@@ -840,8 +840,9 @@ class EffectResource(TimelessStaticFileHandler):
         except:
             raise web.HTTPError(404)
 
-        print("seesion speed:", SESSION.prefs.get('connection-speed', ''))
-        if SESSION.prefs.get('connection-speed', '') == 'slow' and not any(item in path for item in ["knob", "slider", "switch", "led"]) and any(item in path for item in ["boxy", "background", "back", "japanese"]):
+        print("requested path:", path, "session speed:", SESSION.prefs.get('connection-speed', ''))
+        if SESSION.prefs.get('connection-speed', '') == 'slow' and not any(item in path for item in ["knob", "slider", "footswitch", "led"]) and any(item in path for item in ["box", "background", "back", "japanese", "pedalHousing", "cabinet", "bg-", "_bg."]):
+            print("********!!!!!!!!!!!!!!!!!!! uri:", uri, "requested path:", path)
             super(EffectResource, self).initialize(os.path.join(HTML_DIR, 'resources', 'pedals', 'small'))
 
             categories = [cat.lower() for cat in info['category']]
@@ -935,7 +936,7 @@ class EffectImage(TimelessStaticFileHandler):
         if SESSION.prefs.get('connection-speed', '') == 'slow' and any(item in image for item in ["thumbnail"]):
             categories = [cat.lower() for cat in self.info['category']]
             image = self.get_image_filename(categories)
-            path = os.path.join('/mnt/c/Src/Alab/Devel/mod/mod-ui/', HTML_DIR, 'resources', 'pedals', 'small', image)
+            path = os.path.join(HTML_DIR, 'resources', 'pedals', 'small', image)
             TimelessStaticFileHandler.initialize(self, os.path.dirname(path))
 
         if path is None:

@@ -1810,7 +1810,7 @@ function GUI(effect, options) {
             data.ns  = ''
             data.cns = '_sdk'
         } else {
-            data.ns  = '?uri=' + escapeduri + '&v=' + version,
+            data.ns  = '?uri=' + escapeduri + '&v=' + version + '&c=' + PREFERENCES['connection-speed'],
             data.cns = '_' + escapeduri.split("/").join("_").split("%").join("_").split(".").join("_") + version
         }
 
