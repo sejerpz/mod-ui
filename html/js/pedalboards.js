@@ -123,6 +123,9 @@ JqueryClass('pedalboardBox', {
             viewModes: self.find('.view-modes'),
             viewModeList: self.find('#view-mode-list'),
             viewModeGrid: self.find('#view-mode-grid'),
+            uploadBundle: self.find('.js-upload-bundle'),
+            uploadBundleButton: self.find('.js-upload-bundle-button'),
+            uploadBundleInput: self.find('.js-upload-bundle-input'),
             dev_mode: false,
             list: function (callback) {
                 callback([])
@@ -134,6 +137,9 @@ JqueryClass('pedalboardBox', {
                 callback()
             },
             download: function (pedalboard, callback) {
+                callback()
+            },
+            upload: function (file, callback) {
                 callback()
             },
             load: function (bundlepath, broken, callback) {
@@ -179,8 +185,30 @@ JqueryClass('pedalboardBox', {
             self.window('close')
         })
 
-        self.data('dev_mode', PREFERENCES['dev-mode'] == "on")
+        const devMode = PREFERENCES['dev-mode'] == "on"
+        self.data('dev_mode', devMode)
 
+        if (devMode) {
+            options.uploadBundle.show()
+            options.uploadBundleButton.click(function () {
+                options.uploadBundleInput.click()
+            })
+            options.uploadBundleInput.change(function () {
+                const file = this.files[0]
+                if (file) {
+                    options.upload(file, function (resp) {
+                        if (resp.ok) {
+                            options.load(resp.result.bundlepath, false, function () {
+                                self.window('close')
+                            })
+                        }
+                    })
+                }
+            })
+        } else {
+            // Hide upload action
+            options.uploadBundle.hide()
+        }
         options.viewModes.pedalboardsModeSelector(options.resultCanvasUser,
                                                   options.resultCanvasFactory,
                                                   options.saveConfigValue)

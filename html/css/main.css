@@ -6862,10 +6862,12 @@ button.close {
 #pedalboards-library .pedalboards .pedalboard .actions .js-download {
   width: 32px;
   height: 32px;
-  background-image: url(../img/icons/25/save.png);
   background-repeat: no-repeat;
   background-position: 50% 50%;
   transition: background-color 0.33s;
+  font-size: 18px;
+  line-height: 36px;
+  text-align: center;
 }
 #pedalboards-library .pedalboards .pedalboard .actions .js-download:hover {
   background-color: #F29446;
@@ -8268,6 +8270,14 @@ header#pedalboard-actions button.js-settings,
 #file-manager-library header button.js-settings {
   background-image: url(../img/icons/36/settings.png);
   background-size: 30px 30px;
+}
+header#pedalboard-actions button.js-upload-bundle-button,
+#bank-library header button.js-upload-bundle-button,
+#cloud-plugins-library header button.js-upload-bundle-button,
+#performance header button.js-upload-bundle-button,
+#pedalboards-library header button.js-upload-bundle-button,
+#file-manager-library header button.js-upload-bundle-button {
+  padding: 0px 12px 0px 12px;
 }
 header#pedalboard-actions h1,
 #bank-library header h1,

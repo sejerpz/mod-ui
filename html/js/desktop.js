@@ -1905,6 +1905,31 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
 
             transfer.start()
         },
+        upload: function(file, callback) {
+            const title = file.name.replace('.tar', '')
+            var transfer = new SimpleTransference("file://" + file.name,
+                                                '/pedalboard/upload_bundle/',
+                                                { from_args: { file: file }})
+
+            transfer.reportFinished = function (resp2) {
+                if (resp2.ok) {
+                    new Notification('info', 'Pedalboard "' + title + '" loaded from file', 5000)
+                } else {
+                    new Notification('error', `Failed to load pedalboard ${title} from file: ${resp2.result}`)
+                }
+                callback(resp2)
+            }
+
+            transfer.reportError = function (error) {
+                new Notification('error', `Failed to load pedalboard ${title} from file: ${error}`)
+                callback({
+                    ok: false,
+                    error: "Failed to upload the pedalboard",
+                })
+            }
+
+            transfer.start()
+        }
     })
 }
 
