@@ -76,39 +76,47 @@ function SimpleTransference(from, to, options) {
 
     var self = this
 
-    this.start = function () {
-        isInstallingPackage = true
-        self.reauthorizedUpload = false
-        var req = $.ajax($.extend({
-            type: 'GET',
-            url: self.origin,
-            success: to.startsWith('file://') ? self.saveAs : self.upload,
-            dataType: 'binary',
-            cache: false,
-            global: false,
-            error: function (resp) {
-                if (resp.status == 401 && self.reauthorizeDownload != null && ! self.reauthorizedDownload) {
-                    console.log("[TRANSFERENCE] download unauthorized, retrying authentication...")
-                    self.reauthorizedDownload = true
-                    self.reauthorizeDownload(function (ok, options) {
-                        if (ok) {
-                            console.log("[TRANSFERENCE] authentication succeeded")
-                            self.options = $.extend(self.options, options)
-                            self.start()
-                        } else {
-                            console.log("[TRANSFERENCE] authentication failed")
-                            self.abort(resp.statusText)
-                        }
-                    })
-                    return;
-                }
-                self.abort(resp.statusText)
-            },
-            percentageStatus: function (percentage) {
-                self.percentageStatus(percentage)
-            },
-        }, self.options.from_args))
-        self.request = req
+    if (from.startsWith('file://')) {
+        this.start = function () {
+            // upload file to server
+            console.log(`upload from browser: ${from}. ${self.options.from_args.file}`)
+            this.upload(self.options.from_args.file)
+        }
+    } else {
+        this.start = function () {
+            isInstallingPackage = true
+            self.reauthorizedUpload = false
+            var req = $.ajax($.extend({
+                type: 'GET',
+                url: self.origin,
+                success: to.startsWith('file://') ? self.saveAs : self.upload,
+                dataType: 'binary',
+                cache: false,
+                global: false,
+                error: function (resp) {
+                    if (resp.status == 401 && self.reauthorizeDownload != null && ! self.reauthorizedDownload) {
+                        console.log("[TRANSFERENCE] download unauthorized, retrying authentication...")
+                        self.reauthorizedDownload = true
+                        self.reauthorizeDownload(function (ok, options) {
+                            if (ok) {
+                                console.log("[TRANSFERENCE] authentication succeeded")
+                                self.options = $.extend(self.options, options)
+                                self.start()
+                            } else {
+                                console.log("[TRANSFERENCE] authentication failed")
+                                self.abort(resp.statusText)
+                            }
+                        })
+                        return;
+                    }
+                    self.abort(resp.statusText)
+                },
+                percentageStatus: function (percentage) {
+                    self.percentageStatus(percentage)
+                },
+            }, self.options.from_args))
+            self.request = req
+        }
     }
 
     this.saveAs = function (file) {
