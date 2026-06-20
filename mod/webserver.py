@@ -1561,6 +1561,38 @@ class PedalboardLoadWeb(SimpleFileReceiver):
         os.remove(filename)
         callback()
 
+class PedalboardUploadBundle(SimpleFileReceiver):
+    """
+    This is used by the web interface to upload a pedalboard bundle, which is then unpacked to /tmp/pedalboards folder.
+
+    Returns the path to the unpacked bundle, which can then be loaded with PedalboardLoadBundle.
+    """
+    destination_dir = "/tmp/pedalboards"
+
+    @web.asynchronous
+    @gen.engine
+    def process_file(self, basename, callback=lambda:None):
+        filename = os.path.join(self.destination_dir, basename)
+
+        if not os.path.exists(filename):
+            callback()
+            return
+
+        if not os.path.exists(self.destination_dir):
+            os.mkdir(self.destination_dir)
+
+        # FIXME - don't use external tools!
+        tar_output = subprocess.getoutput('env LANG=C tar -xvf "%s" -C "%s"' % (filename, self.destination_dir))
+        bundlepath = os.path.join(self.destination_dir, tar_output.strip().split("\n", 1)[0])
+        bundlepath = os.path.abspath(bundlepath)
+
+        if not os.path.exists(bundlepath):
+            raise IOError(bundlepath)
+
+        os.remove(filename)
+        self.result = {"bundlepath": bundlepath}
+        callback()
+
 class PedalboardFactoryCopy(JsonRequestHandler):
     def get(self):
         bundlepath = os.path.abspath(self.get_argument('bundlepath'))
@@ -2473,6 +2505,7 @@ application = web.Application(
             (r"/pedalboard/load_bundle/", PedalboardLoadBundle),
             (r"/pedalboard/load_remote/*(/[A-Za-z0-9_/]+[^/])/?", PedalboardLoadRemote),
             (r"/pedalboard/load_web/", PedalboardLoadWeb),
+            (r"/pedalboard/upload_bundle/", PedalboardUploadBundle),
             (r"/pedalboard/factorycopy/", PedalboardFactoryCopy),
             (r"/pedalboard/info/", PedalboardInfo),
             (r"/pedalboard/remove/", PedalboardRemove),
