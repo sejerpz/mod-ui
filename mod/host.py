@@ -27,6 +27,7 @@ import os, json, socket, time, logging, sys
 import shutil
 import copy
 import math
+from mod.webserver import FilesList
 
 # only used for HMI screenshots, optional
 try:
@@ -6735,9 +6736,41 @@ _:b%i
                 except Exception as e:
                     logging.exception(e)
 
-        index += 1
         extinfo = get_plugin_info_essentials(plugin['uri'])
+        parameters = extinfo.get('parameters', [])
+        
+        for parameter in parameters:
+            if parameter.get('type', '') == 'http://lv2plug.in/ns/ext/atom#Path' and parameter.get('writable', None):
+                index += 1
+                hw_id = index - start_index
+                symbol = '#' + parameter.get('uri', parameter.get('shortName', ''))
+                actuator_uri = "/hmi/knob" + str(hw_id + 1)
+
+                files = FilesList.get_files(parameter.get('fileTypes', []))
+                files = (0, len(files), files)
+                print("*********** EXTINFO parameter: ", files)
+                data = dict()
+                data['label'] = parameter.get('label', parameter.get('shortName', ''))
+                data['hmitype'] = FLAG_CONTROL_ENUMERATION|FLAG_CONTROL_SCALE_POINTS|FLAG_CONTROL_INTEGER
+                data['unit'] =  ""
+                data['dividers'] = ""
+                data['minimum'] = 0
+                data['maximum'] = files[1] if files and len(files) > 1 else 0
+                data['default'] = 1
+                data['steps'] = 1
+                data['options'] = files[2] if files and len(files) > 2 else None
+                data['value'] = files[0] if files and len(files) > 0 else 0
+                try:
+                    self.hmi.control_add(data, index - start_index, actuator_uri , None)
+                    self.builder_current_addressing.append(symbol)
+                except Exception as e:
+                    logging.exception(e)
+
+        index += 1
+        print("*********** EXTINFO: ", extinfo)
+        print("*********** EXTINFO controlInputs: ", extinfo.get('controlInputs', []))
         for port_info in extinfo.get('controlInputs', []):
+            print("*********** control port_info: ", port_info)
             # skip notOnGUI controls & special designated controls
             if "notOnGUI" in port_info['properties'] or port_info['designation'] in [\
                 "http://lv2plug.in/ns/lv2core#enabled", \

@@ -2379,19 +2379,13 @@ class FilesList(JsonRequestHandler):
         else:
             return (None, ())
 
-    def prepare(self):
-        filetypes = self.get_argument('types', None)
-        if filetypes is None:
-            raise web.HTTPError(501, "Missing types")
-
-        self.filetypes = filetypes.split(",")
-
-    def get(self):
+    @classmethod
+    def get_files(kls, filetypes):
         retfiles = {}
         fullnames = []
 
-        for filetype in self.filetypes:
-            datadir, extensions = self._get_dir_and_extensions_for_filetype(filetype)
+        for filetype in filetypes:
+            datadir, extensions = kls._get_dir_and_extensions_for_filetype(filetype)
 
             if datadir is None:
                 continue
@@ -2407,10 +2401,41 @@ class FilesList(JsonRequestHandler):
                     }
 
         fullnames.sort()
+        return tuple(retfiles[fn] for fn in fullnames)
+
+
+    def prepare(self):
+        filetypes = self.get_argument('types', None)
+        if filetypes is None:
+            raise web.HTTPError(501, "Missing types")
+
+        self.filetypes = filetypes.split(",")
+
+    def get(self):
+        # retfiles = {}
+        # fullnames = []
+
+        # for filetype in self.filetypes:
+        #     datadir, extensions = self._get_dir_and_extensions_for_filetype(filetype)
+
+        #     if datadir is None:
+        #         continue
+
+        #     for root, dirs, files in os.walk(os.path.join(USER_FILES_DIR, datadir)):
+        #         for name in tuple(name for name in sorted(files) if name.lower().endswith(extensions)):
+        #             fullname = os.path.join(root, name)
+        #             fullnames.append(fullname)
+        #             retfiles[fullname] = {
+        #                 'fullname': fullname,
+        #                 'basename': name,
+        #                 'filetype': filetype,
+        #             }
+
+        # fullnames.sort()
 
         self.write({
             'ok': True,
-            'files': tuple(retfiles[fn] for fn in fullnames),
+            'files': self.get_files(self.filetypes),
         })
 
 settings = {'log_function': lambda handler: None} if not LOG else {}
