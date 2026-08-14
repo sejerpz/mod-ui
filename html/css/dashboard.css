@@ -1406,12 +1406,15 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
 ================================================ */
 
 #pedalboard-info .js-ab-compare {
-    display: inline-flex;
     float: right;
+}
+
+.js-ab-compare {
+    display: inline-flex;
     margin-top: 6px;
 }
 
-#pedalboard-info .js-ab-compare-snapshot {
+.js-ab-compare-snapshot {
     font-size: 14px;
     line-height: 30px;
     width: 32px;
@@ -1422,43 +1425,43 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     cursor: pointer;
 }
 
-#pedalboard-info .js-ab-compare-snapshot:hover {
+.js-ab-compare-snapshot:hover {
     color: white;
     background-color: rgb(51, 51, 51);
 }
 
-#pedalboard-info .js-ab-compare-snapshot-a {
+.js-ab-compare-snapshot-a {
     border-width:  1px 1px 1px 0px;
     border-radius: 8px 0px 0px 8px;
 }
 
-#pedalboard-info .js-ab-compare-snapshot-take {
+.js-ab-compare-snapshot-take {
     border-width: 1px;
 }
 
-#pedalboard-info .js-ab-compare-snapshot-b {
+.js-ab-compare-snapshot-b {
     border-width:  1px 1px 1px 0px;
     border-radius: 0px 8px 8px 0px;
 }
 
-#pedalboard-info .js-ab-compare-snapshot-selected  {
+.js-ab-compare-snapshot-selected  {
     background-color: rgb(136, 57, 150);
     color: white;
 }
 
-#pedalboard-info .js-ab-compare-snapshot-selected:hover  {
+.js-ab-compare-snapshot-selected:hover  {
     background-color: rgb(182, 84, 199);
     cursor: default;
     color: white;
 }
 
-#pedalboard-info .js-ab-compare-snapshot-disabled  {
+.js-ab-compare-snapshot-disabled  {
     background-color: rgb(51, 51, 51);
     cursor: default;
     color: black;
 }
 
-#pedalboard-info .js-ab-compare-snapshot-disabled:hover  {
+.js-ab-compare-snapshot-disabled:hover  {
     background-color: rgb(71, 71, 71);
     color: black;
 }

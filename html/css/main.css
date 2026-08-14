@@ -7541,6 +7541,68 @@ button.close {
   height: 100%;
   padding: 8px 0px 164px 1px;
 }
+/*
+simply utility class to make a toolbar with flexbox, 
+so that the buttons are aligned and spaced nicely.
+*/
+.mod-toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+}
+.mod-help-overlay {
+  position: absolute;
+  right: 0px;
+  top: 45px;
+  bottom: auto;
+  width: 380px;
+  background-color: #efece7;
+  opacity: 0.93;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+.mod-help-overlay h1,
+.mod-help-overlay h2,
+.mod-help-overlay h3 {
+  font-weight: bold;
+  padding: 10px;
+  color: #483e35;
+  text-align: center;
+  border-bottom: 1px solid #483e35;
+}
+.mod-help-overlay h1 {
+  font-size: 24px;
+}
+.mod-help-overlay h2 {
+  font-size: 20px;
+}
+.mod-help-overlay h3 {
+  font-size: 16px;
+}
+.mod-help-overlay img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px auto;
+}
+.mod-help-overlay .mod-help-footer {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 10px;
+  margin: 0px 10px;
+  color: #483e35;
+  text-align: center;
+  border-top: 1px solid #483e35;
+}
+.mod-help-overlay .mod-help-content {
+  font-size: 16px;
+  padding: 10px;
+  color: #483e35;
+  height: 100%;
+}
 /**
  * Typography
  */
@@ -8270,6 +8332,28 @@ header#pedalboard-actions button.js-settings,
 #file-manager-library header button.js-settings {
   background-image: url(../img/icons/36/settings.png);
   background-size: 30px 30px;
+}
+header#pedalboard-actions button.js-help-toggle,
+#bank-library header button.js-help-toggle,
+#cloud-plugins-library header button.js-help-toggle,
+#performance header button.js-help-toggle,
+#pedalboards-library header button.js-help-toggle,
+#file-manager-library header button.js-help-toggle {
+  background-image: url(../img/icons/36/help.png);
+}
+header#pedalboard-actions button.js-help-toggle:hover,
+#bank-library header button.js-help-toggle:hover,
+#cloud-plugins-library header button.js-help-toggle:hover,
+#performance header button.js-help-toggle:hover,
+#pedalboards-library header button.js-help-toggle:hover,
+#file-manager-library header button.js-help-toggle:hover,
+header#pedalboard-actions button.js-help-toggle.active,
+#bank-library header button.js-help-toggle.active,
+#cloud-plugins-library header button.js-help-toggle.active,
+#performance header button.js-help-toggle.active,
+#pedalboards-library header button.js-help-toggle.active,
+#file-manager-library header button.js-help-toggle.active {
+  background-color: #883996;
 }
 header#pedalboard-actions button.js-upload-bundle-button,
 #bank-library header button.js-upload-bundle-button,

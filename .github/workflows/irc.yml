@@ -12,7 +12,7 @@ jobs:
         run: |
           echo "message=${{ github.actor }} pushed $(echo '${{ github.event.commits[0].message }}' | head -n 1) ${{ github.event.commits[0].url }}" >> $GITHUB_OUTPUT
       - name: IRC notification
-        uses: Gottox/irc-message-action@v2
+        uses: Gottox/irc-message-action@v3
         with:
           channel: '#modaudio'
           nickname: modaudio-bot

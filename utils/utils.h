@@ -248,6 +248,14 @@ typedef struct {
     bool snapshotable; // if true, this port is snapshotable
 } PedalboardPluginPort;
 
+typedef struct {
+    bool valid;
+    const char* uri;
+    bool readable;
+    bool writable;
+    bool snapshotable; // if true, this parameter is snapshotable
+} PedalboardPluginParameter;
+
 typedef struct  {
     bool visible;
     int index;
@@ -264,6 +272,7 @@ typedef struct {
     float x;
     float y;
     const PedalboardPluginPort* ports;
+    const PedalboardPluginParameter* parameters;
     const char* preset;
     bool preset_snapshotable;
     const char *label;

@@ -59,6 +59,7 @@
 <script type="text/javascript" src="js/lib/buy-button-storefront.js?v={{version}}"></script>
 <script type="text/javascript" src="js/shopify.js?v={{version}}"></script>
 <script type="text/javascript" src="js/lib/slick/slick.min.js?v={{version}}"></script>
+<script type="text/javascript" src="js/lib/marked.umd.js?v={{version}}"></script>
 
 <script type="text/javascript">
     {% autoescape None %}
@@ -162,6 +163,7 @@ $('document').ready(function() {
         bufferSizeButton: $('#mod-buffersize'),
         xrunsButton: $('#mod-xruns'),
         cpuStatsButton: $('#mod-cpu-stats'),
+        helpButton: $('#pedalboard-info .js-help-toggle'),
     })
 
     if ('{{bundlepath}}' && '{{title}}') {
@@ -608,13 +610,13 @@ $('document').ready(function() {
         <!-- END PEDALBOARD SHARE WINDOW -->
 
         <!-- PEDALBOARD-ACTIONS -->
-        <header id="pedalboard-actions">
+        <header id="pedalboard-actions" data-help-id="pedalboard-logo">
 
             <!-- PEDALBOARD-SETTINGS -->
             <div id="pedalboard-info">
-                <h1 class="top bottom {{titleblend}}">{{fulltitle}}</h1>
+                <h1 class="top bottom {{titleblend}}" data-help-id="pedalboard-title">{{fulltitle}}</h1>
                 <div class="actions">
-                    <div class="js-ab-compare" style="display: inline-flex; float: right; margin-top: 6px;">
+                    <div class="js-ab-compare" style="display: inline-flex; float: right; margin-top: 6px;" data-help-id="pedalboard-ab-compare">
                         <div class="js-ab-compare-snapshot js-ab-compare-snapshot-a js-ab-compare-snapshot-selected">
                             A
                         </div>
@@ -625,9 +627,10 @@ $('document').ready(function() {
                             B
                         </div>
                     </div>
-                    <button class="js-cv-addressing" id="js-cv-addressing-toggle">Manage CV Ports</button>
-                    <button class="js-pb-addressing" id="js-pb-addressing-toggle">Bindings</button>
-                    <div id="js-preset-menu" style="display:inline-block;">
+                    <button class="js-help-toggle" data-help-id="help-button">Help</button>
+                    <button class="js-cv-addressing" id="js-cv-addressing-toggle" data-help-id="pedalboard-cv-addressing">Manage CV Ports</button>
+                    <button class="js-pb-addressing" id="js-pb-addressing-toggle" data-help-id="pedalboard-bindings">Bindings</button>
+                    <div id="js-preset-menu" style="display:inline-block;" data-help-id="pedalboard-snapshots">
                         <button class="js-preset menu-trigger">Snapshots</button>
                         <ul class="drop-menu clearfix js-pedalboard-presets-menu" style="cursor:pointer;text-align:left;">
                             <li class="js-preset-save">Save</li>
@@ -640,18 +643,18 @@ $('document').ready(function() {
                             <li class="js-preset-manage">Load / Manage</li>
                         </ul>
                     </div>
-                    <button class="js-reset">New Pedalboard</button>
-                    <button class="js-save">Save</button>
-                    <button class="js-save-as">Save as</button>
-                    <button class="js-cloud mod-hidden">Share</button>
+                    <button class="js-reset" data-help-id="pedalboard-actions">New Pedalboard</button>
+                    <button class="js-save" data-help-id="pedalboard-actions">Save</button>
+                    <button class="js-save-as" data-help-id="pedalboard-actions">Save as</button>
+                    <button class="js-cloud mod-hidden" data-help-id="pedalboard-share">Share</button>
                 </div>
             </div>
             <!-- END PEDALBOARD-SETTINGS -->
 
             <!-- ZOOM CONTROLLERS -->
             <div id="zoom-controllers">
-                <span class="zoom-out"></span>
-                <span class="zoom-in"></span>
+                <span class="zoom-out" data-help-id="pedalboard-zoom"></span>
+                <span class="zoom-in" data-help-id="pedalboard-zoom"></span>
             </div>
             <!-- END ZOOM CONTROLLERS -->
 
@@ -659,7 +662,7 @@ $('document').ready(function() {
         <!-- END PEDALBOARD-ACTIONS -->
 
         <!-- PEDALBOARD-DASHBOARD -->
-        <div id="pedalboard-dashboard" class="{{dev_api_class}}"></div>
+        <div id="pedalboard-dashboard" class="{{dev_api_class}}" data-help-id="pedalboard-constructor"></div>
         <!-- END PEDALBOARD-DASHBOARD -->
 
         <!-- MIDI DEVICE LIST WINDOW -->
@@ -761,48 +764,53 @@ $('document').ready(function() {
             <div class="js-vumeter">
             </div>
         </div>
+        <div class="mod-help-overlay mod-hidden" data-help-id="help-button">
+            <div class="mod-help-content">
+            </div>
+            <div class="mod-help-footer"></div>
+        </div>
     </div>
     <!-- END PEDALBOARD -->
 
     <!-- MAIN MENU-->
     <div id="main-menu" class="mod-init-hidden">
-        <div id="mod-plugins" class="icon selected" data-message="Constructor"></div>
-        <div id="performance-trigger" class="icon" data-message="Performance"></div>
-        <div id="mod-pedalboard" class="icon" data-message="Pedalboards Library"></div>
-        <div id="mod-bank" class="icon" data-message="Banks"></div>
-        <div id="mod-file-manager" class="icon" data-message="File Manager"></div>
-        <div id="mod-cloud-plugins" class="icon" data-message="Plugin Store"></div>
+        <div id="mod-plugins" class="icon selected" data-message="Constructor" data-help-id="mode-selector"></div>
+        <div id="performance-trigger" class="icon" data-message="Performance" data-help-id="mode-selector"></div>
+        <div id="mod-pedalboard" class="icon" data-message="Pedalboards Library" data-help-id="mode-selector"></div>
+        <div id="mod-bank" class="icon" data-message="Banks" data-help-id="mode-selector"></div>
+        <div id="mod-file-manager" class="icon" data-message="File Manager" data-help-id="mode-selector"></div>
+        <div id="mod-cloud-plugins" class="icon" data-message="Plugin Store" data-help-id="mode-selector"></div>
         <div id="banks-saving">Auto saving banks...</div>
-        <div id="mod-update" class="status icon"></div>
-        <div id="mod-status" class="status icon mod-hidden"></div>
-        <div id="mod-devices" class="status icon"></div>
-        <div id="mod-settings" class="status icon mod-settings" data-message="Go to settings screen"></div>
-        <div id="mod-ram" class="icon">
+        <div id="mod-update" class="status icon" data-help-id="system-status-info"></div>
+        <div id="mod-status" class="status icon mod-hidden" data-help-id="mod-status-info"></div>
+        <div id="mod-devices" class="status icon" data-help-id="controlchain-devices-info"></div>
+        <div id="mod-settings" class="status icon mod-settings" data-message="Go to settings screen" data-help-id="mod-settings-info"></div>
+        <div id="mod-ram" class="icon" data-help-id="system-info">
             <div class="progress" id="ram-bar" style="width: 100%;">
                 <div class="bar"></div> <!-- not sure if this is needed -->
             </div>
             <p class="progress-title" id="ram-bar-text">ram</p>
         </div>
-        <div id="mod-cpu" class="icon">
+        <div id="mod-cpu" class="icon" data-help-id="system-info">
             <div class="progress" id="cpu-bar" style="width: 100%;">
                 <div class="bar"></div> <!-- not sure if this is needed -->
             </div>
             <p class="progress-title" id="cpu-bar-text">cpu</p>
         </div>
-        <div id="mod-cpu-stats" class="icon mod-hidden">0 GHz / 0 &deg;C</div>
-        <div id="mod-xruns" class="icon mod-hidden">0 Xruns</div>
-        <div id="mod-buffersize" class="icon mod-hidden">{{bufferSize}} frames</div>
-        <div id="mod-bypassRight" class="icon mod-bypass">Bypass 2</div>
-        <div id="mod-bypassLeft" class="icon mod-bypass">Bypass 1</div>
-        <div id="mod-show-midi-port" class="icon">MIDI Ports</div>
-        <div id="mod-transport-icon" class="icon">
+        <div id="mod-cpu-stats" class="icon mod-hidden" data-help-id="system-info">0 GHz / 0 &deg;C</div>
+        <div id="mod-xruns" class="icon mod-hidden" data-help-id="audio-info">0 Xruns</div>
+        <div id="mod-buffersize" class="icon mod-hidden" data-help-id="audio-info">{{bufferSize}} frames</div>
+        <div id="mod-bypassRight" class="icon mod-bypass" data-help-id="audio-info">Bypass 2</div>
+        <div id="mod-bypassLeft" class="icon mod-bypass" data-help-id="audio-info">Bypass 1</div>
+        <div id="mod-show-midi-port" class="icon" data-help-id="midi-info">MIDI Ports</div>
+        <div id="mod-transport-icon" class="icon" data-help-id="transport-info">
             <span>---.-- BPM</span>
         </div>
     </div>
     <!-- END MAIN MENU-->
 
     <!-- PLUGINS LIBRARY -->
-    <div id="plugins-library" class="js-main-library mod-init-hidden ignore-arrive">
+    <div id="plugins-library" class="js-main-library mod-init-hidden ignore-arrive" data-help-id="plugin-bar">
 
         <!-- EFFECTS MENU ITEMS -->
         <ul class="clearfix js-category-tabs">

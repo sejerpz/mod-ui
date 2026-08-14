@@ -208,6 +208,66 @@ JqueryClass('pedalboard', {
             // Show notification that we are using a demo plugin
             notifyDemoPluginLoaded: function () {
             },
+
+            compareSnapshotSwitch: function (slot) {
+                console.log("pedalboard compareSnapshotSwitch", slot)
+            },
+            compareSnapshotTake: function () {
+                console.log("pedalboard compareSnapshotTake")
+            },
+            pluginSettingsWindowOpen: function (pluginGui) {
+                console.log("pluginSettingsWindowOpen", pluginGui)
+            },
+            pluginSettingsWindowClose: function (pluginGui) {
+                console.log("pluginSettingsWindowClose", pluginGui)
+            },
+            getHelpModeActive: function () {
+                console.log("pedalboard: getHelpModeActive called")
+                return false
+            },
+            /*
+             * Enable, disable or toggle monitoring of a port. 
+             * port: The port to change monitoring state. eg. /graph/eq/Ouput
+             * mode: can be 'enable', 'disable' or 'toggle'.
+             * callback: function to be called when operation is done. 
+             *           It will receive a boolean indicating the current 
+             *           monitoring state for the port.
+             */
+            changePortMonitoring: function (port, mode, callback) {
+                const urlParam = port + ',' + mode
+
+                $.ajax({
+                    url: '/effect/port-audio-monitor' + urlParam,
+                    success: function (resp) {
+                        if (callback) {
+                            callback(resp)
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        if (callback) {
+                            callback(false)
+                        }
+                    },
+                    cache: false,
+                    dataType: 'json'
+                })
+
+            },
+
+            /*
+             * Check if a port is being monitored.
+             *
+             * port: The port to check. eg. /graph/eq/Ouput
+             * 
+             * Returns: true if the port is being monitored, false otherwise.
+             */
+            isPortMonitored: function (port) {
+                const vumeters = self.data('vumeters')
+                const isMonitored = Object.keys(vumeters).includes(port)
+
+                return isMonitored
+            }
+
         }, options)
 
         self.pedalboard('wrapApplicationFunctions', options, [
@@ -795,7 +855,13 @@ JqueryClass('pedalboard', {
                 $('body').append(dummy)
                 return dummy
             },
-            handle: thumb
+            handle: thumb,
+            start: function (event, ui) {
+                // prevent adding plugin when help mode is active: block the drag event
+                if (self.data('getHelpModeActive')()) {
+                    return false
+                }
+            }
         }))
     },
 
@@ -1439,6 +1505,10 @@ JqueryClass('pedalboard', {
                         }
                     })
             },
+            compareSnapshotSwitch: self.data('compareSnapshotSwitch'),
+            compareSnapshotTake: self.data('compareSnapshotTake'),
+            changePortMonitoring: self.data('changePortMonitoring'),
+            isPortMonitored: self.data('isPortMonitored'),
             bypassed: bypassed ? 1 : 0,
             defaultIconTemplate: DEFAULT_ICON_TEMPLATE,
             defaultSettingsTemplate: DEFAULT_SETTINGS_TEMPLATE
@@ -1632,7 +1702,7 @@ JqueryClass('pedalboard', {
             })
 
             // appenda standard UI icons like info, delete to plugin gui on the constructor
-            var actions = $('<div>').addClass('ignore-arrive').addClass('mod-actions').appendTo(icon)
+            var actions = $('<div>').data('helpId', 'pedalboard-effect-actions').addClass('ignore-arrive').addClass('mod-actions').appendTo(icon)
             if (pluginData.hasExternalUI) {
                 $('<div>').addClass('mod-external-ui').click(function () {
                     self.pedalboard('finishConnection')
@@ -1662,7 +1732,13 @@ JqueryClass('pedalboard', {
 
             settings.window({
                 windowName: "Plugin Settings",
-                windowManager: self.data('windowManager')
+                windowManager: self.data('windowManager'),
+                open: function() {
+                    self.data('pluginSettingsWindowOpen')(pluginGui)
+                },
+                close: function() {
+                    self.data('pluginSettingsWindowClose')(pluginGui)
+                }
             }).appendTo($('body'))
             icon.css({
                 'z-index': self.data('z_index'),
@@ -1885,6 +1961,31 @@ JqueryClass('pedalboard', {
 
                 var gui = self.pedalboard('getGui', instance)
                 gui.setPortPropertyValue(symbol, property, value)
+            }
+
+            self.pedalboard('addUniqueCallbackToArrive', cb, targetname, callbackId)
+        }
+    },
+
+    /*
+     * Properties are special values of a parameter tied with the pedalboard
+     * set parameter property of a parameter
+     */
+    setParameterPropertyValue: function (instance, uri, property, value) {
+        var self = $(this)
+        var targetname = '.mod-pedal[mod-instance="'+instance+'"]'
+        var callbackId = instance+'/'+uri+":property:"+property
+        var gui = self.pedalboard('getGui', instance)
+
+        if (gui && self.find(targetname).length) {
+            gui.setParameterPropertyValue(uri, property, value)
+        } else {
+            var cb = function () {
+                delete self.data('callbacksToArrive')[callbackId]
+                self.unbindArrive(targetname, cb)
+
+                var gui = self.pedalboard('getGui', instance)
+                gui.setParameterPropertyValue(uri, property, value)
             }
 
             self.pedalboard('addUniqueCallbackToArrive', cb, targetname, callbackId)
@@ -2296,7 +2397,6 @@ JqueryClass('pedalboard', {
         const vumeters = self.data('vumeters')
         const vumeter = new VUMeter(32, 256, {
             onClick: (sender, e) => {
-                self.data('vumeters::selected', port)
                 const vumeters = self.data('vumeters')
 
                 const global_vumeter = vumeters['global::overlay']
@@ -2307,18 +2407,17 @@ JqueryClass('pedalboard', {
 
                     if (item == sender) {
                         item.setIsSelected(true)
-                        var instance = key.replace(key.split('/').pop(), '')?.slice(0, -1)
+                        var instanceKey = key.replace(key.split('/').pop(), '')?.slice(0, -1)
 
-                        if (instance) {
-                            pluginInstance = self.data('plugins')[instance]
+                        if (instanceKey) {
+                            self.pedalboard('selectPortVUMeter', instanceKey, port)
                         }
                     } else {
                         item.setIsSelected(false)
                     }
                 }
-
-                self.pedalboard('updateGlobalVUMeterPluginInfo', pluginInstance)
                 global_vumeter.setLabel(sender.getLabel())
+                global_vumeter.resetClip()
                 e.stopPropagation()
             }
         })
@@ -2327,6 +2426,10 @@ JqueryClass('pedalboard', {
         let count = 0
         let vuMeterKey = port.replace(port.split('/').pop(), '')
         for(let key in vumeters) {
+            // unselect all other vumeters
+            vumeters[key]?.setIsSelected(false)
+
+            // count how many vumeters belong to the same plugin instance, so we can set odd/even class for styling
             if (key.startsWith(vuMeterKey))
                 count++
         }
@@ -2335,6 +2438,7 @@ JqueryClass('pedalboard', {
         vumeter.wrapper.className += count % 2 == 1 ? " odd" : " even"
         vumeter.setLabel(label)
         vumeter.setLabelIsVisible(false)
+        vumeter.setIsSelected(true)
         element.append(vumeter.getElement())
         vumeters[port] = vumeter
 
@@ -2343,10 +2447,6 @@ JqueryClass('pedalboard', {
             const global_vumeter_container = global_overlay?.find(".js-vumeter")
             global_overlay.removeClass('mod-hidden')
 
-            const instance = vuMeterKey.slice(0, -1)
-            const pluginInstance = self.data('plugins')[instance]
-
-            self.pedalboard('updateGlobalVUMeterPluginInfo', pluginInstance)
             // create the global overlay vumeter
             const global_vumeter = new VUMeter("50px", "100%")
 
@@ -2357,7 +2457,36 @@ JqueryClass('pedalboard', {
             vumeters['global::overlay'] = global_vumeter
         }
 
+        // select the plugin instance for the global vumeter and update the label and thumbnail
+        const instance = vuMeterKey.slice(0, -1)
+        self.pedalboard('selectPortVUMeter', instance, port)
+    },
+
+    selectPortVUMeter: function(pluginInstanceKey, port) {
+        const self = $(this)
+        const pluginInstance = self.data('plugins')[pluginInstanceKey]
+
+        self.pedalboard('updateGlobalVUMeterPluginInfo', pluginInstance)
         self.data('vumeters::selected', port)
+
+        const vumeters = self.data('vumeters')
+        const vumeter = vumeters[port]
+        const global_vumeter = vumeters['global::overlay']
+        if (global_vumeter) {
+            if (vumeter) {
+                global_vumeter.setLabel(vumeter.getLabel())
+                global_vumeter.setLevel(vumeter.getLevel())
+                if (vumeter.getClip()) {
+                    global_vumeter.setClip()
+                } else {
+                    global_vumeter.resetClip()
+                }
+            } else {
+                global_vumeter.setLabel('')
+                global_vumeter.setLevel(-60)
+                global_vumeter.resetClip()
+            }
+        }
     },
 
     removePortVUMeter: function(port) {
@@ -2368,9 +2497,7 @@ JqueryClass('pedalboard', {
         if (vumeter) {
             vumeter.remove()
             let vumeters = self.data('vumeters')
-            console.log(`vumeters ${vumeter}`)
             delete vumeters[port]
-            console.log(`vumeters ${vumeter}`)
 
             if (Object.keys(vumeters).length == 1) { // we only have the global vumeter, remove it
                 const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
@@ -2383,9 +2510,14 @@ JqueryClass('pedalboard', {
                 // check if is the selected vumeter
                 if (port == self.data('vumeters::selected')) {
                     const global_vumeter = vumeters['global::overlay']
+                    const firstKey = Object.keys(vumeters).find(key => key !== 'global::overlay')
 
-                    global_vumeter.setLabel('')
-                    global_vumeter.setLevel(-60)
+                    if (global_vumeter) {
+                        const instanceKey = firstKey?.replace(firstKey.split('/').pop(), '')?.slice(0, -1)
+                        self.pedalboard('selectPortVUMeter', instanceKey, firstKey)
+                    } else {
+                        console.warn("not global vumeter present: vumeters not synched with host?!?")
+                    }
                 }
             }
         }
@@ -2403,6 +2535,14 @@ JqueryClass('pedalboard', {
                 vumeter.setLevel(db)
             }
         } else {
+            // check if we have to debounce the vumeter creation,
+            // because we just closed the plugin settings and the vumeter was removed,
+            // but the host is still sending some values for it
+            const debounceBaseDate = self.data('currentSettingsWindowClosedTime') || 0
+            if (debounceBaseDate && (Date.now() - debounceBaseDate) < 1000) {
+                console.log("debouncing vumeter creation for port " + port + " because settings window was just closed")
+                return
+            }
             // if we don't have a vumeter we have refreshed the page
             // create a new one
             const output = self.find(`[mod-port='${port}']`)
@@ -2441,25 +2581,21 @@ JqueryClass('pedalboard', {
             // Do not start connection if cv addressing checkbox or text input clicked
             if (!$(e.target).is('input') && !$(e.target).hasClass('checkmark') && !$(e.target).hasClass('checkbox-container')) {
               // POC: shift pressed toggle audio level monitoring
-              if (e.shiftKey) {
+              if (e.shiftKey || e.ctrlKey) {
                 const jack = element.find('[mod-role=output-jack]')
                 const output = jack.parent()
                 const port = output.attr('mod-port')
                 const label = output.attr('title')
                 const urlParam = port + ',toggle'
 
-                $.ajax({
-                    url: '/effect/port-audio-monitor' + urlParam,
-                    success: function (resp) {
-                        if (resp) {
-                            self.pedalboard('addPortVUMeter', port, label, output)
-                        } else {
-                            self.pedalboard('removePortVUMeter', port)
-                        }
-                    },
-                    cache: false,
-                    dataType: 'json'
-                })
+                self.data('changePortMonitoring')(port, 'toggle', function (resp) {
+                    if (resp) {
+                        self.pedalboard('addPortVUMeter', port, label, output)
+                    } else {
+                        self.pedalboard('removePortVUMeter', port)
+                    }
+                });
+             
               } else {
                   self.pedalboard('startConnection', element)
               }

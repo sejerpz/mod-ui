@@ -2,6 +2,7 @@ class VUMeter {
     constructor(width, height, options = {}) {
         this.width = width;
         this.height = height;
+        this.orientation = options.orientation || 'vertical'; // 'vertical' o 'horizontal'
         this.currentDb = -60;
         this.targetDb = -60;
         this.peakDb = -60;
@@ -28,7 +29,8 @@ class VUMeter {
         this.ctx = this.canvas.getContext('2d');
 
         this.wrapper = document.createElement('div');
-        this.wrapper.className = 'mod-vumeter-wrapper';
+        this.wrapper.className = `mod-vumeter-wrapper orientation-${this.orientation}`;
+        this.wrapper.style.position = 'relative'; // Utile per posizionare il clip indicator
 
         this.clipIndicator = document.createElement('div');
         this.clipIndicator.className = 'mod-vumeter-clip-indicator';
@@ -78,6 +80,10 @@ class VUMeter {
         this.isSelected = selected;
     }
 
+    getLevel() {
+        return this.targetDb;
+    }
+
     setLevel(db) {
         this.targetDb = Math.max(this.minDb, Math.min(this.maxDb, db));
 
@@ -92,17 +98,26 @@ class VUMeter {
         }
     }
 
+    getClip() {
+        return this.clipDetected;
+    }
+
+    setClip() {
+        this.clipDetected = true;
+    }
+
     resetClip() {
         this.clipDetected = false;
         this.clipIndicator.classList.remove('active');
         this.peakDb = this.currentDb;
     }
 
-    dbToHeight(db, h) {
+    // Restituisce la dimensione in pixel corrispondente al valore in dB
+    dbToPixels(db, totalLength) {
         const borderWidth = 1;
-        const availableHeight = (h == undefined ? this.height : h) - (borderWidth * 2);
+        const availableLength = totalLength - (borderWidth * 2);
         const normalized = (db - this.minDb) / (this.maxDb - this.minDb);
-        return normalized * availableHeight;
+        return normalized * availableLength;
     }
 
     drawRoundedRect(ctx, x, y, width, height, radius) {
@@ -124,7 +139,6 @@ class VUMeter {
         const h = this.canvas.offsetHeight;
         
         if (isNaN(w) || isNaN(h) || w < 1 || h < 1) {
-            // non yet rendered / layout
             return;
         }
 
@@ -133,47 +147,61 @@ class VUMeter {
         const ctx = this.ctx;
         const borderWidth = 1;
 
-        // Clear
-        ctx.clearRect(0, 0, w, h);
+        const isVert = this.orientation === 'vertical';
+        const totalLength = isVert ? h : w;
 
-        // Background
+        // Clear & Background
+        ctx.clearRect(0, 0, w, h);
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(0, 0, w, h);
 
-        const barHeight = this.dbToHeight(this.currentDb, h);
+        const barSize = this.dbToPixels(this.currentDb, totalLength);
+        const zeroDbSize = this.dbToPixels(0, totalLength);
+        const barTouchesZeroDb = barSize >= zeroDbSize - 1;
 
-        const zeroDbHeight = this.dbToHeight(0, h);
-        const barTouchesZeroDb = barHeight >= zeroDbHeight - 1; // -1px tollerance
+        if (barSize > 0) {
+            const availableLength = totalLength - (borderWidth * 2);
+            let gradient;
 
-        if (barHeight > 0) {
-            // gradient green -> yellow -> red
-            const availableHeight = h - (borderWidth * 2);
-            const gradient = ctx.createLinearGradient(0, h - borderWidth, 0, borderWidth);
+            // Il gradiente deve andare da sinistra a destra (orizzontale) o dal basso verso l'alto (verticale)
+            if (isVert) {
+                gradient = ctx.createLinearGradient(0, h - borderWidth, 0, borderWidth);
+            } else {
+                gradient = ctx.createLinearGradient(borderWidth, 0, w - borderWidth, 0);
+            }
 
-            const greenHeight = this.dbToHeight(-12, h);
-            const yellowHeight = this.dbToHeight(-3, h);
-            const redHeight = this.dbToHeight(0, h);
+            const greenSize = this.dbToPixels(-12, totalLength);
+            const yellowSize = this.dbToPixels(-3, totalLength);
+            const redSize = this.dbToPixels(0, totalLength);
 
             gradient.addColorStop(0, '#00ff00');
-            gradient.addColorStop(Math.min(1, greenHeight / availableHeight), '#00ff00');
-            gradient.addColorStop(Math.min(1, yellowHeight / availableHeight), '#ffff00');
-            gradient.addColorStop(Math.min(1, redHeight / availableHeight), '#ff3300');
+            gradient.addColorStop(Math.min(1, greenSize / availableLength), '#00ff00');
+            gradient.addColorStop(Math.min(1, yellowSize / availableLength), '#ffff00');
+            gradient.addColorStop(Math.min(1, redSize / availableLength), '#ff3300');
             gradient.addColorStop(1, '#ff0000');
 
             ctx.fillStyle = gradient;
-            ctx.fillRect(
-                borderWidth, 
-                h - borderWidth - barHeight, 
-                w - (borderWidth * 2), 
-                barHeight
-            );
+
+            if (isVert) {
+                ctx.fillRect(borderWidth, h - borderWidth - barSize, w - (borderWidth * 2), barSize);
+            } else {
+                ctx.fillRect(borderWidth, borderWidth, barSize, h - (borderWidth * 2));
+            }
         }
 
-        // dB scale only if the control is >= 24px wide
-        if (w >= 24) {
+        // Controllo larghezza/altezza minima per disegnare la scala dei dB
+        const canDrawScale = isVert ? (w >= 22) : (h >= 22);
+
+        if (canDrawScale) {
             ctx.font = '12px monospace';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
+            
+            if (isVert) {
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+            } else {
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+            }
 
             const labelPadding = 2;
             const labelBgWidth = 18;
@@ -181,41 +209,47 @@ class VUMeter {
             const labelBgRadius = 2;
 
             this.dbMarkers.forEach(db => {
-                const markerHeight = this.dbToHeight(db, h);
-                const y = h - borderWidth - markerHeight;
-
-                const isAboveBar = markerHeight > barHeight;
-
+                const markerSize = this.dbToPixels(db, totalLength);
+                const isAboveBar = markerSize > barSize;
                 const isZeroDb = db === 0;
                 const zeroDbColor = barTouchesZeroDb ? '#ffffff' : '#ff0000';
 
                 ctx.strokeStyle = isZeroDb ? zeroDbColor : '#444';
                 ctx.lineWidth = isZeroDb ? 1.5 : 1;
+
+                let textX, textY;
+
                 ctx.beginPath();
-                ctx.moveTo(borderWidth, y);
-                ctx.lineTo(borderWidth + (w * 0.15), y);
+                if (isVert) {
+                    const y = h - borderWidth - markerSize;
+                    ctx.moveTo(borderWidth, y);
+                    ctx.lineTo(borderWidth + (w * 0.15), y);
+                    textX = w - borderWidth - labelPadding;
+                    textY = y;
+                } else {
+                    const x = borderWidth + markerSize;
+                    ctx.moveTo(x, h - borderWidth);
+                    ctx.lineTo(x, h - borderWidth - (h * 0.15));
+                    textX = x;
+                    textY = h - borderWidth - labelPadding;
+                }
                 ctx.stroke();
 
                 const text = db.toString();
-                const textX = w - borderWidth - labelPadding;
-                const textY = y;
 
+                // Disegna sfondo scuro sotto il testo se la barra ci passa sopra
                 if (!isAboveBar) {
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-                    this.drawRoundedRect(
-                        ctx,
-                        w - borderWidth - labelBgWidth,
-                        textY - labelBgHeight / 2,
-                        labelBgWidth,
-                        labelBgHeight,
-                        labelBgRadius
-                    );
+                    if (isVert) {
+                        this.drawRoundedRect(ctx, w - borderWidth - labelBgWidth, textY - labelBgHeight / 2, labelBgWidth, labelBgHeight, labelBgRadius);
+                    } else {
+                        this.drawRoundedRect(ctx, textX - labelBgWidth / 2, textY - labelBgHeight, labelBgWidth, labelBgHeight, labelBgRadius);
+                    }
                     ctx.fill();
                 }
 
-                // text
+                // Disegna il testo del marcatore
                 if (isZeroDb) {
-                    // 0dB con outline for better readablity
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 2.5;
                     ctx.strokeText(text, textX, textY);
@@ -228,45 +262,52 @@ class VUMeter {
             });
         }
 
-        // 0dB line
-        const zeroDbY = h - borderWidth - zeroDbHeight;
+        // Linea tratteggiata dello 0dB
+        const zeroDbPos = zeroDbSize;
         const zeroDbLineColor = barTouchesZeroDb ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 0, 0, 0.3)';
         ctx.strokeStyle = zeroDbLineColor;
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 2]);
         ctx.beginPath();
-        ctx.moveTo(borderWidth, zeroDbY);
-        ctx.lineTo(w - borderWidth, zeroDbY);
+        if (isVert) {
+            const zeroDbY = h - borderWidth - zeroDbPos;
+            ctx.moveTo(borderWidth, zeroDbY);
+            ctx.lineTo(w - borderWidth, zeroDbY);
+        } else {
+            const zeroDbX = borderWidth + zeroDbPos;
+            ctx.moveTo(zeroDbX, borderWidth);
+            ctx.lineTo(zeroDbX, h - borderWidth);
+        }
         ctx.stroke();
         ctx.setLineDash([]);
 
         // Peak hold indicator
         const now = Date.now();
         if (now - this.peakHoldTime < this.peakHoldDuration) {
-            const peakHeight = this.dbToHeight(this.peakDb, h);
-            const peakY = h - borderWidth - peakHeight;
-
-            // Peak color (red when clipping with hold)
+            const peakSize = this.dbToPixels(this.peakDb, totalLength);
             const isClipping = this.peakDb >= this.clipThreshold;
+            
             ctx.fillStyle = isClipping ? '#ff0000' : '#ffffff';
 
-            const peakWidth = w - (borderWidth * 2);
-
-            // Peak line with shadow when clipping
             if (isClipping) {
                 ctx.shadowColor = '#ff0000';
                 ctx.shadowBlur = 4;
             }
 
-            ctx.fillRect(borderWidth, peakY - 1, peakWidth, 2);
+            if (isVert) {
+                const peakY = h - borderWidth - peakSize;
+                ctx.fillRect(borderWidth, peakY - 1, w - (borderWidth * 2), 2);
+            } else {
+                const peakX = borderWidth + peakSize;
+                ctx.fillRect(peakX - 1, borderWidth, 2, h - (borderWidth * 2));
+            }
 
             ctx.shadowBlur = 0;
         } else {
-            // peak decay
             this.peakDb = Math.max(this.currentDb, this.peakDb - 0.5);
         }
 
-        // red border when clipping
+        // Border condizionale (Clip / Selection / Default)
         ctx.lineWidth = 1;
         if (this.clipDetected) {
             ctx.strokeStyle = '#ff0000';
@@ -280,9 +321,7 @@ class VUMeter {
     }
 
     animate() {
-        // Smooth interpolation
         this.currentDb += (this.targetDb - this.currentDb) * this.smoothingFactor;
-
         this.draw();
         requestAnimationFrame(() => this.animate());
     }

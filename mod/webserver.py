@@ -426,6 +426,11 @@ class SystemPreferences(JsonRequestHandler):
         # Workarounds
         self.make_pref("autorestart_hmi", self.OPTION_FILE_EXISTS, "/data/autorestart-hmi")
 
+        # midi controllers
+        self.make_pref("midi_feedback", self.OPTION_FILE_EXISTS, "/data/midi-feedback")
+        self.make_pref("midi_feedback_sync", self.OPTION_FILE_EXISTS, "/data/midi-feedback-sync")
+        self.make_pref("midi_nrpn", self.OPTION_FILE_EXISTS, "/data/midi-nrpn")
+
     def make_pref(self, label, otype, data, valtype=None, valdef=None):
         self.prefs.append({
             "label": label,
@@ -530,7 +535,10 @@ class SystemExeChange(JsonRequestHandler):
                             "jack-mono-copy",
                             "jack-sync-mode",
                             "separate-spdif-outs",
-                            "using-256-frames"):
+                            "using-256-frames",
+                            "midi-feedback",
+                            "midi-feedback-sync",
+                            "midi-nrpn"):
                 self.write(False)
                 return
 
@@ -1298,7 +1306,15 @@ class ServerWebSocket(websocket.WebSocketHandler):
             propertyName = data[2]
             value = data[3]
             SESSION.ws_port_prop_set(inst, portSymbol, propertyName, value, self)
-            
+
+        elif cmd == "param_prop_set":
+            data = data[1].split(" ",4)
+            inst = data[0]
+            uri = data[1]
+            propertyName = data[2]
+            value = data[3]
+            SESSION.ws_param_prop_set(inst, uri, propertyName, value, self)
+
         elif cmd == "performance_plugin_visibility":
             data = data[1].split(" ",2)
             inst = data[0]
@@ -1341,6 +1357,18 @@ class ServerWebSocket(websocket.WebSocketHandler):
         elif cmd == "show_external_ui":
             inst = data[1]
             SESSION.ws_show_external_ui(inst)
+
+        elif cmd == "midi_feedback_enabled":
+            inst = data[1]
+            SESSION.host.send_notmodified("feature_enable midi-feedback " + str(inst))
+
+        elif cmd == "midi_feedback_sync_enabled":
+            inst = data[1]
+            SESSION.host.send_notmodified("feature_enable midi-feedback-sync " + str(inst))
+
+        elif cmd == "midi_nrpn_enabled":
+            inst = data[1]
+            SESSION.host.send_notmodified("feature_enable midi-nrpn " + str(inst))
 
         else:
             print("Unexpected command received over websocket")

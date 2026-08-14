@@ -239,6 +239,20 @@ function GUI(effect, options) {
         presetDelete: function (uri, bundlepath, callback) {
             callback()
         },
+        compareSnapshotSwitch: function (slot) {
+            console.log("GUI: compareSnapshotSwitch", slot)
+        },
+        compareSnapshotTake: function () {
+            console.log("GUI: compareSnapshotTake")
+        },
+        changePortMonitoring: function (port, mode, callback) {
+            console.log("GUI: changePortMonitoring", port, mode)
+            if (callback) {
+                callback()
+            }
+        },
+        isPortMonitored: function (port, callback) {
+        },
         bypassed: true,
         defaultIconTemplate: 'Template missing',
         defaultSettingsTemplate: 'Template missing',
@@ -591,11 +605,101 @@ function GUI(effect, options) {
         }
 
         if (property == "snapshotable") {
-            // global snapshotable status
-            let status = undefined
+            this.updateGlobalSnapshotableStatus()
+        }
+    }
 
-            for(let key in self.controls) {
-                const p = self.controls[key]
+
+    this.setParameterPropertyValue = function (uri, property, value) {
+        var param = self.parameters[uri]
+
+        if (!param) {
+            console.error("setParameterPropertyValue: unknown parameter", uri)
+        }
+        let parsedValue = undefined;
+
+        if (property == "snapshotable") {
+            let elemId = "[mod-role=parameter-snapshotable][mod-parameter-uri='" + uri + "']"
+            parsedValue = (value == "1" || value == "true" || value == 1 || value == true)
+
+            // update the UI
+            const snapshotIconCallback = function(icon, isActive) {
+                if (isActive) {
+                    icon.addClass("active")
+                } else {
+                    icon.removeClass("active")
+                }
+            }
+            // settings: port snapshotable status
+            self.settings.find(elemId).each(function() {
+                var elem = $(this)
+
+                snapshotIconCallback(elem, parsedValue)
+            })
+            // performance view: port snapshotable status
+            self.settingsPerformance.find(elemId).each(function() {
+                var elem = $(this)
+
+                snapshotIconCallback(elem, parsedValue)
+            })
+        } else {
+            console.error("setParameterPropertyValue: unsupported property", property)
+        }
+
+        if (parsedValue === undefined) {
+            console.error("setParameterPropertyValue: property", property, " unknown value ", value)
+        } else {
+            let idx = param.properties.findIndex(function(p) { return p.hasOwnProperty(property) })
+            if (idx >= 0) {
+                param.properties[idx][property] = parsedValue
+            } else {
+                const prop = {}
+
+                prop[property] = parsedValue
+                param.properties.push(prop)
+            }
+        }
+
+        if (property == "snapshotable") {
+            this.updateGlobalSnapshotableStatus()
+        }
+    }
+
+    this.updateGlobalSnapshotableStatus = function () {
+        // global snapshotable status
+        let status = undefined
+
+        for(let key in self.controls) {
+            const p = self.controls[key]
+            const idx = p.properties.findIndex(function(prop) {
+                return prop.hasOwnProperty('snapshotable')
+            })
+            let propVal = false;
+
+            if (idx >= 0)
+                propVal = p.properties[idx].snapshotable
+
+            if (propVal === true) {
+                if (status === undefined)
+                    status = "allOn"
+                else if (status == "allOff") {
+                    status = "mixed"
+                    break; // exit the for
+                }
+            } else {
+                if (status === undefined)
+                    status = "allOff"
+                else if (status == "allOn") {
+                    status = "mixed"
+                    break; // exit the for
+                }
+            }
+        }
+
+        if (status != "mixed") {
+            // check parameters too only if all ports are on or off
+            for(let key in self.parameters) {
+                const p = self.parameters[key]
                 const idx = p.properties.findIndex(function(prop) {
                     return prop.hasOwnProperty('snapshotable')
                 })
@@ -620,40 +724,40 @@ function GUI(effect, options) {
                     }
                 }
             }
-
-            let setStatusFunc;
-
-            if (status == "allOn") {
-                setStatusFunc = function (icon) {
-                    icon.addClass('active')
-                    icon.removeClass('mixed')
-                }
-            } else if (status == "allOff") {
-                setStatusFunc = function (icon) {
-                    icon.removeClass('mixed')
-                    icon.removeClass('active')
-                }
-            } else {
-                setStatusFunc = function (icon) {
-                    icon.addClass('mixed')
-                    icon.removeClass('active')
-                }
-            }
-
-            // icon on the contructor gui (visible only when hovering a plugin)
-            self.icon.find('.plugin-global-snapshot').each(function() {
-                let icon = $(this)
-
-                setStatusFunc(icon)
-            })
-
-            // icon on the setting page
-            self.settings.find('.plugin-global-snapshot').each(function() {
-                let icon = $(this)
-
-                setStatusFunc(icon)
-            })
         }
+
+        let setStatusFunc;
+
+        if (status == "allOn") {
+            setStatusFunc = function (icon) {
+                icon.addClass('active')
+                icon.removeClass('mixed')
+            }
+        } else if (status == "allOff") {
+            setStatusFunc = function (icon) {
+                icon.removeClass('mixed')
+                icon.removeClass('active')
+            }
+        } else {
+            setStatusFunc = function (icon) {
+                icon.addClass('mixed')
+                icon.removeClass('active')
+            }
+        }
+
+        // icon on the contructor gui (visible only when hovering a plugin)
+        self.icon.find('.plugin-global-snapshot').each(function() {
+            let icon = $(this)
+
+            setStatusFunc(icon)
+        })
+
+        // icon on the setting page
+        self.settings.find('.plugin-global-snapshot').each(function() {
+            let icon = $(this)
+
+            setStatusFunc(icon)
+        })
     }
 
     this.setOutputPortValue = function (symbol, value) {
@@ -1063,6 +1167,180 @@ function GUI(effect, options) {
 
     }
 
+    /*
+     * This function sets up a VU meter for monitoring the audio output of this plugin instance.
+     * It creates a VUMeter object, appends it to the plugin settings, and requests the host to monitor
+     * the audio output ports of this plugin instance. 
+     * 
+     * If the host is already monitoring the ports, it will start sending audio level values to this plugin instance.
+     * 
+     * It's called by the desktop when the plugin settings are opened, 
+     * and it should be cleaned up when the settings are closed.
+     * 
+     * It will monitor ports if they are not already monitored, 
+     * and will enable monitoring for each output port of the plugin instance.
+     * 
+     * It will clenaup only the ports that were enabled for monitoring by this function,
+     * when the settings are closed, to avoid interfering with other plugins that may be using the same ports.
+     */
+    this.setupMonitorVUMeter = function () {
+        const vumeter = new VUMeter("100%", "22px", { orientation: "horizontal" })
+        const vumeter_container = self.settings?.find(".js-plugin-vumeter")
+
+        vumeter.dbMarkers = [0, -3, -6, -12, -20, -40];
+        vumeter.setLabel("")
+        vumeter_container.append(vumeter.getElement())
+
+        vumeter.setLevel(-60)
+        self.vumeter = vumeter
+
+        // request host to monitor the audio output ports of this plugin instance
+        // if not already monitored, the host will start sending the audio level 
+        // values to this plugin instance
+
+        self.monitoredPorts = self.monitoredPorts || []
+        self.monitoredPortsIteration = 1
+
+        for(var port of self.effect.ports.audio.output) {
+            const portSymbol = self.instance + '/' + port.symbol
+            let monitoredPort = {
+                portSymbol: portSymbol,
+                alreadyMonitored: options.isPortMonitored(portSymbol),
+                lastValue: -999.0,
+                iteration: 0
+            }
+
+            self.monitoredPorts.push(monitoredPort)
+
+            if (!monitoredPort.alreadyMonitored) {
+                options.changePortMonitoring(portSymbol, 'enable')
+            }
+        }
+    }
+
+    this.setPortVUMeterValue = function(port, db) {
+        if (self.vumeter) {
+            // check if the port is a port of this instance, if not ignore the value
+            if (!port.startsWith(self.instance + "/")) {
+                return
+            }
+
+            // check if port is a selected output port, if not ignore the value
+            const selectedPort = self.settings.find('.mod-monitors-ports-dropdown').val()
+
+            if ((self.instance + "/" + selectedPort) === port) {
+                self.vumeter.setLevel(db)
+            } else if (selectedPort === "all") {
+                // if all ports are selected, we can show the max value of all output ports
+                // first store the last value of this port, then calculate the max value of all output ports
+                let max = -999.0
+                let portWithValues = 0;
+
+                for (let monitoredPort of self.monitoredPorts) {
+                    if (monitoredPort.portSymbol === port) {
+                        max = Math.max(max, db)
+                        monitoredPort.lastValue = db
+                        // got a value for this iteration
+                        monitoredPort.iteration = self.monitoredPortsIteration
+                        portWithValues++
+                    } else if (monitoredPort.iteration == self.monitoredPortsIteration) {
+                        // already have a value setted for this iterations
+                        max = Math.max(max, monitoredPort.lastValue)
+                        portWithValues++
+                    }
+                }
+
+                if (portWithValues == self.monitoredPorts.length) {
+                    // al value collected, we visualize the peak (max) of all outputs
+                    self.vumeter.setLevel(max)
+                    // prepare for next iteration (avoid to cleanup all the values)
+                    self.monitoredPortsIteration++
+                }
+            }
+        }
+    }
+
+    this.cleanupMonitorVUMeter = function (callback) {
+        if (self.vumeter) {
+            self.vumeter.getElement().remove();
+            delete self.vumeter
+        }
+
+        // cleanup the monitored ports that were enabled in the setupMonitorVUMeter function
+        if (self.monitoredPorts && self.monitoredPorts.length > 0) {
+
+            function cleanupMonitoredPort() {
+                // cleanup the first port in the array
+                const monitoredPort = self.monitoredPorts.shift();
+                
+                if (!monitoredPort) {
+                    // FINISH: all port removed
+                    if (callback) {
+                        callback()
+                    }
+                } else {
+                    // cleanup
+                    if (monitoredPort.alreadyMonitored) {
+                        // no need to cleanup go to the next
+                        cleanupMonitoredPort();
+                    } else {
+                        // cleanup and wait
+                        options.changePortMonitoring(monitoredPort.portSymbol, 'disable', function (status) {
+                            if (status) {
+                                console.log("GUI Port monitoring: FAIL to disabled for port", monitoredPort.portSymbol);
+                            }
+                            
+                            // recoursion: next element
+                            setTimeout(cleanupMonitoredPort, 750);
+                        });
+                    }
+                }
+            }
+
+            // start everything: cleanup the first port
+            cleanupMonitoredPort();
+        } else {
+            // nothing to cleanup just call the callback
+            if (callback) {
+                callback()
+            }
+        }
+    }
+
+    this.updateCompareSnapshotStatus = function (status) {
+        const compareAButton = self.settings.find('.js-ab-compare-snapshot-a')
+        const compareBButton = self.settings.find('.js-ab-compare-snapshot-b')
+        const compareTakeButton = self.settings.find('.js-ab-compare-snapshot-take')
+
+        // initialize the compare buttons state based on the current slot
+        if (status == 'A') {
+            compareAButton
+                .addClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+            compareBButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+        } else if (status == 'B') {
+            compareAButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+            compareBButton
+                .addClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+        } else if (status == 'init') {
+            compareAButton.removeClass('js-ab-compare-snapshot-selected js-ab-compare-snapshot-disabled')
+            compareBButton.removeClass('js-ab-compare-snapshot-selected js-ab-compare-snapshot-disabled')
+        } else {
+            // empty state
+            compareAButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .addClass('js-ab-compare-snapshot-disabled')
+            compareBButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .addClass('js-ab-compare-snapshot-disabled')
+        }
+    }
+
     this.render = function (instance, callback, skipNamespace) {
         self.instance = instance
 
@@ -1075,6 +1353,7 @@ function GUI(effect, options) {
                 self.icon = $('<div class="mod-pedal">')
             }
 
+            self.icon.data('helpId', 'mod-pedal-icon')
             var templateData = self.getTemplateData(effect, skipNamespace)
             self.icon.html(Mustache.render(effect.gui.iconTemplate || options.defaultIconTemplate, templateData))
 
@@ -1135,168 +1414,199 @@ function GUI(effect, options) {
 
             var presetElem = self.settings.find('.mod-presets')
             var presetElemPerfView = self.settingsPerformance.find('.mod-presets')
+            var compareAButton = self.settings.find('.js-ab-compare-snapshot-a')
+            var compareBButton = self.settings.find('.js-ab-compare-snapshot-b')
+            var compareTakeButton = self.settings.find('.js-ab-compare-snapshot-take')
 
-            if (instance &&
-                (totalPresetCount > 0 || self.effect.parameters.length + self.effect.ports.control.input.length > 0))
+            if (instance)
             {
-                self.handleSettingsPresets(presetElem, presets)
-                self.handleSettingsPresets(presetElemPerfView, presets)
+                self.updateCompareSnapshotStatus(undefined)
 
-                var getCurrentPresetItem = function () {
-                    if (! self.currentPreset) {
-                        return null
-                    }
-                    var opt = presetElem.find('[mod-role=enumeration-option][mod-uri="' + self.currentPreset + '"]')
-                    if (opt.length == 0) {
-                        return null
-                    }
-                    return opt
-                }
+                compareAButton.click(function () {
+                    if (compareBButton.hasClass('js-ab-compare-snapshot-disabled'))
+                        return
 
-                /* we only need to handle preset save/rename/delete in the setting view and not in the performance view */
-                presetElem.find('.preset-btn-save').click(function () {
-                    if ($(this).hasClass('disabled')) {
+                    options.compareSnapshotSwitch('A')
+                });
+
+                compareBButton.click(function () {
+                    if (compareBButton.hasClass('js-ab-compare-snapshot-disabled'))
                         return
+
+                    options.compareSnapshotSwitch('B')
+                });
+                compareTakeButton.click(function () {
+                    options.compareSnapshotTake(function(ok) {
+                        if (ok) {
+                            options.compareSnapshotSwitch('B')
+                        } else {
+                            new Notification('error', 'Failed to take snapshot', 2000)
+                        }
+                    })
+                });
+
+                if (totalPresetCount > 0 || self.effect.parameters.length + self.effect.ports.control.input.length > 0)
+                {
+                    self.handleSettingsPresets(presetElem, presets)
+                    self.handleSettingsPresets(presetElemPerfView, presets)
+
+                    var getCurrentPresetItem = function () {
+                        if (! self.currentPreset) {
+                            return null
+                        }
+                        var opt = presetElem.find('[mod-role=enumeration-option][mod-uri="' + self.currentPreset + '"]')
+                        if (opt.length == 0) {
+                            return null
+                        }
+                        return opt
                     }
-                    var item = getCurrentPresetItem()
-                    if (! item) {
-                        return
-                    }
-                    var name = item.text() || "Untitled",
-                        path = item.attr('mod-path'),
-                        uri  = item.attr('mod-uri')
-                    if (! path || ! uri) {
-                        return
-                    }
-                    options.presetSaveReplace(uri, path, name, function (resp) {
-                        if (! resp.ok) {
+
+                    /* we only need to handle preset save/rename/delete in the setting view and not in the performance view */
+                    presetElem.find('.preset-btn-save').click(function () {
+                        if ($(this).hasClass('disabled')) {
                             return
                         }
-                        item.attr('mod-path', resp.bundle)
-                        item.attr('mod-uri', resp.uri)
-                        item.find(".mod-preset-label")
-                            .attr('mod-uri', resp.uri)
-                        item.find('.mod-preset-check')
-                            .attr('mod-uri', resp.uri)
-                            .attr('id', 'preset-' + resp.uri)
-                    })
-                })
-
-                presetElem.find('.preset-btn-save-as').click(function () {
-                    if (desktop == null) {
-                        return
-                    }
-                    var name = "",
-                        item = getCurrentPresetItem()
-                    if (item) {
-                        name = item.find(".mod-preset-label").text() || "Undefined"
-                    }
-                    desktop.openPresetSaveWindow("Saving Preset", name, function (newName) {
-                        options.presetSaveNew(newName, function (resp) {
-                            const newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'" class="mod-preset"><input type="checkbox" id="preset-'+resp.uri+'" class="mod-preset-check" mod-uri="'+resp.uri+'" checked><label class="mod-preset-label">'+newName+'</label></div>')
-                            //var newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'">'+newName+'</div>')
-                            newItem.appendTo(presetElem.find('.mod-preset-user')) // .click((e) => self.presetItemClicked(newItem, presetElem, e))
-
-                            newItem.click((e) => self.presetItemClicked(newItem, presetElem, e))
-                            const checkbox = newItem.find('.mod-preset-check')
-                            checkbox.click((e) => {
-                                e.stopPropagation() // avoid triggering the preset selection when clicking the checkbox
-                                const enabled =  e.target.checked
-
-                                self.setPresetEnabled(checkbox, enabled, function (resp) {
-                                    if (!resp) {
-                                        // in case of error revert the checkbox state
-                                        e.target.checked = !enabled
-                                    }
-                                })
-                            }).prop('checked', true)
-
-                            presetElem.find('.radio-preset-user').click()
-                            presetElem.find('.preset-btn-assign-all').removeClass("disabled")
-
-                            totalPresetCount += 1
-                            self.selectPreset(resp.uri)
-                        })
-                    })
-                })
-
-                presetElem.find('.preset-btn-rename').click(function () {
-                    if (desktop == null) {
-                        return
-                    }
-                    if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
-                        return
-                    }
-                    var item = getCurrentPresetItem()
-                    if (! item) {
-                        return
-                    }
-                    var name = name = item.find(".mod-preset-label").text() || "Undefined"
-                        path = item.attr('mod-path'),
-                        uri  = item.attr('mod-uri')
-                    if (! path || ! uri) {
-                        return
-                    }
-                    desktop.openPresetSaveWindow("Renaming Preset", name, function (newName) {
-                        options.presetSaveReplace(uri, path, newName, function (resp) {
+                        var item = getCurrentPresetItem()
+                        if (! item) {
+                            return
+                        }
+                        var name = item.text() || "Untitled",
+                            path = item.attr('mod-path'),
+                            uri  = item.attr('mod-uri')
+                        if (! path || ! uri) {
+                            return
+                        }
+                        options.presetSaveReplace(uri, path, name, function (resp) {
+                            if (! resp.ok) {
+                                return
+                            }
                             item.attr('mod-path', resp.bundle)
                             item.attr('mod-uri', resp.uri)
                             item.find(".mod-preset-label")
-                                .text(newName)
+                                .attr('mod-uri', resp.uri)
                             item.find('.mod-preset-check')
                                 .attr('mod-uri', resp.uri)
                                 .attr('id', 'preset-' + resp.uri)
                         })
                     })
-                })
 
-                presetElem.find('.preset-btn-delete').click(function () {
-                    if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
-                        return
-                    }
-                    var item = getCurrentPresetItem()
-                    if (! item) {
-                        return
-                    }
-                    var path = item.attr('mod-path')
-                    if (! path) {
-                        return
-                    }
-                    options.presetDelete(self.currentPreset, path, function () {
-                        self.selectPreset("")
-                        item.remove()
-
-                        totalPresetCount -= 1
-
-                        if (totalPresetCount == 1) {
-                            presetElem.find('.preset-btn-assign-all').addClass("disabled")
+                    presetElem.find('.preset-btn-save-as').click(function () {
+                        if (desktop == null) {
+                            return
                         }
-                    })
-                })
-            }
-            else
-            {
-                presetElem.hide()
-                presetElemPerfView.hide()
-            }
+                        var name = "",
+                            item = getCurrentPresetItem()
+                        if (item) {
+                            name = item.find(".mod-preset-label").text() || "Undefined"
+                        }
+                        desktop.openPresetSaveWindow("Saving Preset", name, function (newName) {
+                            options.presetSaveNew(newName, function (resp) {
+                                const newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'" class="mod-preset"><input type="checkbox" id="preset-'+resp.uri+'" class="mod-preset-check" mod-uri="'+resp.uri+'" checked><label class="mod-preset-label">'+newName+'</label></div>')
+                                //var newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'">'+newName+'</div>')
+                                newItem.appendTo(presetElem.find('.mod-preset-user')) // .click((e) => self.presetItemClicked(newItem, presetElem, e))
 
-            if (instance && self.effect.parameters.length)
-            {
-                self.settings.find('.mod-file-list').each(function () {
-                    var elem = $(this)
-                    var list = elem.find('.mod-enumerated-list')
-                    if (list.length == 1 && list[0].childElementCount > 5) {
-                        elem.find('.file-list-btn-expand').click(function () {
-                            if (elem.hasClass('expanded')) {
-                                elem.removeClass('expanded')
-                            } else {
-                                elem.addClass('expanded')
+                                newItem.click((e) => self.presetItemClicked(newItem, presetElem, e))
+                                const checkbox = newItem.find('.mod-preset-check')
+                                checkbox.click((e) => {
+                                    e.stopPropagation() // avoid triggering the preset selection when clicking the checkbox
+                                    const enabled =  e.target.checked
+
+                                    self.setPresetEnabled(checkbox, enabled, function (resp) {
+                                        if (!resp) {
+                                            // in case of error revert the checkbox state
+                                            e.target.checked = !enabled
+                                        }
+                                    })
+                                }).prop('checked', true)
+
+                                presetElem.find('.radio-preset-user').click()
+                                presetElem.find('.preset-btn-assign-all').removeClass("disabled")
+
+                                totalPresetCount += 1
+                                self.selectPreset(resp.uri)
+                            })
+                        })
+                    })
+
+                    presetElem.find('.preset-btn-rename').click(function () {
+                        if (desktop == null) {
+                            return
+                        }
+                        if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
+                            return
+                        }
+                        var item = getCurrentPresetItem()
+                        if (! item) {
+                            return
+                        }
+                        var name = name = item.find(".mod-preset-label").text() || "Undefined"
+                            path = item.attr('mod-path'),
+                            uri  = item.attr('mod-uri')
+                        if (! path || ! uri) {
+                            return
+                        }
+                        desktop.openPresetSaveWindow("Renaming Preset", name, function (newName) {
+                            options.presetSaveReplace(uri, path, newName, function (resp) {
+                                item.attr('mod-path', resp.bundle)
+                                item.attr('mod-uri', resp.uri)
+                                item.find(".mod-preset-label")
+                                    .text(newName)
+                                item.find('.mod-preset-check')
+                                    .attr('mod-uri', resp.uri)
+                                    .attr('id', 'preset-' + resp.uri)
+                            })
+                        })
+                    })
+
+                    presetElem.find('.preset-btn-delete').click(function () {
+                        if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
+                            return
+                        }
+                        var item = getCurrentPresetItem()
+                        if (! item) {
+                            return
+                        }
+                        var path = item.attr('mod-path')
+                        if (! path) {
+                            return
+                        }
+                        options.presetDelete(self.currentPreset, path, function () {
+                            self.selectPreset("")
+                            item.remove()
+
+                            totalPresetCount -= 1
+
+                            if (totalPresetCount == 1) {
+                                presetElem.find('.preset-btn-assign-all').addClass("disabled")
                             }
                         })
-                    } else {
-                        elem.find('.file-list-btn-expand').hide()
-                    }
-                })
+                    })
+                }
+                else
+                {
+                    presetElem.hide()
+                    presetElemPerfView.hide()
+                }
+
+                if (self.effect.parameters.length)
+                {
+                    self.settings.find('.mod-file-list').each(function () {
+                        var elem = $(this)
+                        var list = elem.find('.mod-enumerated-list')
+                        if (list.length == 1 && list[0].childElementCount > 5) {
+                            elem.find('.file-list-btn-expand').click(function () {
+                                if (elem.hasClass('expanded')) {
+                                    elem.removeClass('expanded')
+                                } else {
+                                    elem.addClass('expanded')
+                                }
+                            })
+                        } else {
+                            elem.find('.file-list-btn-expand').hide()
+                        }
+                    })
+                }
+
             }
 
             var editButton = self.settings.find('.mod-pedal-settings .mod-edit')
@@ -1340,30 +1650,39 @@ function GUI(effect, options) {
                         console.log("Toggling global snapshotable for", self.instance, " new:", newSnapshotable ? "ON" : "OFF")
                         desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, newSnapshotable)
                     }
+
+                    //TODO: update the parameters
                 })
             })
 
             // snapshot icon click
-            self.settings.find('[mod-role=bypass-snapshotable],[mod-role=presets-snapshotable],[mod-role=input-control-snapshotable]').each(function () {
+            self.settings.find('[mod-role=bypass-snapshotable],[mod-role=presets-snapshotable],[mod-role=input-control-snapshotable],[mod-role=parameter-snapshotable]').each(function () {
                 var control = $(this)
 
                 control.click(function () {
-                    let symbol;
-
-                    if (control.attr('mod-role') == 'bypass-snapshotable') {
-                        symbol = ":bypass"
-                    } else if (control.attr('mod-role') == 'presets-snapshotable') {
-                        symbol = ":presets"
-                    } else {
-                        symbol = control.attr('mod-port-symbol')
-                    }
-
-                    if (!symbol) {
-                        return
-                    }
-
                     const hasSnapshotable = control.hasClass("active")
-                    desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, hasSnapshotable ? false : true)
+
+                    if (control.attr('mod-role') == 'parameter-snapshotable') {
+                        const uri = control.attr('mod-parameter-uri')
+                        if (!uri) {
+                            return
+                        }
+                        desktop.pedalboard.data('pluginParameterSnapshotableSet')(self.instance, uri, hasSnapshotable ? false : true)
+                    } else {
+                        let symbol;
+                        if (control.attr('mod-role') == 'bypass-snapshotable') {
+                            symbol = ":bypass"
+                        } else if (control.attr('mod-role') == 'presets-snapshotable') {
+                            symbol = ":presets"
+                        } else {
+                            symbol = control.attr('mod-port-symbol')
+                        }
+
+                        if (!symbol) {
+                            return
+                        }
+                        desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, hasSnapshotable ? false : true)
+                    }
                 })
             })
 
@@ -1476,6 +1795,7 @@ function GUI(effect, options) {
         var render = function () {
             self.preRender()
             var icon = $('<div class="mod-pedal dummy ignore-arrive">')
+            icon.data('helpId', 'mod-pedal-icon')
             icon.html(Mustache.render(effect.gui.iconTemplate || options.defaultIconTemplate,
                       self.getTemplateData(effect, false)))
             icon.find('[mod-role="input-audio-port"]').addClass("mod-audio-input")
@@ -1491,6 +1811,8 @@ function GUI(effect, options) {
             render()
         } else {
             self.dependenciesCallbacks.push(render)
+            // fire the loadDependencies now
+            self.deferredLoadDependencies()
         }
     }
 
@@ -1990,6 +2312,26 @@ function GUI(effect, options) {
         else
         {
             data.effect.all_control_in_ports = []
+        }
+
+        // create an array of output ports
+        // with a more human friendly label
+        data.effect.monitor_ports = []
+        if (data.effect.ports.audio.output) {
+            if (data.effect.ports.audio.output.length > 1) {
+                // if more than one output add a special "all" output port
+                data.effect.monitor_ports.push({
+                    symbol: "all",
+                    label: "All outputs (peak)"
+                })
+            }
+            for (let port of data.effect.ports.audio.output) {
+
+                if (!port['label']) {
+                    port['label'] = port['name'].replace('_', ' ')
+                }
+                data.effect.monitor_ports.push(port)
+            }
         }
 
         for (var i in data.effect.parameters) {

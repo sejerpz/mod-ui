@@ -23,6 +23,7 @@ from tornado import gen, iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
 from urllib.parse import quote, unquote
 from pprint import pprint
+
 import os, json, socket, time, logging, sys
 import shutil
 import copy
@@ -764,9 +765,12 @@ class Host(object):
             port_status = next((item for item in self.audioportsMonitored if item['port'] == port), None)
 
         audioMonitorExists = port_status is not None
+        retry = 0
 
         def monitor_audio_port_callback(success):
             nonlocal port_status
+            nonlocal retry
+
             logging.debug("monitor_audio_port callback: %s - %s enabled %s. success %s", port, jack_port, enable, success)
             if success:
                 if enable:
@@ -782,7 +786,11 @@ class Host(object):
                     if audioMonitorExists:
                         self.audioportsMonitored.remove(port_status)
             else:
-                logging.error("Failed to %s audio monitor for port %s - %s", "enable" if enable else "disable", port, jack_port)
+                logging.error("Failed to %s audio monitor for port %s - %s: %s", "enable" if enable else "disable", port, jack_port, "retry" if retry == 0 else "giveup")
+                if retry == 0:
+                    retry += 1
+                    time.sleep(0.100)
+                    self.send_notmodified("monitor_audio_levels \"%s\" %s" % (jack_port, "1" if enable else "0"), monitor_audio_port_callback, datatype='boolean')
 
         # send the command to mod host
         self.send_notmodified("monitor_audio_levels \"%s\" %s" % (jack_port, "1" if enable else "0"), monitor_audio_port_callback, datatype='boolean')
@@ -2307,6 +2315,13 @@ class Host(object):
                 if crashed:
                     self.send_notmodified("port_prop_set %d %s %s %s" % (instance_id, symbol, "snapshotable", "1" if props['snapshotable'] else "0"))
 
+            # send parameter properties like snapshotable
+            for uri, props in pluginData['paramsprops'].items():
+                websocket.write_message("param_prop_set %s %s %s %s" % (pluginData['instance'], uri, "snapshotable", "1" if props['snapshotable'] else "0"))
+
+                if crashed:
+                    self.send_notmodified("param_prop_set %d %s %s %s" % (instance_id, uri, "snapshotable", "1" if props['snapshotable'] else "0"))
+
             for symbol, value in pluginData['outputs'].items():
                 if value is None:
                     continue
@@ -2602,6 +2617,7 @@ class Host(object):
             params = {}
             ranges = {}
             portsprops = dict() # port properties (snapshot, ...)
+            paramsprops = dict() # parameter properties (snapshot, ...)
             enabled_symbol = None
             freewheel_symbol = None
             bpb_symbol = None
@@ -2674,7 +2690,12 @@ class Host(object):
                     continue
                 if paramtype not in ('s','p','u') and param['ranges']['minimum'] == param['ranges']['maximum']:
                     continue
+
                 paramuri = param['uri']
+                # snapshot property defaults to False when adding a new plugin
+                # this is different from previous behaviour, before all ports
+                # were snapshotable, now we need to activate this functionality
+                paramsprops[paramuri] = {'snapshotable': param.get('snapshotable', False)}
                 params[paramuri] = [param['ranges']['default'], paramtype]
                 ranges[paramuri] = (param['ranges']['minimum'], param['ranges']['maximum'])
 
@@ -2715,6 +2736,7 @@ class Host(object):
                 "slabel"      : "",
                 "performance" : dict(visible=performanceInfo.visible, index=performanceInfo.index), #  extinfo['performance']
                 "portsprops"  : portsprops,
+                "paramsprops" : paramsprops
             }
 
             for output in extinfo['monitoredOutputs']:
@@ -2953,6 +2975,54 @@ class Host(object):
                 self.save_snapshots_to_disk()
         else:
             logging.error("[host] Trying to modify an unknown port property '%s'", propertyName)
+            parsedValue = None
+
+        return parsedValue
+
+    def set_param_prop(self, instance, paramUri, propertyName, value):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+        paramprops = pluginData['paramsprops'].get(paramUri, None)
+        if paramprops is None:
+            logging.error("[host] Trying to modify a non-existing parameter '%s' of instance '%s'", paramUri, instance)
+            return
+
+        logging.info("[host] modify property '%s' of parameter '%s' of instance '%s': %s", propertyName, paramUri, instance, value)
+
+        if (propertyName == "snapshotable"):
+            parsedValue =  True if value in (1, True, "1", "true", "True") else False
+            paramprops[propertyName] = parsedValue
+
+            # if parseValue is true we should add/update the current port value to all snapshots
+            # if parseValue is False we don't have anything to do since not snapshot-able ports are filtered on snapshot load
+            if parsedValue == True:
+                # for every snapshot
+                instance = instance.replace("/graph/","",1)
+                for snapshot in self.pedalboard_snapshots:
+                    if snapshot is None:
+                        continue
+
+                    data = snapshot['data']
+                    # search for this plugin instance
+                    snapshotData = data.get(instance, None)
+                    if snapshotData is None:
+                        logging.warning("[host] snapshot %s plugin %s not found", snapshot['name'], instance)
+                        continue
+
+                    # patching snapshot addind/updating just this port
+                    parameters =  pluginData['parameters']
+                    parameterValue = parameters.get(paramUri, None)
+                    logging.debug("snapshot %s plugin %s parameter %s value %s", snapshot['name'], instance, paramUri, parameterValue)
+                    if parameterValue is None:
+                        logging.warning("[host] snapshot %s plugin %s parameter %s value not found", snapshot['name'], instance, paramUri)
+                        continue # next snapshot
+
+                    logging.debug("snapshot %s patching plugin %s parameter %s value %s", snapshot['name'], instance, paramUri, parameterValue)
+                    snapshotData['parameters'][paramUri] = parameterValue
+
+                self.save_snapshots_to_disk()
+        else:
+            logging.error("[host] Trying to modify an unknown parameter property '%s'", propertyName)
             parsedValue = None
 
         return parsedValue
@@ -3404,6 +3474,7 @@ class Host(object):
                 continue
 
             portsprops = pluginData['portsprops']
+            paramsprops = pluginData['paramsprops']
             # check if bypass is snapshotable
             bypassSnapshotable = force_load_params or portsprops[':bypass'].get('snapshotable', False)
             presetSnapshotable = force_load_params or portsprops[':presets'].get('snapshotable', False)
@@ -3495,6 +3566,11 @@ class Host(object):
             for uri, param in data.get('parameters', {}).items():
                 if pluginData['parameters'].get(uri, None) in (param, None):
                     continue
+
+                if force_load_params == False and paramsprops[uri].get('snapshotable', False) == False:
+                    logging.info("load snapshot %s parameter %s.%s is not snapshotable", snapshot['name'], instance, uri)
+                    continue
+
                 self.msg_callback("patch_set %s 1 %s %s %s" % (instance, uri, param[1], param[0]))
                 try:
                     yield gen.Task(self.patch_set, instance, uri, param[0])
@@ -4074,14 +4150,14 @@ class Host(object):
             params = {}
             ranges = {}
             portsprops = dict() # symbol: {property, value}
-
+            paramsprops = dict() # uri: {property, value}
             enabled_symbol = None
             freewheel_symbol = None
             bpb_symbol = None
             bpm_symbol = None
             speed_symbol = None
 
-            # read from the pedalboard, default to True if not presente to be consistent with previous snapshot behaviour
+            # read from the pedalboard, default to True if not present to be consistent with previous snapshot behaviour
             portsprops[':bypass'] = {'snapshotable': p.get('bypass_snapshotable', True)}
             portsprops[':presets'] = {'snapshotable':  p.get('preset_snapshotable', True)}
 
@@ -4146,6 +4222,8 @@ class Host(object):
                 if paramtype not in ('s','p','u') and param['ranges']['minimum'] == param['ranges']['maximum']:
                     continue
                 paramuri = param['uri']
+                # default for port properties (e.g. if port is snapshotable), current value is read from config below
+                paramsprops[paramuri] = {'snapshotable': False}
                 params[paramuri] = [param['ranges']['default'], paramtype]
                 ranges[paramuri] = (param['ranges']['minimum'], param['ranges']['maximum'])
 
@@ -4187,7 +4265,8 @@ class Host(object):
                 "label"       : p['label'],
                 "slabel"      : p['label'].replace(' ', '_') if p['label'] is not None else "", # replace spaces with _
                 "performance" : dict((prop, p['performance'].get(prop)) for prop in p['performance'].keys()),
-                "portsprops" : portsprops
+                "portsprops" : portsprops,
+                "paramsprops": paramsprops,
             }
 
             self.send_notmodified("add %s %d" % (p['uri'], instance_id))
@@ -4262,6 +4341,22 @@ class Host(object):
                     pluginData['midiCCs'][symbol] = (mchnnl, mctrl, minimum, maximum)
                     pluginData['addressings'][symbol] = self.addressings.add_midi(instance_id, symbol,
                                                                                   mchnnl, mctrl, minimum, maximum)
+
+            # read the parameter properties from the pedalboard .ttl file and set them in the pluginData dictionary
+            for parameter in p['parameters']:
+                logging.debug("[host] loading parameter '%s' from %s" % (parameter, pluginData['paramsprops']))
+                # the parameter URI contains just the name of the parameter, we need to prepend the plugin URI to get the full URI
+                uri = p['uri'] + '#' + parameter['uri']
+                # snapshot property defaults to True when loading old pedalboards
+                # which don't have this property saved. This is consinstent with
+                # the previous behaviour.
+                snapshot = parameter.get('snapshotable', True)
+                # set the snapshotable property read from the pedalboard .ttl file
+                if uri not in pluginData['paramsprops']:
+                    logging.warning("[host] parameter '%s' not found in plugin '%s' paramsprops, skipping snapshotable property" % (uri, instance))
+                else:
+                    logging.debug("[host] setting parameter '%s' snapshotable property to %s" % (uri, snapshot))
+                    pluginData['paramsprops'][uri]['snapshotable'] = snapshot
 
             for output in extinfo['monitoredOutputs']:
                 self.send_notmodified("monitor_output %d %s" % (instance_id, output))
@@ -4488,6 +4583,7 @@ _:b%i
     mod:releaseNumber %i ;
     mod:label '%s' ;
     lv2:port <%s> ;
+    patch:writable <%s> ;
     lv2:prototype <%s> ;
     perf:visible %s ;
     perf:index %i ;
@@ -4506,6 +4602,7 @@ _:b%i
                                                                                           info['ports']['midi']['input']+
                                                                                           info['ports']['midi']['output']+
                                                                                           [{'symbol': ":bypass"}]))),
+       "> ,\n             <".join(tuple("%s#%s" % (instance, parameter['uri'].partition("#")[2]) for parameter in info['parameters'] if parameter['uri'].partition("#")[2])),
        pluginData['uri'],
        "true" if pluginData['performance']['visible'] else "false",
        pluginData['performance']['index'],
@@ -4605,6 +4702,22 @@ _:b%i
         midi:controllerNumber %i ;
         a midi:Controller ;
     ] ;""" % pluginData['bypassCC']) if -1 not in pluginData['bypassCC'] else "")
+
+            # parameters
+            for parameter in info['parameters']:
+                uri = parameter['uri']
+                paramname = uri.partition("#")[2]
+                if not paramname:
+                    logging.error("[host] parameter %s has no name, skipping" % (uri))
+                    continue
+
+                logging.debug("[host] saving plugin parameter %s" % (paramname))
+                snapshotable = pluginData['paramsprops'][uri].get('snapshotable', False)
+                blocks += """
+<%s#%s>
+    mod:snapshotable %s ;
+    a lv2:Parameter .
+""" % (instance, paramname, 'true' if snapshotable else 'false')
 
         # Globak Ports
         pluginData = self.plugins[PEDALBOARD_INSTANCE_ID]
@@ -4832,6 +4945,7 @@ _:b%i
 @prefix pedal: <http://moddevices.com/ns/modpedal#> .
 @prefix perf:  <http://moddevices.com/ns/modperformance#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix patch: <http://lv2plug.in/ns/ext/patch#> .
 %s%s%s
 <>
     doap:name "%s" ;
@@ -6336,13 +6450,16 @@ _:b%i
             if port_addressing is not None:
                 cctype = port_addressing.get('cctype', 0x0)
                 hmitype = port_addressing.get('hmitype', 0x0)
+                tempo_addressing = port_addressing.get('tempo', None)
 
                 if hmitype & FLAG_CONTROL_ENUMERATION or cctype & CC_MODE_OPTIONS:
-                    value = get_nearest_valid_scalepoint_value(value, port_addressing['options'])[1]
+                    # don't get the scale point for tempo binded parameters when setting from builder
+                    if not from_builder or not tempo_addressing:
+                        value = get_nearest_valid_scalepoint_value(value, port_addressing['options'])[1]
 
                 group_actuators = self.addressings.get_group_actuators(port_addressing['actuator_uri'])
 
-                if port_addressing.get('tempo', None):
+                if tempo_addressing:
                     # compute new port value based on received divider value
                     extinfo = get_plugin_info_essentials(pluginData['uri'])
 
@@ -6357,9 +6474,13 @@ _:b%i
                         return
 
                     port = ports[0]
-                    port_value = get_port_value(self.transport_bpm, value, port['units']['symbol'])
-                    if port['units']['symbol'] != 'BPM': # convert back into port unit if needed
-                        port_value = convert_seconds_to_port_value_equivalent(port_value, port['units']['symbol'])
+                    if from_builder:
+                        # when setting from builder value is already in right the port unit
+                        port_value = value
+                    else:
+                        port_value = get_port_value(self.transport_bpm, value, port['units']['symbol'])
+                        if port['units']['symbol'] != 'BPM': # convert back into port unit if needed
+                            port_value = convert_seconds_to_port_value_equivalent(port_value, port['units']['symbol'])
 
                     port_addressing['dividers'] = value
                     port_addressing['value'] = port_value

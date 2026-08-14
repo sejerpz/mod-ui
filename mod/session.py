@@ -358,7 +358,11 @@ class Session(object):
         self.msg_callback_broadcast("port_prop_set %s %s %s %s" % (instance, portSymbol, propertyName, value), ws)
         ws.write_message("port_prop_set %s %s %s %s" % (instance, portSymbol, "snapshotable", "1" if value else "0"))
 
-        
+    def ws_param_prop_set(self, instance, uri, propertyName, value, ws):
+        value = self.host.set_param_prop(instance, uri, propertyName, value)
+        self.msg_callback_broadcast("param_prop_set %s %s %s %s" % (instance, uri, propertyName, value), ws)
+        ws.write_message("param_prop_set %s %s %s %s" % (instance, uri, "snapshotable", "1" if value else "0"))
+
     # Set a plugin visibility on the performance view
     def ws_performance_plugin_visibility(self, instance, visible, ws):
         #self.screenshot_needed = True

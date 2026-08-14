@@ -192,6 +192,21 @@ function refresh_sysprefs() {
             $("#prefs-service-mod-sdk").prop("checked", resp.service_mod_sdk)
             $("#prefs-service-netmanager").prop("checked", resp.service_netmanager)
             $("#prefs-workarounds-autorestart-hmi").prop("checked", resp.autorestart_hmi)
+
+            $("#prefs-enable-midi-feedback").prop("checked", resp.midi_feedback)
+            if (resp.midi_feedback_sync) {
+                // enable the feedback
+                $("#prefs-enable-midi-feedback-sync")
+                    .prop("checked", resp.midi_feedback_sync)
+                    .removeAttr("disabled")
+            } else {
+                // uncheck the midi feedback sync checkbox & disable if
+                $("#prefs-enable-midi-feedback-sync")
+                    .prop("checked", false)
+                    .attr("disabled", true)
+            }
+            $("#prefs-enable-midi-nrpn").prop("checked", resp.midi_nrpn)
+
         },
         cache: false,
         global: false,
@@ -692,6 +707,44 @@ $('document').ready(function() {
     })
 
     // ----------------------------------------------------------------------------------------------------------------
+    // --- Midi Controllers
+    const enable_midi_feedback_sync = function(enabled) {
+        create_or_delete_file("midi-feedback-sync", enabled)
+        ws.send(sprintf("midi_feedback_sync_enabled %u", enabled))
+    }
+    const enable_midi_feedback = function(enabled) {
+        create_or_delete_file("midi-feedback", enabled);
+        ws.send(sprintf("midi_feedback_enabled %u", enabled));
+        if (enabled) {
+            // enable the feedback
+            $("#prefs-enable-midi-feedback-sync")
+                .prop("checked", false)
+                .removeAttr("disabled")
+        } else {
+            // uncheck the midi feedback sync checkbox & disable if
+            $("#prefs-enable-midi-feedback-sync")
+                .prop("checked", false)
+                .attr("disabled", true)
+            // disable also midi feedback sync
+            enable_midi_feedback_sync(enabled)
+        }
+    }
+
+    $("#prefs-enable-midi-feedback").click(function () {
+        var enabled = $(this).prop("checked") ? 1 : 0;
+        enable_midi_feedback(enabled);
+    })
+    $("#prefs-enable-midi-feedback-sync").click(function () {
+        var enabled = $(this).prop("checked") ? 1 : 0;
+        enable_midi_feedback_sync(enabled)
+    })
+    $("#prefs-enable-midi-nrpn").click(function () {
+        var enabled = $(this).prop("checked") ? 1 : 0;
+        create_or_delete_file("midi-nrpn", enabled)
+        ws.send(sprintf("midi_nrpn_enabled %u", enabled))
+    })
+
+    // ----------------------------------------------------------------------------------------------------------------
     // --- User Interface
 
     $("#prefs-ui-developer-mode").click(function () {
@@ -1068,6 +1121,39 @@ $('document').ready(function() {
                     </p>
                 </form>
 
+                <h1>Midi Controllers</h1>
+                <form class="form">
+
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-enable-midi-feedback">
+                            Enable Midi feedback
+                        </input>
+                    </label>
+                    <p>
+                        If enabled, when a paramater has a midi binding and that parameter is change on the MOD, midid is sent out of the MOD to update the controller.
+                    </p>
+
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-enable-midi-feedback-sync">
+                            Enable Midi feedback sync
+                        </input>
+                    </label>
+                    <p>
+                        If midi feedback is enabled and this is enabled, bound midi messages are sent out from the MOD.
+                        This is only used to keep multiple midi controllers in sync.
+                    </p>
+
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-enable-midi-nrpn">
+                            Enable Midi NRPN support
+                        </input>
+                    </label>
+                    <p>
+                        Enables Midi NRPN support for controlling parameters.
+                        If this is enabled then the following CC mssages cannot be used: CC6, CC38, CC98 and CC99.
+                    </p>
+                </form>
+                
                 <h1>Services</h1>
                 <form class="form">
                     <p>
