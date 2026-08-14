@@ -699,8 +699,6 @@ function GUI(effect, options) {
         if (status != "mixed") {
             // check parameters too only if all ports are on or off
             for(let key in self.parameters) {
-                console.log("checking parameter", key)
-
                 const p = self.parameters[key]
                 const idx = p.properties.findIndex(function(prop) {
                     return prop.hasOwnProperty('snapshotable')
