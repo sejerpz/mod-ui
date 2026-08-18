@@ -26,15 +26,20 @@ function shouldSkipPort(port) {
 
 function loadFileTypesList(parameter, dummy, callback) {
     var files = []
-    if (parameter.ranges.default) {
-        var sdef = parameter.ranges.default
-        files.push({
-            'fullname': sdef,
-            'basename': sdef.slice(sdef.lastIndexOf('/')+1),
-        })
+    const addDefaultParamValue = function() {
+        if (parameter.ranges.default) {
+            var sdef = parameter.ranges.default
+            files.push({
+                'fullname': sdef,
+                'dirname': '',
+                'basename': sdef.slice(sdef.lastIndexOf('/')+1),
+            })
+        }
     }
     if (dummy) {
+        addDefaultParamValue()
         parameter.files = files
+        parameter.basepaths = []
         parameter.path = true
         callback()
         return
@@ -45,11 +50,52 @@ function loadFileTypesList(parameter, dummy, callback) {
             'types': parameter.fileTypes.join(","),
         },
         success: function (data) {
+            console.log(data.files)
+            const dirs = []
+            const basePaths = []
+            for(let file of data.files) {
+                if (file.dirname && file.dirname.length > 0) {
+                    let dirPath = file.fullname
+                    const lastSlashIndex = Math.max(file.fullname.lastIndexOf('/'), file.fullname.lastIndexOf('\\'));
+
+                    if (lastSlashIndex != -1) {
+                        dirPath = file.fullname.slice(0, lastSlashIndex);
+                    }
+                    if (!dirs.find((value, index) => value === dirPath)) {
+                        dirs.push(dirPath)
+                    }
+                }
+
+                if (!basePaths.find((value, index) => value === file.basepath)) {
+                    basePaths.push(file.basepath)
+                }
+            }
+
+            dirs.sort()
+            for(let dir of dirs) {
+                const lastSlashIndex = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'));
+                let dirname
+
+                if (lastSlashIndex != -1) {
+                    dirname = dir.slice(lastSlashIndex + 1);
+                } else {
+                    dirname = dir
+                }
+                files.push({
+                    'basename': dirname,
+                    'dirname': dirname,
+                    'filetype': 'dir',
+                    'fullname': 'dir://' + dir
+                })
+            }
+            addDefaultParamValue()
             parameter.files = files.concat(data.files)
+            parameter.basepaths = basePaths
             parameter.path = true
             callback()
         },
         error: function () {
+            addDefaultParamValue()
             callback()
         },
         cache: false,
@@ -3346,16 +3392,41 @@ JqueryClass('customSelect', baseWidget, {
 JqueryClass('customSelectPath', baseWidget, {
     init: function (options) {
         var self = $(this)
+        self.data('currentPath', [])
+        self.data('port', options.port)
+        console.log(`custom select path widget: ${options}`)
         self.customSelectPath('config', options)
         self.customSelectPath('setValue', options.port.value, true)
         self.find('[mod-role=enumeration-option]').each(function () {
             var opt = $(this)
+            let icon = undefined
+
+            if (opt.attr('mod-parameter-value').startsWith("dir://")) {
+                icon = "\u{1F4C1} " // folder
+            } else {
+                icon = "\u{1F4C4} " // file
+            }
+            opt.text(icon + opt.text())
+
             opt.click(function (e) {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
                 }
                 var value = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
-                self.customSelectPath('setValue', value, false)
+                if (value?.startsWith('dir://')) {
+                    const backArrow = "\u{2B05} " //21B0} " // "
+
+                    if (opt.text().startsWith(backArrow)) {
+                        self.customSelectPath('popDir')
+                        opt.text(opt.text().substr(backArrow.length))
+                    } else {
+                        self.customSelectPath('pushDir', value)
+                        opt.text(backArrow + opt.text())
+                    }
+                    e.stopPropagation()
+                } else {
+                    self.customSelectPath('setValue', value, false)
+                }
             })
         })
         self.click(function () {
@@ -3363,6 +3434,171 @@ JqueryClass('customSelectPath', baseWidget, {
         })
 
         return self
+    },
+
+    pushDir: function(dir) {
+        let self = $(this)
+        let current = self.data('currentPath')
+        let port = self.data('port')
+        // set the value as current folder
+        let currentPath = dir.substr('dir://'.length)
+        current.push(currentPath)
+        let validItems = []
+        for(let file of port.files) {
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+            
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+            
+            if (fullname == currentPath) {
+                // always show current folder since is used to navigate Up
+                validItems.push(file)
+            } else {
+                // remove last element
+                const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+                
+                if (lastSlashIndex != -1) {
+                    itemPath = fullname.slice(0, lastSlashIndex);
+                } else {
+                    itemPath = fullname
+                }
+
+                if (currentPath === itemPath) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+         self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+               opt.removeClass('mod-hidden')
+            } else {
+            opt.addClass('mod-hidden')
+            }
+        });
+
+        console.log(`current path ${current}`)
+        return
+
+        self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+            
+            if (item !== currentPath) { 
+                let itemPath
+                const lastSlashIndex = Math.max(item.lastIndexOf('/'), item.lastIndexOf('\\'));
+                
+                if (lastSlashIndex != -1) {
+                    itemPath = item.slice(0, lastSlashIndex);
+                } else {
+                    itemPath = item
+                }
+                console.log(`check value ${currentPath} vs ${itemPath}`)
+                if (currentPath === itemPath) {
+                    opt.removeClass('mod-hidden')
+                } else {
+                    opt.addClass('mod-hidden')
+                }
+            }
+        })
+    },
+
+    popDir: function() {
+        let self = $(this)
+        let current = self.data('currentPath')
+        let port = self.data('port')
+        // set the value as current folder
+        self.data('currentPath').pop()
+        console.log(`current path ${current}`)
+        let currentPaths
+
+        if (current.length == 0) {
+            currentPaths = port.basepaths
+        } else {
+            // show only files in the current path
+            currentPaths = [ current.join('/') ]
+        }
+
+        let validItems = []
+        for(let file of port.files) {
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+            
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+            
+            // remove last element
+            const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+            
+            if (lastSlashIndex != -1) {
+                itemPath = fullname.slice(0, lastSlashIndex);
+            } else {
+                itemPath = fullname
+            }
+
+            for(let currentPath of currentPaths) {
+                if (currentPath === itemPath
+                    || (current.length > 0 && itemIsDir && currentPath == fullname) // always show the current folder since is used to navigate up
+                    || (current.length == 0 && file.dirname == '') // show the default value on root
+                    ) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+         self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+                opt.removeClass('mod-hidden')
+            } else {
+                opt.addClass('mod-hidden')
+            }
+        });
+        return
+        self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+            let itemIsDir = item.startsWith('dir://')
+            
+            if (itemIsDir) {
+                item = item.substr('dir://'.length)
+            }
+
+            if (item !== currentPath) { // don't hide current folder since is used to navigate Up
+                let itemPath
+
+                const lastSlashIndex = Math.max(item.lastIndexOf('/'), item.lastIndexOf('\\'));
+                
+                if (lastSlashIndex != -1) {
+                    itemPath = item.slice(0, lastSlashIndex);
+                } else {
+                    itemPath = item
+                }
+
+                for(let currentPath of currentPaths) {
+                    console.log(`check value ${currentPath} vs ${itemPath}`)
+                    if (currentPath === itemPath) {
+                        opt.removeClass('mod-hidden')
+                    } else {
+                        opt.addClass('mod-hidden')
+                    }
+                }
+            } else {
+                opt.removeClass('mod-hidden')
+            }
+        })
     },
 
     setValue: function (value, only_gui) {

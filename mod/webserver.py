@@ -2424,13 +2424,16 @@ class FilesList(JsonRequestHandler):
             if datadir is None:
                 continue
 
-            for root, dirs, files in os.walk(os.path.join(USER_FILES_DIR, datadir)):
+            basepath = os.path.join(USER_FILES_DIR, datadir)
+            for root, dirs, files in os.walk(basepath):
                 for name in tuple(name for name in sorted(files) if name.lower().endswith(extensions)):
                     fullname = os.path.join(root, name)
                     fullnames.append(fullname)
                     retfiles[fullname] = {
                         'fullname': fullname,
+                        'dirname': root[len(basepath) + 1:],
                         'basename': name,
+                        'basepath': basepath,
                         'filetype': filetype,
                     }
 
