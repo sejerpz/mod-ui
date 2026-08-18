@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2012-2025 MOD Audio UG
+// SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "utils.h"
@@ -15,7 +15,6 @@
 #include <lv2/midi/midi.h>
 #include <lv2/morph/morph.h>
 #include <lv2/patch/patch.h>
-#include <lv2/port-groups/port-groups.h>
 #include <lv2/port-props/port-props.h>
 #include <lv2/presets/presets.h>
 #include <lv2/state/state.h>
@@ -360,7 +359,6 @@ struct NamespaceDefinitions {
     LilvNode* atom_bufferType;
     LilvNode* atom_Sequence;
     LilvNode* midi_MidiEvent;
-    LilvNode* pgroups_group;
     LilvNode* pprops_rangeSteps;
     LilvNode* patch_readable;
     LilvNode* patch_writable;
@@ -454,7 +452,6 @@ struct NamespaceDefinitions {
         atom_bufferType          = lilv_new_uri(w, LV2_ATOM__bufferType);
         atom_Sequence            = lilv_new_uri(w, LV2_ATOM__Sequence);
         midi_MidiEvent           = lilv_new_uri(w, LV2_MIDI__MidiEvent);
-        pgroups_group            = lilv_new_uri(w, LV2_PORT_GROUPS__group);
         pprops_rangeSteps        = lilv_new_uri(w, LV2_PORT_PROPS__rangeSteps);
         patch_readable           = lilv_new_uri(w, LV2_PATCH__readable);
         patch_writable           = lilv_new_uri(w, LV2_PATCH__writable);
@@ -526,7 +523,6 @@ struct NamespaceDefinitions {
         lilv_node_free(atom_bufferType);
         lilv_node_free(atom_Sequence);
         lilv_node_free(midi_MidiEvent);
-        lilv_node_free(pgroups_group);
         lilv_node_free(pprops_rangeSteps);
         lilv_node_free(patch_readable);
         lilv_node_free(patch_writable);
@@ -2610,8 +2606,6 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
     // --------------------------------------------------------------------------------------------------------
     // ports
 
-    std::unordered_map<std::string, PluginPortGroup> portGroups;
-
     if (const uint32_t count = lilv_plugin_get_num_ports(p))
     {
         uint32_t countAudioInput=0,   countAudioOutput=0;
@@ -2859,14 +2853,12 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
             }
 
             // ----------------------------------------------------------------------------------------------------
-            // group
-
-            if (LilvNodes* const nodes = lilv_port_get_value(p, port, ns.pgroups_group))
+            // groups
+            portinfo.groupSymbol = nc;
+            if (LilvNode* symbolnode = lilv_port_get(p, port, ns.port_groups_groupName))
             {
-                LilvNode* const group = lilv_nodes_get_first(nodes);
-                portinfo.group = strdup(lilv_node_as_string(group));
-
-                if (! contains(portGroups, portinfo.group))
+                const char* groupName = lilv_node_as_string(symbolnode);
+                if (!contains(usedGroups, groupName))
                 {
                     PluginPortGroup& portGroup = portGroups[portinfo.group] = {
                         true,
@@ -2883,13 +2875,9 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
 
                         lilv_node_free(group_symbol);
                     }
-
-                    if (LilvNode* const group_name = lilv_world_get(w, group, ns.lv2core_name, nullptr))
+                    else
                     {
-                        if (const char* const namestr = lilv_node_as_string(group_name))
-                            portGroup.name = strdup(namestr);
-
-                        lilv_node_free(group_name);
+                        printf("WARNING: Group definition not found for %s\n", groupName);
                     }
 
                     if (LilvNode* const node = lilv_world_get(w, group, ns.lv2core_index, nullptr))
@@ -3495,8 +3483,6 @@ static void _clear_port_info(PluginPort& portinfo)
         free((void*)portinfo.comment);
     if (portinfo.designation != nc)
         free((void*)portinfo.designation);
-    if (portinfo.group != nc)
-        free((void*)portinfo.group);
     if (portinfo.shortName != nc)
         free((void*)portinfo.shortName);
 
@@ -3529,11 +3515,8 @@ static void _clear_port_info(PluginPort& portinfo)
 
 static void _clear_port_group_info(const PluginPortGroup& portGroup)
 {
-    // NOTE portGroup.uri points to port.group
-    if (portGroup.symbol != nc)
-        free((void*)portGroup.symbol);
-    if (portGroup.name != nc)
-        free((void*)portGroup.name);
+    free((void*)portGroup.symbol);
+    free((void*)portGroup.name);
 }
 
 static void _clear_parameter_info(const PluginParameter& parameter)
