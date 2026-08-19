@@ -3481,10 +3481,10 @@ function T3KIntegration(pedalboard) {
             })
     }
 
-    this.refreshPluginsFilelist = function(senderEffect, senderParameter) {
+    this.refreshPluginsFilelist = function(senderEffect, senderParameter, senderSetValue) {
         const plugins = self.pedalboard.data('plugins')
         const sender = plugins[senderEffect] // the effect who completed the download
-        const gui = sender.data('gui')
+        const senderGui = sender.data('gui')
         for(let pluginKey in plugins) {
             // refresh the file lists
             const plugin = plugins[pluginKey]
@@ -3498,6 +3498,25 @@ function T3KIntegration(pedalboard) {
             });
 
             console.log(`refresh plugin filelists ${pluginKey}`)
+        }
+
+
+        if (senderSetValue) {
+            // we just updated the sender effect
+            // set the current value to senderSetValue
+            // HACK: give jquery the time to update the DOM
+            setTimeout(() => {
+                senderGui.settings
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + senderParameter.uri + '"]')
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        if (control.customSelectPath) {
+                            // preserve current path if available
+                            currentPath = control.customSelectPath('setValue', senderSetValue.fullname)
+                        }
+                    })
+            }, 250);
         }
     }
 
@@ -3517,9 +3536,8 @@ function T3KIntegration(pedalboard) {
         }
 
         deleteEffectPopup(effect)
-        t3kinfo.popup.close()
+        t3kinfo.popup.location = "/t3k.html?d=" + Date.now().toString()
 
-        new Notification('info', 'Downloading models from Tone3000.', 3000)
         // must match the callbackUrl of the request we need to exchange the code for
         const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
         // start the download
@@ -3540,10 +3558,15 @@ function T3KIntegration(pedalboard) {
                             console.log(`t3kToneSelected fetch success:`)
                             console.log(`${resp}`)
                             // refresh plugins file list
-                            self.refreshPluginsFilelist(effect, t3kinfo.parameter)
+                            let setValue = undefined
+                            if (resp && resp.length > 0)
+                                setValue = resp[0]
+                            self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
+                            t3kinfo.popup.close()
                             new Notification('info', 'Download from Tone3000 completed.', 8000)
                         },
                         error: function (xhr, status, error) {
+                            t3kinfo.popup.close()
                             new Notification('error', 'Error downloading from Tone3000.')
                             console.error(`t3kToneSelected status ${status} error: ${error} `);
                         },
@@ -3557,13 +3580,6 @@ function T3KIntegration(pedalboard) {
             .catch((error) => {
                 console.error("t3kToneSelected error:", error);
             })
-    }
-
-     /*
-     * This function is called on tone selection (3)
-     */
-    this.t3kModelsFetched = function(instance, models) {
-        console.log(`models fecthed ${instance}: ${models}`)
     }
 
     /*

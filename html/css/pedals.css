@@ -566,6 +566,7 @@ body > .mod-settings.mod-window-visible {
     overflow:auto;
     position:relative;
 }
+
 .mod-pedal-settings .mod-enumerated.mod-file-list .mod-file-list-buttons {
     position: absolute;
     top: 0px;
@@ -575,6 +576,15 @@ body > .mod-settings.mod-window-visible {
 .mod-pedal-settings .mod-enumerated.mod-file-list .mod-enumerated-list {
     height:130px;
 }
+
+.mod-enumerated-list > [mod-role="enumeration-option"] {
+    height: 28px;
+    line-height: 24px;
+    overflow: hidden;
+    text-overflow: clip;
+    text-wrap-mode: nowrap;
+}
+
 .mod-pedal-settings .mod-enumerated.mod-file-list.expanded .mod-enumerated-list {
     height: calc(100vh - 175px);
     z-index: 1;

@@ -24,6 +24,10 @@ function shouldSkipPort(port) {
     return false;
 }
 
+function supportsT3K(parameter) {
+    return parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir' || type == 'aidadspmodel')
+}
+
 function loadFileTypesList(parameter, dummy, callback) {
     var files = []
 
@@ -36,15 +40,18 @@ function loadFileTypesList(parameter, dummy, callback) {
                 'fullname': sdef,
                 'dirname': '',
                 'basename': sdef.slice(sdef.lastIndexOf('/')+1),
+                'icon': '<span>\u{1F4E6}</span>' // box
             })
         }
         // check if parameters can be suported by T3K
-        if (parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir' || type == 'aidadspmodel')) {
+        parameter.t3k = supportsT3K(parameter)
+        if (parameter.t3k) {
             // this parameter can be downloaded from T3K
             files.push({
                 'fullname': 't3k://browse',
                 'dirname': '',
                 'basename': 'Browse tones',
+                'icon': '<img class="t3k-enumerated-option-logo" src="js/lib/t3k/logo/T3K%20logo.png" />'
             })
         }
     }
@@ -2041,9 +2048,15 @@ function GUI(effect, options) {
                 return
             }
 
+            let currentPath = undefined
+            if (control.customSelectPath) {
+                // preserve current path if available
+                currentPath = control.customSelectPath('getCurrentPath')
+            }
             control.controlWidget({
                 dummy: onlySetValues,
                 port: parameter,
+                currentPath: currentPath ,
                 change: function (e, value) {
                     self.lv2PatchSet(uri, parameter.valuetype, value, control)
                 },
@@ -2439,19 +2452,23 @@ function GUI(effect, options) {
         return data
     }
 
-    this.refreshPluginFileListParameter = function(instance, parameter) {
+    this.refreshPluginFileListParameter = function(instance, parameteri) {
         
         console.log("T3K refresh plugin parameter")
-        loadFileTypesList(parameter, false, function() {
-            console.log(`load file list done for ${parameter.uri}`)
+        loadFileTypesList(parameteri, false, function() {
+            console.log(`load file list done for ${parameteri.uri}`)
             let options = ""
+            var parameter = self.parameters[parameteri.uri]
+            // update indexed parameter with new files
+            $.extend(parameter, parameteri)
+            // delete previous widgets
+            parameter.widgets = []
+
             for(let file of parameter.files) {
                 options += 
                     '<div mod-role="enumeration-option" mod-parameter-value="' + file.fullname +'">' + file.basename + '</div>\n'
             }
 
-            // delete previous widgets
-            self.parameters[parameter.uri].widgets = []
             // need to update the values in the icon UI
             self.icon
                 .find('.mod-enumerated[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
@@ -3485,7 +3502,7 @@ JqueryClass('customSelect', baseWidget, {
 JqueryClass('customSelectPath', baseWidget, {
     init: function (options) {
         var self = $(this)
-        self.data('currentPath', [])
+        self.data('currentPath', options.currentPath || [])
         self.data('port', options.port)
         self.data('urihandle', options.urihandle)
         console.log(`custom select path widget: ${options}`)
@@ -3494,14 +3511,24 @@ JqueryClass('customSelectPath', baseWidget, {
         self.find('[mod-role=enumeration-option]').each(function () {
             var opt = $(this)
             let icon = undefined
+            const optValue = opt.attr('mod-parameter-value')
 
-            if (opt.attr('mod-parameter-value').startsWith("dir://")) {
-                icon = "\u{1F4C1} " // folder
-            } else {
-                icon = "\u{1F4C4} " // file
+            // find the options in the port (parameter) files
+            const file = options.port.files.find(item => item.fullname == optValue)
+
+            if (file && file.icon) {
+                icon = file.icon
             }
-            opt.text(icon + opt.text())
 
+            if (!icon) {
+                if (optValue.startsWith("dir://")) {
+                    icon = "\u{1F4C1} " // folder
+                } else {
+                    icon = "\u{1F4C4} " // file
+                }
+            }
+            opt.attr('title', opt.text())
+            opt.html(icon + opt.text())
             opt.click(function (e) {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
@@ -3535,7 +3562,76 @@ JqueryClass('customSelectPath', baseWidget, {
             self.find('.mod-enumerated-list').toggle()
         })
 
+        self.customSelectPath('refreshFileList', self.data('currentPath'))
         return self
+    },
+
+    getCurrentPath: function() {
+        let self = $(this)
+
+        return self.data('currentPath')
+    },
+
+
+    refreshFileList: function(current) {
+        let self = $(this)
+        let port = self.data('port')
+        let currentPaths
+        
+        console.log(`current path ${current}`)
+        if (current.length == 0) {
+            currentPaths = port.basepaths
+        } else {
+            // show only files in the current path
+            currentPaths = [ current.join('/') ]
+        }
+
+        let validItems = []
+        for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                if (current.length == 0) {
+                    validItems.push(file)
+                }
+                continue;
+            }
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+            
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+            
+            // remove last element
+            const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+            
+            if (lastSlashIndex != -1) {
+                itemPath = fullname.slice(0, lastSlashIndex);
+            } else {
+                itemPath = fullname
+            }
+
+            for(let currentPath of currentPaths) {
+                if (currentPath === itemPath
+                    || (current.length > 0 && itemIsDir && currentPath == fullname) // always show the current folder since is used to navigate up
+                    || (current.length == 0 && file.dirname == '') // show the default value on root
+                    ) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+         self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+                opt.removeClass('mod-hidden')
+            } else {
+                opt.addClass('mod-hidden')
+            }
+        });
     },
 
     pushDir: function(dir) {
@@ -3545,10 +3641,13 @@ JqueryClass('customSelectPath', baseWidget, {
         // set the value as current folder
         let currentPath = dir.substr('dir://'.length)
         current.push(currentPath)
+
         let validItems = []
         for(let file of port.files) {
             if (file.fullname.startsWith('t3k://')) {
-                validItems.push(file)
+                if (current.length == 0) {
+                    validItems.push(file)
+                }
                 continue;
             }
             // check if file path is direct child of current path
@@ -3595,66 +3694,12 @@ JqueryClass('customSelectPath', baseWidget, {
     popDir: function() {
         let self = $(this)
         let current = self.data('currentPath')
-        let port = self.data('port')
-        // set the value as current folder
-        self.data('currentPath').pop()
-        console.log(`current path ${current}`)
-        let currentPaths
-
-        if (current.length == 0) {
-            currentPaths = port.basepaths
-        } else {
-            // show only files in the current path
-            currentPaths = [ current.join('/') ]
-        }
-
-        let validItems = []
-        for(let file of port.files) {
-            if (file.fullname.startsWith('t3k://')) {
-                validItems.push(file)
-                continue;
-            }
-            // check if file path is direct child of current path
-            // if yes add to files to show
-            let fullname = file.fullname
-            let itemIsDir = fullname.startsWith('dir://')
-            
-            if (itemIsDir) {
-                fullname = fullname.substr('dir://'.length)
-            }
-            
-            // remove last element
-            const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
-            
-            if (lastSlashIndex != -1) {
-                itemPath = fullname.slice(0, lastSlashIndex);
-            } else {
-                itemPath = fullname
-            }
-
-            for(let currentPath of currentPaths) {
-                if (currentPath === itemPath
-                    || (current.length > 0 && itemIsDir && currentPath == fullname) // always show the current folder since is used to navigate up
-                    || (current.length == 0 && file.dirname == '') // show the default value on root
-                    ) {
-                    validItems.push(file)
-                }
-            }
-        }
-
-         self.find('[mod-role=enumeration-option]').each(function () {
-            let opt = $(this)
-            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
-
-            if (validItems.find((file) => item === file.fullname)) {
-                opt.removeClass('mod-hidden')
-            } else {
-                opt.addClass('mod-hidden')
-            }
-        });
+        current.pop()
+        self.customSelectPath('refreshFileList', current)
     },
 
     setValue: function (value, only_gui) {
+        console.log(`custom select value ${value}`)
         var self = $(this)
         self.find('[mod-role=enumeration-option]').removeClass('selected')
 
