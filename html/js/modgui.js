@@ -29,7 +29,7 @@ function loadFileTypesList(parameter, dummy, callback) {
 
     parameter.files = files
     parameter.basepaths = []
-    const addDefaultParamValue = function() {
+    const addDefaultParamValues = function() {
         if (parameter.ranges.default) {
             var sdef = parameter.ranges.default
             files.push({
@@ -38,9 +38,18 @@ function loadFileTypesList(parameter, dummy, callback) {
                 'basename': sdef.slice(sdef.lastIndexOf('/')+1),
             })
         }
+        // check if parameters can be suported by T3K
+        if (parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir' || type == 'aidadspmodel')) {
+            // this parameter can be downloaded from T3K
+            files.push({
+                'fullname': 't3k://browse',
+                'dirname': '',
+                'basename': 'Browse tones',
+            })
+        }
     }
     if (dummy) {
-        addDefaultParamValue()
+        addDefaultParamValues()
         parameter.path = true
         callback()
         return
@@ -72,6 +81,8 @@ function loadFileTypesList(parameter, dummy, callback) {
                 }
             }
 
+            // file sorting criteria
+            // first directory
             dirs.sort()
             for(let dir of dirs) {
                 const lastSlashIndex = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'));
@@ -89,14 +100,20 @@ function loadFileTypesList(parameter, dummy, callback) {
                     'fullname': 'dir://' + dir
                 })
             }
-            addDefaultParamValue()
-            parameter.files = files.concat(data.files)
+
+            // then user downloaded files
+            files = files.concat(data.files)
+            // then plugin resources
+            // then special uris like t3k://
+            addDefaultParamValues()
+
+            parameter.files = files
             parameter.basepaths = basePaths
             parameter.path = true
             callback()
         },
         error: function () {
-            addDefaultParamValue()
+            addDefaultParamValues()
             callback()
         },
         cache: false,
@@ -1962,6 +1979,95 @@ function GUI(effect, options) {
         }
     }
 
+    this.assignParameterControlFunctionality = function(instance, control, uri, onlySetValues) {
+        var parameter = self.parameters[uri]
+
+        if (parameter)
+        {
+            /*  */ if (parameter.type === "http://lv2plug.in/ns/ext/atom#Bool") {
+                parameter.valuetype = 'b'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Int") {
+                parameter.valuetype = 'i'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Long") {
+                parameter.valuetype = 'l'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Float") {
+                parameter.valuetype = 'f'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Double") {
+                parameter.valuetype = 'g'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#String") {
+                parameter.valuetype = 's'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Path") {
+                parameter.valuetype = 'p'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#URI") {
+                parameter.valuetype = 'u'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Vector") {
+                parameter.valuetype = 'v'
+            } else {
+                return
+            }
+
+            if (parameter.control || parameter.string)
+            {
+                // Set the display formatting of this control
+                if (parameter.string)
+                    parameter.format = '%s'
+                else if (parameter.units.render)
+                    parameter.format = parameter.units.render.replace('%f', '%.2f')
+                else
+                    parameter.format = '%.2f'
+
+                if (parameter.properties.indexOf("integer") >= 0) {
+                    parameter.format = parameter.format.replace(/%\.\d+f/, '%d')
+                }
+
+                var valueField = element.find('[mod-role=input-parameter-value][mod-parameter-uri="' + uri + '"]')
+                parameter.valueFields.push(valueField)
+
+                if (valueField.length > 0 && parameter.properties.indexOf("toggled") < 0)
+                {
+                    self.setupValueField(valueField, parameter, function (value) {
+                        self.lv2PatchSet(uri, parameter.valuetype, value, control)
+                        // setWritableParameterValue() skips this control as it's the same as the 'source'
+                        control.controlWidget('setValue', value, true)
+                    })
+                }
+            }
+            else if (parameter.path)
+            {
+                // TODO?
+            }
+            else
+            {
+                return
+            }
+
+            control.controlWidget({
+                dummy: onlySetValues,
+                port: parameter,
+                change: function (e, value) {
+                    self.lv2PatchSet(uri, parameter.valuetype, value, control)
+                },
+                urihandle: function(value) {
+                    console.log(`handle special uri ${value}`)
+                    const t3k = desktop.pedalboard.data('T3KIntegration')
+                    t3k.startSelectFlow(instance, parameter)
+                }
+            })
+
+            if (instance) {
+                control.attr("mod-instance", instance)
+            }
+
+            parameter.widgets.push(control)
+
+            self.setWritableParameterValue(uri, parameter.valuetype, parameter.value, control, true)
+        }
+        else
+        {
+            control.text('No such parameter: ' + uri)
+        }
+    }
+
     this.assignControlFunctionality = function (element, onlySetValues) {
         var instance = element.attr('mod-instance')
 
@@ -2088,87 +2194,7 @@ function GUI(effect, options) {
         element.find('[mod-role=input-parameter]').each(function () {
             var control = $(this)
             var uri = $(this).attr('mod-parameter-uri')
-            var parameter = self.parameters[uri]
-
-            if (parameter)
-            {
-                /*  */ if (parameter.type === "http://lv2plug.in/ns/ext/atom#Bool") {
-                    parameter.valuetype = 'b'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Int") {
-                    parameter.valuetype = 'i'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Long") {
-                    parameter.valuetype = 'l'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Float") {
-                    parameter.valuetype = 'f'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Double") {
-                    parameter.valuetype = 'g'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#String") {
-                    parameter.valuetype = 's'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Path") {
-                    parameter.valuetype = 'p'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#URI") {
-                    parameter.valuetype = 'u'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Vector") {
-                    parameter.valuetype = 'v'
-                } else {
-                    return
-                }
-
-                if (parameter.control || parameter.string)
-                {
-                    // Set the display formatting of this control
-                    if (parameter.string)
-                        parameter.format = '%s'
-                    else if (parameter.units.render)
-                        parameter.format = parameter.units.render.replace('%f', '%.2f')
-                    else
-                        parameter.format = '%.2f'
-
-                    if (parameter.properties.indexOf("integer") >= 0) {
-                        parameter.format = parameter.format.replace(/%\.\d+f/, '%d')
-                    }
-
-                    var valueField = element.find('[mod-role=input-parameter-value][mod-parameter-uri="' + uri + '"]')
-                    parameter.valueFields.push(valueField)
-
-                    if (valueField.length > 0 && parameter.properties.indexOf("toggled") < 0)
-                    {
-                        self.setupValueField(valueField, parameter, function (value) {
-                            self.lv2PatchSet(uri, parameter.valuetype, value, control)
-                            // setWritableParameterValue() skips this control as it's the same as the 'source'
-                            control.controlWidget('setValue', value, true)
-                        })
-                    }
-                }
-                else if (parameter.path)
-                {
-                    // TODO?
-                }
-                else
-                {
-                    return
-                }
-
-                control.controlWidget({
-                    dummy: onlySetValues,
-                    port: parameter,
-                    change: function (e, value) {
-                        self.lv2PatchSet(uri, parameter.valuetype, value, control)
-                    }
-                })
-
-                if (instance) {
-                    control.attr("mod-instance", instance)
-                }
-
-                parameter.widgets.push(control)
-
-                self.setWritableParameterValue(uri, parameter.valuetype, parameter.value, control, true)
-            }
-            else
-            {
-                control.text('No such parameter: ' + uri)
-            }
+            self.assignParameterControlFunctionality(instance, control, uri, onlySetValues)
         })
 
         if (onlySetValues) {
@@ -2414,12 +2440,54 @@ function GUI(effect, options) {
     }
 
     this.refreshPluginFileListParameter = function(instance, parameter) {
+        
         console.log("T3K refresh plugin parameter")
         loadFileTypesList(parameter, false, function() {
             console.log(`load file list done for ${parameter.uri}`)
+            let options = ""
+            for(let file of parameter.files) {
+                options += 
+                    '<div mod-role="enumeration-option" mod-parameter-value="' + file.fullname +'">' + file.basename + '</div>\n'
+            }
+
+            // delete previous widgets
+            self.parameters[parameter.uri].widgets = []
             // need to update the values in the icon UI
-            // need to update the values in the icon Settings
-            // need to update the values in the icon Settings for performance mode
+            self.icon
+                .find('.mod-enumerated[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                .find('.mod-enumerated-list')
+                .html(options)
+            self.icon
+                .find('[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                .each(function() {
+                    // reattach the widget
+                    let control = $(this)
+                    self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                })
+            // need to update the values in the settings UI
+            if (self.settings) {
+                self.settings
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                    .html(options)
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                    })
+
+            }
+
+            // need to update the values in the settings for performance mode
+            if (self.settingsPerformance) {
+                self.settingsPerformance
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                    .html(options)
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                    })
+            }
         })
     }
 
@@ -3419,6 +3487,7 @@ JqueryClass('customSelectPath', baseWidget, {
         var self = $(this)
         self.data('currentPath', [])
         self.data('port', options.port)
+        self.data('urihandle', options.urihandle)
         console.log(`custom select path widget: ${options}`)
         self.customSelectPath('config', options)
         self.customSelectPath('setValue', options.port.value, true)
@@ -3449,12 +3518,20 @@ JqueryClass('customSelectPath', baseWidget, {
                         opt.text(backArrow + opt.text())
                     }
                     e.stopPropagation()
+                } else if (value?.indexOf('://', 0) > -1) {
+                    // handle special uri
+                    const urihandle = self.data('urihandle')
+                    if (urihandle) {
+                        urihandle(value)
+                    }
                 } else {
                     self.customSelectPath('setValue', value, false)
                 }
             })
         })
-        self.click(function () {
+
+        self.off('click.customSelectPath')
+        self.on('click.customSelectPath', function() {
             self.find('.mod-enumerated-list').toggle()
         })
 
@@ -3470,6 +3547,10 @@ JqueryClass('customSelectPath', baseWidget, {
         current.push(currentPath)
         let validItems = []
         for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                validItems.push(file)
+                continue;
+            }
             // check if file path is direct child of current path
             // if yes add to files to show
             let fullname = file.fullname
@@ -3498,41 +3579,17 @@ JqueryClass('customSelectPath', baseWidget, {
             }
         }
 
-         self.find('[mod-role=enumeration-option]').each(function () {
+        console.log(`current path ${current}`)
+        self.find('[mod-role=enumeration-option]').each(function () {
             let opt = $(this)
             let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
 
             if (validItems.find((file) => item === file.fullname)) {
-               opt.removeClass('mod-hidden')
+                opt.removeClass('mod-hidden')
             } else {
-            opt.addClass('mod-hidden')
+                opt.addClass('mod-hidden')
             }
         });
-
-        console.log(`current path ${current}`)
-        return
-
-        self.find('[mod-role=enumeration-option]').each(function () {
-            let opt = $(this)
-            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
-            
-            if (item !== currentPath) { 
-                let itemPath
-                const lastSlashIndex = Math.max(item.lastIndexOf('/'), item.lastIndexOf('\\'));
-                
-                if (lastSlashIndex != -1) {
-                    itemPath = item.slice(0, lastSlashIndex);
-                } else {
-                    itemPath = item
-                }
-                console.log(`check value ${currentPath} vs ${itemPath}`)
-                if (currentPath === itemPath) {
-                    opt.removeClass('mod-hidden')
-                } else {
-                    opt.addClass('mod-hidden')
-                }
-            }
-        })
     },
 
     popDir: function() {
@@ -3553,6 +3610,10 @@ JqueryClass('customSelectPath', baseWidget, {
 
         let validItems = []
         for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                validItems.push(file)
+                continue;
+            }
             // check if file path is direct child of current path
             // if yes add to files to show
             let fullname = file.fullname
@@ -3591,39 +3652,6 @@ JqueryClass('customSelectPath', baseWidget, {
                 opt.addClass('mod-hidden')
             }
         });
-        return
-        self.find('[mod-role=enumeration-option]').each(function () {
-            let opt = $(this)
-            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
-            let itemIsDir = item.startsWith('dir://')
-            
-            if (itemIsDir) {
-                item = item.substr('dir://'.length)
-            }
-
-            if (item !== currentPath) { // don't hide current folder since is used to navigate Up
-                let itemPath
-
-                const lastSlashIndex = Math.max(item.lastIndexOf('/'), item.lastIndexOf('\\'));
-                
-                if (lastSlashIndex != -1) {
-                    itemPath = item.slice(0, lastSlashIndex);
-                } else {
-                    itemPath = item
-                }
-
-                for(let currentPath of currentPaths) {
-                    console.log(`check value ${currentPath} vs ${itemPath}`)
-                    if (currentPath === itemPath) {
-                        opt.removeClass('mod-hidden')
-                    } else {
-                        opt.addClass('mod-hidden')
-                    }
-                }
-            } else {
-                opt.removeClass('mod-hidden')
-            }
-        })
     },
 
     setValue: function (value, only_gui) {

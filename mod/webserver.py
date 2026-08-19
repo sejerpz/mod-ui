@@ -925,15 +925,34 @@ class EffectT3KFetch(JsonRequestHandler):
             model_dir_name = EffectT3KFetch.sanitize_filename(tone['title']) # eg. VOX AC 30/
         else:
             model_dir_name = ""
+
+        lastdirname = None
         for model in models:
             model_url = model['model_url']
             _, ext = os.path.splitext(urllib.parse.urlparse(model_url).path)
             filetype = filetypes.get(ext, None)
             directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
             basepath = os.path.join(USER_FILES_DIR, directory) # eg. /user-files/NAM Models/
-            model_file_name = f"{EffectT3KFetch.sanitize_filename(model['name'])}{ext}" # eg. VOX AC 30 Clean.nam
-            dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/
+            dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/VOX AC 30/
+            if model_dir_name != "" and dirname != lastdirname:
+                # resolve dirname conflicts only the first time it changes
+                index = 0
+                while os.path.exists(dirname):
+                    index += 1
+                    model_dir_name = f"{EffectT3KFetch.sanitize_filename(tone['title'])} {index:02d}"
+                    dirname = os.path.join(basepath, model_dir_name)
+                lastdirname = dirname
+
+            model_name = EffectT3KFetch.sanitize_filename(model['name'])
+            model_file_name = f"{model_name}{ext}" # eg. VOX AC 30 Clean.nam
             fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
+
+            index = 0
+            while os.path.exists(fullname):
+                index += 1
+                model_name = f"{EffectT3KFetch.sanitize_filename(model['name'])} {index:02d}"
+                model_file_name = f"{model_name}{ext}" # eg. VOX AC 30 Clean.nam
+                fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
 
             logging.info("T3K model downloading: %s -> %s", model_url, fullname)
 

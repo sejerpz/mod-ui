@@ -3438,8 +3438,31 @@ function T3KIntegration(pedalboard) {
     this.startSelectFlow = function(effect, parameter) {
         const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
         // todo: gears -> check if we need to load an amp/effet or a cab/ir
+
+        gears = []
+        parameter.fileTypes.forEach(value => {
+           if (value == 'nammodel' || value == 'aidadspmodel') {
+                gears.push('amp')
+                gears.push('amp-cab')
+                gears.push('pedal')
+                gears.push('outboard')
+           } else if (value == 'cabsim') {
+                gears.push('cab')
+           } else if (value == 'ir') {
+                gears.push('space')
+           }
+        });
+        
+        if (gears.length == 0) {
+            gears.push('amp')
+            gears.push('amp-cab')
+            gears.push('pedal')
+            gears.push('outboard')
+        } else {
+            gears = [...new Set(gears)];
+        }
         const options = {
-            gears: 'full-rig',
+            gears: gears.join('_'),
             //format: string,
             menubar: true,
             //loginHint: string,
@@ -3496,6 +3519,7 @@ function T3KIntegration(pedalboard) {
         deleteEffectPopup(effect)
         t3kinfo.popup.close()
 
+        new Notification('info', 'Downloading models from Tone3000.', 3000)
         // must match the callbackUrl of the request we need to exchange the code for
         const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
         // start the download
@@ -3515,12 +3539,12 @@ function T3KIntegration(pedalboard) {
                         success: function (resp) {
                             console.log(`t3kToneSelected fetch success:`)
                             console.log(`${resp}`)
-                            new Notification('info', 'Download from Tone3000 completed!')
                             // refresh plugins file list
                             self.refreshPluginsFilelist(effect, t3kinfo.parameter)
+                            new Notification('info', 'Download from Tone3000 completed.', 8000)
                         },
                         error: function (xhr, status, error) {
-                            new Notification('error', 'Error downloading from Tone3000!')
+                            new Notification('error', 'Error downloading from Tone3000.')
                             console.error(`t3kToneSelected status ${status} error: ${error} `);
                         },
                         cache: false,
