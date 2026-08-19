@@ -314,6 +314,9 @@ JqueryClass('pedalboard', {
         // replacement plugin, used for recreating connections
         self.data('replacementPlugin', null)
 
+        // t3k integration
+        self.data('T3KIntegration', new T3KIntegration(self))
+
         // Pedalboard itself will get big dimensions and will have it's scale and position changed dinamically
         // often. So, let's wrap it inside an element with same original dimensions and positioning, with overflow
         // hidden, so that the visible part of the pedalboard is always occupying the area that was initially determined
@@ -3262,7 +3265,7 @@ JqueryClass('pedalboard', {
         plugin.css({ top: y, left: x })
         self.pedalboard('fitToWindow')
         self.pedalboard('drawPluginJacks', plugin)
-    }
+    },
 })
 
 function ConnectionManager() {
@@ -3378,5 +3381,181 @@ function ConnectionManager() {
 
         delete self.origByInstanceIndex[instance]
         delete self.destByInstanceIndex[instance]
+    }
+}
+
+
+function T3KIntegration(pedalboard) {
+    /*
+     * Handle Tone3000 integration
+     *
+     * Terminology:
+     * 
+     * CLIENT: is the javascript mod UI that runs in the browser
+     * SERVER: is the python mod server that runs in the unit (dwarf)
+     * T3K: is the Tone3000 remote REST api
+     * 
+     * Flow:
+     * 
+     * 1. The CLIENT start the select tone flow using the T3K API
+     * 2. T3K callback the python SERVER when a tone is selected or the popup is closed
+     * 3. The SERVER callback the CLIENT to inform the tone selection is done using the websocket connection using the command 't3k-tone-selected' or 't3k-cancel'
+     * 4. The CLIENT exchange the code with an auth token using T3K API
+     * 5. The CLIENT call the SERVER to fetch the tones passing the toneId and auth token
+     * 
+     * TODO:
+     * 
+     * Point 3, 4 and 5 can be simplified if the server generate the token verifier.
+     * With that in place the server fetch the tones and the call the client to inform that everything is completed.
+     */
+    const pubKey = 't3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'
+    const self = this
+    let t3kOpenPopups = [] 
+
+    this.pedalboard = pedalboard
+    /*
+     * Find ongoing t3k state by effect.
+     * 
+     * Returns the popup window or undefined
+     */
+    const findInfoByEffect = function(effect) {
+        for(let item of t3kOpenPopups) {
+            if (item.effect === effect) {
+                return item
+            }
+        }
+
+        return undefined
+    }
+
+    /*
+     * Delete the effect from the list of monitored effects
+     */
+    const deleteEffectPopup = function(effect) {
+        t3kOpenPopups = t3kOpenPopups.filter(item => item.effect != effect)
+    }
+
+    this.startSelectFlow = function(effect, parameter) {
+        const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
+        // todo: gears -> check if we need to load an amp/effet or a cab/ir
+        const options = {
+            gears: 'full-rig',
+            //format: string,
+            menubar: true,
+            //loginHint: string,
+            architecture: 2, // NAM A2
+            preview: true
+        }
+        window.Tone3000Client
+            .startSelectFlowPopup(pubKey, callbackUrl, options)
+            .then((data) => {
+                console.log("T3KSelect:", data);
+                // add the popup to the traked popups
+                t3kOpenPopups.push({effect: effect, parameter: parameter, popup: data})
+            })
+            .catch((error) => {
+                console.error("T3KSelect error:", error);
+            })
+    }
+
+    this.refreshPluginsFilelist = function(senderEffect, senderParameter) {
+        const plugins = self.pedalboard.data('plugins')
+        const sender = plugins[senderEffect] // the effect who completed the download
+        const gui = sender.data('gui')
+        for(let pluginKey in plugins) {
+            // refresh the file lists
+            const plugin = plugins[pluginKey]
+            const pluginGui = plugin.data('gui')
+
+            pluginGui?.effect?.parameters?.forEach(parameter => {
+                // we need to refresh a plugin parameter if it has the same filetype of the senderParameter
+                if (parameter.fileTypes && senderParameter.fileTypes.some(item => parameter.fileTypes.includes(item))) {
+                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter)
+                }
+            });
+
+            console.log(`refresh plugin filelists ${pluginKey}`)
+        }
+    }
+
+    /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kToneSelected = function(effect, code, state, toneId) {
+        // Select Flow — user browses TONE3000 and picks a tone
+        // Optional: gears, platform, architecture, menubar (same query params as authorize URL)
+        console.log(`t3k cancel instance ${effect}, code ${code}, state ${state}, toneId ${toneId}`)
+        const t3kinfo = findInfoByEffect(effect)
+
+        // check if we have a popup registered
+        if (!t3kinfo) {
+            console.error(`t3kToneSelected t3kinfo for instance ${effect} can't download models`)
+            return
+        }
+
+        deleteEffectPopup(effect)
+        t3kinfo.popup.close()
+
+        // must match the callbackUrl of the request we need to exchange the code for
+        const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
+        // start the download
+        window.Tone3000Client
+            .exchangeCode(pubKey, callbackUrl, code, state)
+            .then((response) => {
+                if (response?.ok) {
+                    // now fetch
+                    $.ajax({
+                        url: '/effect/t3k/fetch',
+                        type: 'POST',
+                        data: {
+                            effect: effect,
+                            access_token: response.tokens.access_token,
+                            tone_id: toneId
+                        },
+                        success: function (resp) {
+                            console.log(`t3kToneSelected fetch success:`)
+                            console.log(`${resp}`)
+                            new Notification('info', 'Download from Tone3000 completed!')
+                            // refresh plugins file list
+                            self.refreshPluginsFilelist(effect, t3kinfo.parameter)
+                        },
+                        error: function (xhr, status, error) {
+                            new Notification('error', 'Error downloading from Tone3000!')
+                            console.error(`t3kToneSelected status ${status} error: ${error} `);
+                        },
+                        cache: false,
+                        dataType: 'json'
+                    })      
+                } else {
+                    console.error("t3kToneSelected response ko:", response);
+                }
+            })
+            .catch((error) => {
+                console.error("t3kToneSelected error:", error);
+            })
+    }
+
+     /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kModelsFetched = function(instance, models) {
+        console.log(`models fecthed ${instance}: ${models}`)
+    }
+
+    /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kCancel = function(instance) {
+        console.log("t3k cancel " + instance)
+        const t3kinfo = findInfoByEffect(instance)
+        
+        // check if we have a popup registered
+        if (t3kinfo) {
+            deleteEffectPopup(instance)
+            t3kinfo.popup?.close()
+        } else {
+            console.error(`t3kCancel no popup for instance ${instance} can't download models`)
+            return
+        }
     }
 }

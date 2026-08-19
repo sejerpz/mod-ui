@@ -712,6 +712,43 @@ $('document').ready(function() {
             const db = parseFloat(data[1])
 
             desktop.setPortVUMeterValue(port, db)
+            return
+        }
+
+        if (cmd == "t3k-tone-selected") {
+            // tone selected from the t3k integration
+            // the first parameter is the effect instance
+            data      = data.split(" ",4)
+            const instance  = data[0]
+            const code = data[1]
+            const state = data[2]
+            const toneId = parseInt(data[3])
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kToneSelected(instance, code, state, toneId)
+            return
+        }
+
+        if (cmd == "t3k-cancel") {
+            // tone selected from the t3k integration
+            // the first paramater is the effect instance
+            const instance  = data
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kCancel(instance)
+            return
+        }
+
+        if (cmd == "t3k-models-fetched") {
+            // tone selected from the t3k integration
+            // the first paramater is the effect instance
+            data      = data.split(" ",2)
+            const instance  = data[0]
+            const toneId = parseInt(data[1])
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kCancel(instance)
+            return
         }
     }
 })

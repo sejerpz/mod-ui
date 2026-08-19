@@ -10,6 +10,10 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
+import urllib.parse
+import re
+import unicodedata
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
@@ -794,6 +798,193 @@ class EffectRefresh(JsonRequestHandler):
         SESSION.host.reload_pedalboard(affected_uris)
 
         self.write(True)
+
+class EffectT3KSelect(JsonRequestHandler):
+    """This is the select callback handler from tone3k integration"""
+    def get(self, instance):
+        code = self.get_query_argument('code', default=None)
+        state = self.get_query_argument('state', default=None)
+        tone_id = int(self.get_query_argument('tone_id', default=0))
+        canceled = bool(self.get_query_argument('canceled', default=False))
+
+        # if state != session.get('t3k_state'):
+        #     raise ValueError('State mismatch. Possible CSRF attack.')
+        logging.debug(" T3Keffect select callback: %s, code %s, state %s, tone_id %s, canceled %s", instance, code, state, tone_id, canceled)
+        if canceled:
+            # User exited without selecting a tone.
+            # If code is present, you can still exchange it for tokens.
+            # If code is absent, the user closed before signing in.
+            SESSION.host.msg_callback('t3k-cancel %s' % (instance))
+        else:
+            SESSION.host.msg_callback('t3k-tone-selected %s %s %s %s' % (instance, code, state, tone_id))
+
+        self.write('')
+
+class EffectT3KFetch(JsonRequestHandler):
+    """Start the tone fetch from tone3000 web site, the auth exchange started from the browser this is the callback"""
+    t3kApi = 'https://www.tone3000.com/api/v1'
+    agent = 'MOD-Dwarf-Starless/1.0'
+
+    def sanitize_filename(filename: str, replacement: str = "_") -> str:
+        # 1. Normalize Unicode (e.g., convert accented characters like 'é' -> 'e')
+        filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
+        
+        # 2. Remove characters that are unsafe across OS (Windows, Linux, macOS)
+        # Allows only alphanumeric, hyphens, underscores, and dots
+        filename = re.sub(r'[^a-zA-Z0-9._\- !\+]', replacement, filename)
+        
+        # 3. Collapse multiple consecutive replacement characters into one
+        filename = re.sub(f'{re.escape(replacement)}+', replacement, filename)
+        
+        # 4. Strip leading/trailing whitespaces, dots, and replacement characters
+        filename = filename.strip(f' .{replacement}')
+        
+        # 5. Fallback for empty strings
+        return filename or "unnamed_file"
+
+    def fetch_tone_metadata(self, access_token: str, tone_id: int) -> dict:
+        """
+            Fetch tone metadata using T3K API
+        
+            access_token: a valid access_token for T3K API
+            tone_id: the id to download
+
+            return: the tone metadata or None
+        """
+
+        req = urllib.request.Request(
+            self.t3kApi+ f'/tones/{tone_id}', 
+            headers = {
+                'User-Agent': self.agent,
+                'Authorization': f'Bearer {access_token}'
+            }
+        )
+
+        # 3. Perform synchronous GET request
+        with urllib.request.urlopen(req, timeout=10) as response:
+            response_bytes = response.read()
+            tone = json.loads(response_bytes.decode('utf-8', errors='replace'))
+
+        return tone or None
+
+    def fetch_tone_models(self, access_token: str, tone_id: int, architecture: int | None = None) -> dict:
+        """
+            Fetch the tone models url to download the files
+
+            access_token: a valid access_token for T3K API
+            tone_id: the id to download
+            
+            return: the tone models or None
+        """
+        params = {'tone_id': tone_id}
+
+        if architecture:
+            params['architecture'] = architecture # it seems the architecture is mandatory only for A2 models
+               
+        query_string = urllib.parse.urlencode(params)
+        url = self.t3kApi + f"/models?{query_string}"
+
+        req = urllib.request.Request(
+            url,
+            headers = {
+                'User-Agent': self.agent,
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json',
+            },
+            method='GET'
+        )
+        with urllib.request.urlopen(req, timeout=1000) as response:
+            response_bytes = response.read()
+            js = response_bytes.decode('utf-8', errors='replace')
+            models = json.loads(response_bytes.decode('utf-8', errors='replace'))
+
+        return models['data'] if models else None
+
+    def download_tone_models_files(self, access_token: str, tone: dict, models: dict) -> dict:
+        """
+            Fetch the tone models url to download the files
+
+            access_token: a valid access_token for T3K API
+            tone: the tone metadata
+            models: the models metadata that contains a list of url to download
+            
+            return: the tone models or None
+        """
+
+        files = []
+        # choose the download base path from the type of file
+        
+        filetypes = {
+            ".nam": "nammodel",
+            ".wav": "cabsim",
+            ".aidax": "aidadspmodel"
+        }
+
+        if len(models) > 1:
+            # place T3K boundle in a separate subfolder
+            model_dir_name = EffectT3KFetch.sanitize_filename(tone['title']) # eg. VOX AC 30/
+        else:
+            model_dir_name = ""
+        for model in models:
+            model_url = model['model_url']
+            _, ext = os.path.splitext(urllib.parse.urlparse(model_url).path)
+            filetype = filetypes.get(ext, None)
+            directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
+            basepath = os.path.join(USER_FILES_DIR, directory) # eg. /user-files/NAM Models/
+            model_file_name = f"{EffectT3KFetch.sanitize_filename(model['name'])}{ext}" # eg. VOX AC 30 Clean.nam
+            dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/
+            fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
+
+            logging.info("T3K model downloading: %s -> %s", model_url, fullname)
+
+            req = urllib.request.Request(
+                model_url,
+                headers = {
+                    'User-Agent': self.agent,
+                    'Authorization': f'Bearer {access_token}',
+                    'Accept': 'application/json',
+                },
+                method='GET'
+            )
+
+            # create download folder if not exists
+            os.makedirs(dirname, exist_ok=True)
+            with urllib.request.urlopen(req) as response:
+                # read the streaming
+                with open(fullname, 'wb') as f:
+                    while True:
+                        chunk = response.read(8192)  # 8 KB buffer
+                        if not chunk:
+                            break
+                        f.write(chunk)
+
+            file = {
+                'fullname': fullname,
+                'dirname': model_dir_name,
+                'basename': model_file_name,
+                'basepath': basepath,
+                'filetype': filetype,
+            }
+            files.append(file)
+
+        return files
+
+    def post(self):
+        instance = self.get_argument('effect')
+        access_token = self.get_argument('access_token')
+        tone_id = self.get_argument('tone_id')
+        logging.info("T3K fetch effect: %s, tone_id: %s", instance, tone_id)
+
+        tone = self.fetch_tone_metadata(access_token, tone_id)
+        if tone.get('a2_models_count', 0) > 0:
+            architecture = 2 # it seems the architecture is mandatory only for A2 models
+        else:
+            architecture = None 
+
+        models = self.fetch_tone_models(access_token, tone_id, architecture)
+
+        files = self.download_tone_models_files(access_token, tone, models)
+        self.write(json.dumps(files))
 
 class SDKEffectInstaller(EffectInstaller):
     def set_default_headers(self):
@@ -2494,6 +2685,9 @@ application = web.Application(
             (r"/effect/licenses/list", EffectLicenseList),
             (r"/effect/licenses/save/(.*)", EffectLicenseSave),
             (r"/effect/refresh", EffectRefresh),
+
+            (r"/effect/t3k/select/*(/[A-Za-z0-9_/]+[^/])/?", EffectT3KSelect),
+            (r"/effect/t3k/fetch", EffectT3KFetch),
 
             (r"/package/uninstall", PackageUninstall),
 

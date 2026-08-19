@@ -26,6 +26,9 @@ function shouldSkipPort(port) {
 
 function loadFileTypesList(parameter, dummy, callback) {
     var files = []
+
+    parameter.files = files
+    parameter.basepaths = []
     const addDefaultParamValue = function() {
         if (parameter.ranges.default) {
             var sdef = parameter.ranges.default
@@ -38,8 +41,6 @@ function loadFileTypesList(parameter, dummy, callback) {
     }
     if (dummy) {
         addDefaultParamValue()
-        parameter.files = files
-        parameter.basepaths = []
         parameter.path = true
         callback()
         return
@@ -1650,6 +1651,17 @@ function GUI(effect, options) {
                         } else {
                             elem.find('.file-list-btn-expand').hide()
                         }
+
+                        elem.find('.file-list-btn-t3k').click(function () {
+                            const uri = $(this).attr('mod-parameter-uri')
+                            const parameter = self.effect.parameters.find((p) => p.uri == uri)
+                            
+                            if (parameter) {
+                                // TODO T3K: check if file type can be downloaded from tone3000
+                                const t3k = desktop.pedalboard.data('T3KIntegration')
+                                t3k.startSelectFlow(instance, parameter)
+                            }
+                        })
                     })
                 }
 
@@ -1821,6 +1833,9 @@ function GUI(effect, options) {
                     value: port.value
                 })
             }
+
+            // T3K Integration
+
             // ready!
             self.jsStarted = true
             self.triggerJS({ type: 'start', parameters: jsParameters, ports: jsPorts })
@@ -2396,6 +2411,16 @@ function GUI(effect, options) {
         }
 
         return data
+    }
+
+    this.refreshPluginFileListParameter = function(instance, parameter) {
+        console.log("T3K refresh plugin parameter")
+        loadFileTypesList(parameter, false, function() {
+            console.log(`load file list done for ${parameter.uri}`)
+            // need to update the values in the icon UI
+            // need to update the values in the icon Settings
+            // need to update the values in the icon Settings for performance mode
+        })
     }
 
     this.jsData = {}

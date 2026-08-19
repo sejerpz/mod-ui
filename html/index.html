@@ -60,6 +60,17 @@
 <script type="text/javascript" src="js/shopify.js?v={{version}}"></script>
 <script type="text/javascript" src="js/lib/slick/slick.min.js?v={{version}}"></script>
 <script type="text/javascript" src="js/lib/marked.umd.js?v={{version}}"></script>
+<script type="module">
+  // Import ESM modules for Tone3000 client functionality
+  import { startSelectFlowPopup, exchangeCode } from './js/lib/t3k/tone3000-client.js?v={{version}}';
+
+  // make select API available to legacy javascript code
+  window.Tone3000Client = {
+    startSelectFlowPopup: startSelectFlowPopup,
+    exchangeCode: exchangeCode
+  }
+  console.log("Tone3000 Client caricato con successo!");
+</script>
 
 <script type="text/javascript">
     {% autoescape None %}
@@ -469,7 +480,7 @@ $('document').ready(function() {
 
     <!-- PEDALBOARD -->
     <div id="pedalboard">
-
+        
         <!-- SAVE PEDALBOARD WINDOW -->
         <div id="save-pedalboard" class="save-popup mod-hidden">
             <div class="mod-box">
@@ -627,6 +638,7 @@ $('document').ready(function() {
                             B
                         </div>
                     </div>
+                    <button class="btn btn-danger" id="t3k-test-button" onclick="desktop.runT3KTest()">T3K TEST</button>
                     <button class="js-help-toggle" data-help-id="help-button">Help</button>
                     <button class="js-cv-addressing" id="js-cv-addressing-toggle" data-help-id="pedalboard-cv-addressing">Manage CV Ports</button>
                     <button class="js-pb-addressing" id="js-pb-addressing-toggle" data-help-id="pedalboard-bindings">Bindings</button>
