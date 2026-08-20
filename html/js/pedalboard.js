@@ -3521,26 +3521,55 @@ function T3KIntegration(pedalboard) {
         // start the download
         window.Tone3000Client
             .exchangeCode(pubKey, callbackUrl, code, state)
-            .then((response) => {
-                if (response?.ok) {
-                    // now fetch
+            .then((auth) => {
+                if (auth?.ok) {
+                    // fetching the tone info
+                    
                     $.ajax({
-                        url: '/effect/t3k/fetch',
-                        type: 'POST',
-                        data: {
-                            effect: effect,
-                            access_token: response.tokens.access_token,
-                            tone_id: toneId
+                        url: `https://www.tone3000.com/api/v1/tones/${toneId}`,
+                        type: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + auth.tokens.access_token
                         },
-                        success: function (resp) {
-                            // refresh plugins file list
-                            let setValue = undefined
-                            if (resp && resp.length > 0)
-                                setValue = resp[0]
-                            self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
-                            t3kinfo.popup.close()
-                            deleteEffectPopup(effect)
-                            new Notification('info', 'Download from Tone3000 completed.', 2000)
+                        success: function (tone) {
+                            // update the popup with the info of the tone
+                            const title = tone.title
+                            const des = tone.description
+                            const user = tone.user?.display_name
+                            const image = tone.images?.[0]
+
+                            t3kinfo.popup.setToneInfo(user, title, des, image)
+                            // now fetch the models
+                            $.ajax({
+                                url: '/effect/t3k/fetch',
+                                type: 'POST',
+                                data: {
+                                    effect: effect,
+                                    access_token: auth.tokens.access_token,
+                                    tone_id: toneId
+                                },
+                                success: function (models) {
+                                    // refresh plugins file list
+                                    let setValue = undefined
+                                    if (models && models.length > 0) {
+                                        models.sort((a, b) =>  a.fullname.localeCompare(b.fullname))
+                                        // first in alphabetic order
+                                        setValue = models[0]
+                                    }
+                                    self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
+                                    t3kinfo.popup.close()
+                                    deleteEffectPopup(effect)
+                                    new Notification('info', 'Download from Tone3000 completed.', 2000)
+                                },
+                                error: function (xhr, status, error) {
+                                    t3kinfo.popup.close()
+                                    deleteEffectPopup(effect)
+                                    new Notification('error', 'Error downloading from Tone3000.')
+                                    console.error(`t3kToneSelected status ${status} error: ${error} `);
+                                },
+                                cache: false,
+                                dataType: 'json'
+                            })      
                         },
                         error: function (xhr, status, error) {
                             t3kinfo.popup.close()
@@ -3550,7 +3579,7 @@ function T3KIntegration(pedalboard) {
                         },
                         cache: false,
                         dataType: 'json'
-                    })      
+                    });
                 } else {
                     console.error("t3kToneSelected response ko:", response);
                 }
@@ -3575,5 +3604,16 @@ function T3KIntegration(pedalboard) {
             console.error(`t3kCancel no popup for instance ${instance} can't download models`)
             return
         }
+    }
+
+    /*
+     * Update the popup UI with the progress of the
+     * (download) current operation
+     */
+    this.t3kProgress = function(instance, msg, progress) {
+        console.log(`T3K progress ${instance}: ${msg} ${progress}%`)
+        const t3kinfo = findInfoByEffect(instance)
+
+        t3kinfo?.popup?.progress?.(msg, progress)
     }
 }

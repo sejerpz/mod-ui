@@ -95,7 +95,13 @@
         font-weight: 700;
         letter-spacing: -0.5px;
     }
-    .t3k-subtitle { margin: 0 0 22px; font-size: 15px; color: var(--t3k-fg-dim); }
+    .t3k-subtitle { 
+        margin: 0 0 22px;
+        font-size: 15px;
+        color: var(--t3k-fg-dim); 
+        overflow: auto;
+        max-height: 96px;
+    }
 
     /* status / download */
     .t3k-status {
@@ -124,6 +130,28 @@
 <script type="text/javascript">
     $('document').ready(function() {
         console.log("t3k ready")
+        window.progress = function(msg, progress) {
+            $('#t3k-status-text').text(msg)
+        }
+        window.setToneInfo = function(user, title, description, image) {
+            $('#t3k-title').text(title)
+
+            if (description) {
+                $('#t3k-subtitle').text(description).removeClass('t3k-hidden')
+            } else {
+                $('#t3k-subtitle').addClass('t3k-hidden')
+            }
+            if (user) {
+                $('#t3k-user').text(`by ${user}`).removeClass('t3k-hidden')
+            } else {
+                $('#t3k-user').addClass('t3k-hidden')
+            }
+            if (image) {
+                $('#t3k-hero-img').attr('src', image)
+            } else {
+                $('#t3k-hero-img').attr('src', 'js/lib/t3k/logo/NoImage.svg')
+            }
+        }
     })
 </script>
 </head>
@@ -145,18 +173,19 @@
 
         <!-- NOTICE BAR -->
         <div class="t3k-notice">
-            <span class="t3k-notice-icon" aria-hidden="true">i</span>
-            <span id="t3k-notice-text">Starless × TONE3000</span>
+            <!-- <span class="t3k-notice-icon" aria-hidden="true">i</span> -->
+            <span id="t3k-notice-text">Starless &#10084;&#65039; TONE3000</span>
         </div>
 
         <!-- CONTENT -->
         <main class="t3k-main">
             <figure class="t3k-hero">
-                <img id="t3k-hero-img" src="/img/loading.gif" alt="Loading Spinner"/>
+                <img id="t3k-hero-img" src="js/lib/t3k/logo/NoImage.svg" alt="Gear Image"/>
             </figure>
 
             <h1 class="t3k-title" id="t3k-title"></h1>
             <p class="t3k-subtitle t3k-hidden" id="t3k-subtitle"></p>
+            <p class="t3k-user t3k-hidden" id="t3k-user"></p>
 
             <section class="t3k-status" id="t3k-status">
                 <span id="t3k-status-text">Downloading tone&hellip;</span>

@@ -911,7 +911,7 @@ class EffectT3KFetch(JsonRequestHandler):
             return: the tone models or None
         """
 
-        SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, f'downloading_models_0/{len(models)}', 0))
+        SESSION.host.notify_progress('T3K', f'Downloading files 0/{len(models)}...', 0, instance)
         files = []
         # choose the download base path from the type of file
         
@@ -931,7 +931,7 @@ class EffectT3KFetch(JsonRequestHandler):
         lastdirname = None
         for model in models:
             count += 1
-            SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, f'downloading_models_{count}/{len(models)}', int(round(count / len(models) * 100))))
+            SESSION.host.notify_progress('T3K', f'Downloading files {count}/{len(models)}...', int(round(count / len(models) * 100)), instance)
 
             model_url = model['model_url']
             _, ext = os.path.splitext(urllib.parse.urlparse(model_url).path)
@@ -999,14 +999,13 @@ class EffectT3KFetch(JsonRequestHandler):
         tone_id = self.get_argument('tone_id')
         logging.info("T3K fetch effect: %s, tone_id: %s", instance, tone_id)
 
-        SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, 'reading_tone_info', 0))
+        SESSION.host.notify_progress('T3K', 'Download initializing...', 0, instance)
         tone = self.fetch_tone_metadata(access_token, tone_id)
         if tone.get('a2_models_count', 0) > 0:
             architecture = 2 # it seems the architecture is mandatory only for A2 models
         else:
             architecture = None 
 
-        SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, 'reading_tone_available_models', 0))
         models = self.fetch_tone_models(access_token, tone_id, architecture)
 
         files = self.download_tone_models_files(instance, access_token, tone, models)

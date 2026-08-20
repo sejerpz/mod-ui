@@ -739,27 +739,52 @@ $('document').ready(function() {
             return
         }
 
-        if (cmd == "t3k-models-fetched") {
+        if (cmd == "progress") {
             // tone selected from the t3k integration
             // the first paramater is the effect instance
-            data      = data.split(" ",2)
-            const instance  = data[0]
-            const toneId = parseInt(data[1])
-            const t3k = desktop.pedalboard.data('T3KIntegration')
+            const stringParse = function(str) {
+                // parse the string like string.split, but also support 'strings with spaces'
+                // returns an array of strings
+                const result = []
+                let current = ""
+                let state = false
 
-            t3k.t3kCancel(instance)
-            return
-        }
+                for(const c of str) {
+                    if (state == true) {
+                        if (c == "'") {
+                            state = false
+                        } else {
+                            current += c
+                        }
+                    } else {
+                        if (c == "'") {
+                            state = true
+                        } else if (c == " ") {
+                            result.push(current)
+                            current = ""
+                        } else {
+                            current += c
+                        }
+                    }
+                }
 
-        if (cmd == "t3k-status") {
-            // tone selected from the t3k integration
-            // the first paramater is the effect instance
-            data      = data.split(" ",3)
-            const instance  = data[0]
+                if (current.length > 0) {
+                    result.push(current)
+                }
+
+                return result
+            }
+            data      = stringParse(data)
+            const source = data[0]
             const msg = data[1].replace('\_', ' ')
             const progress = parseInt(data[2])
 
-            console.log(`tk3-status ${instance}: ${msg} ${progress}%`)
+            if (source == "T3K") {
+                const instance  = data[3]
+                const t3k = desktop.pedalboard.data('T3KIntegration')
+
+                t3k.t3kProgress(instance, msg, progress)
+            }
             return
         }
     }
