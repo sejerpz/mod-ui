@@ -3649,7 +3649,6 @@ function T3KIntegration(pedalboard) {
      * (download) current operation
      */
     this.t3kProgress = function(instance, msg, progress) {
-        console.log(`T3K progress ${instance}: ${msg} ${progress}%`)
         const t3kinfo = findInfoByEffect(instance)
 
         t3kinfo?.popup?.progress?.(msg, progress)

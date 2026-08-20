@@ -825,6 +825,7 @@ class EffectT3KFetch(JsonRequestHandler):
     t3kApi = 'https://www.tone3000.com/api/v1'
     agent = 'MOD-Dwarf-Starless/1.0'
 
+    @staticmethod
     def sanitize_filename(filename: str, replacement: str = "-") -> str:
         # 1. Normalize Unicode (e.g., convert accented characters like 'é' -> 'e')
         filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
