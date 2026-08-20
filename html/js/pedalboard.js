@@ -3435,24 +3435,61 @@ function T3KIntegration(pedalboard) {
         t3kOpenPopups = t3kOpenPopups.filter(item => item.effect != effect)
     }
 
-    this.startSelectFlow = function(effect, parameter) {
+    this.startSelectFlow = function(effect, parameter, skipAuthCheck) {
+        if (!skipAuthCheck) {
+            // check if I'm authenticated
+            const auth = window.Tone3000Client.getTokens()
+            let authenticated = false
+            if (auth != null) {
+                // note that this call is sync
+                $.ajax({
+                    url: `https://www.tone3000.com/api/v1/user`,
+                    type: 'GET',
+                    async: false,
+                    headers: {
+                        'Authorization': 'Bearer ' + auth.tokens.access_token
+                    },
+                    success: function (tone) {
+                        authenticated = true
+                    }
+                })
+            } 
+
+            if (!authenticated) {
+                // if not authenticated show the T3K welcome
+                const width = 480;
+                const height = 720;
+                const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+                const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+                const url = "/t3k_spash.html?d=" + Date.now().toString()
+                const t3kwelcome = window.open(url, 't3k_select', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
+                t3kwelcome.onSplashContinue = function() {
+                    // continue with the select workflow skipAuthCheck = true
+                    self.startSelectFlow(effect, parameter, true)
+                }
+
+                return // stop now because we have shown the splash window
+            }
+        }
+
+        // start the select workflow
         const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
         // todo: gears -> check if we need to load an amp/effet or a cab/ir
 
         gears = []
         parameter.fileTypes.forEach(value => {
-           if (value == 'nammodel' || value == 'aidadspmodel') {
+            if (value == 'nammodel' || value == 'aidadspmodel') {
                 gears.push('amp')
                 gears.push('amp-cab')
                 gears.push('pedal')
                 gears.push('outboard')
-           } else if (value == 'cabsim') {
+            } else if (value == 'cabsim') {
                 gears.push('cab')
-           } else if (value == 'ir') {
+            } else if (value == 'ir') {
                 gears.push('space')
-           }
+            }
         });
-        
+
         if (gears.length == 0) {
             gears.push('amp')
             gears.push('amp-cab')
@@ -3461,6 +3498,7 @@ function T3KIntegration(pedalboard) {
         } else {
             gears = [...new Set(gears)];
         }
+
         const options = {
             gears: gears.join('_'),
             //format: string,
@@ -3479,7 +3517,7 @@ function T3KIntegration(pedalboard) {
                 console.error("T3KSelect error:", error);
             })
     }
-
+    
     this.refreshPluginsFilelist = function(senderEffect, senderParameter, senderSetValue) {
         const plugins = self.pedalboard.data('plugins')
         const sender = plugins[senderEffect] // the effect who completed the download
@@ -3524,7 +3562,7 @@ function T3KIntegration(pedalboard) {
             .then((auth) => {
                 if (auth?.ok) {
                     // fetching the tone info
-                    
+                    window.Tone3000Client.setTokens(auth)
                     $.ajax({
                         url: `https://www.tone3000.com/api/v1/tones/${toneId}`,
                         type: 'GET',

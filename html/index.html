@@ -67,7 +67,14 @@
   // make select API available to legacy javascript code
   window.Tone3000Client = {
     startSelectFlowPopup: startSelectFlowPopup,
-    exchangeCode: exchangeCode
+    exchangeCode: exchangeCode,
+    getTokens: function() {
+        const raw = sessionStorage.getItem('starless_t3k_tokens');
+        return raw ? JSON.parse(raw) : null;
+    },
+    setTokens: function(tokens) {
+        sessionStorage.setItem('starless_t3k_tokens', JSON.stringify(tokens));
+    }
   }
 </script>
 
