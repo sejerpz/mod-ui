@@ -750,5 +750,17 @@ $('document').ready(function() {
             t3k.t3kCancel(instance)
             return
         }
+
+        if (cmd == "t3k-status") {
+            // tone selected from the t3k integration
+            // the first paramater is the effect instance
+            data      = data.split(" ",3)
+            const instance  = data[0]
+            const msg = data[1].replace('\_', ' ')
+            const progress = parseInt(data[2])
+
+            console.log(`tk3-status ${instance}: ${msg} ${progress}%`)
+            return
+        }
     }
 })

@@ -67,7 +67,6 @@ function loadFileTypesList(parameter, dummy, callback) {
             'types': parameter.fileTypes.join(","),
         },
         success: function (data) {
-            console.log(data.files)
             const dirs = []
             const basePaths = []
             for(let file of data.files) {
@@ -2452,11 +2451,9 @@ function GUI(effect, options) {
         return data
     }
 
-    this.refreshPluginFileListParameter = function(instance, parameteri) {
+    this.refreshPluginFileListParameter = function(instance, parameteri, setValue) {
         
-        console.log("T3K refresh plugin parameter")
         loadFileTypesList(parameteri, false, function() {
-            console.log(`load file list done for ${parameteri.uri}`)
             let options = ""
             var parameter = self.parameters[parameteri.uri]
             // update indexed parameter with new files
@@ -2490,8 +2487,13 @@ function GUI(effect, options) {
                         // reattach the widget
                         let control = $(this)
                         self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                        if (setValue) {
+                            if (control.customSelectPath) {
+                                // preserve current path if available
+                                currentPath = control.customSelectPath('setValue', setValue)
+                            }
+                        }
                     })
-
             }
 
             // need to update the values in the settings for performance mode
@@ -3502,10 +3504,10 @@ JqueryClass('customSelect', baseWidget, {
 JqueryClass('customSelectPath', baseWidget, {
     init: function (options) {
         var self = $(this)
+        self.data('initialized', false)
         self.data('currentPath', options.currentPath || [])
         self.data('port', options.port)
         self.data('urihandle', options.urihandle)
-        console.log(`custom select path widget: ${options}`)
         self.customSelectPath('config', options)
         self.customSelectPath('setValue', options.port.value, true)
         self.find('[mod-role=enumeration-option]').each(function () {
@@ -3563,6 +3565,7 @@ JqueryClass('customSelectPath', baseWidget, {
         })
 
         self.customSelectPath('refreshFileList', self.data('currentPath'))
+        self.data('initialized', true)
         return self
     },
 
@@ -3578,7 +3581,6 @@ JqueryClass('customSelectPath', baseWidget, {
         let port = self.data('port')
         let currentPaths
         
-        console.log(`current path ${current}`)
         if (current.length == 0) {
             currentPaths = port.basepaths
         } else {
@@ -3678,7 +3680,6 @@ JqueryClass('customSelectPath', baseWidget, {
             }
         }
 
-        console.log(`current path ${current}`)
         self.find('[mod-role=enumeration-option]').each(function () {
             let opt = $(this)
             let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
@@ -3699,7 +3700,6 @@ JqueryClass('customSelectPath', baseWidget, {
     },
 
     setValue: function (value, only_gui) {
-        console.log(`custom select value ${value}`)
         var self = $(this)
         self.find('[mod-role=enumeration-option]').removeClass('selected')
 
@@ -3716,6 +3716,48 @@ JqueryClass('customSelectPath', baseWidget, {
             valueField.text(selected.text())
         }
 
+        // sync the current folder with the value path
+        if (self.data('initialized')) {
+            let parts = value.split('/')
+            let path = ""
+            let parentPath = ""
+            let newCurrent = []
+
+            for(let index = 0; index < parts.length - 1; index++) {
+                if (index > 0) path += '/'
+                path += parts[index]
+                const folder = self.find("[mod-role=enumeration-option][mod-parameter-value='dir://" + path + "']")
+                if (folder.length > 0) {
+                    if (parentPath.length > 0) {
+                        // puth the other folders
+                        newCurrent.push(parts[index])
+                    } else {
+                        // push the root
+                        newCurrent.push(path)
+                    }
+                    parentPath = path
+                    // the back arrow is used to differentiate between push and pop dir on click
+                    // since we pushed I update also the text accordly
+                    const backArrow = "\u{2B05} " //21B0} " // "
+
+                    if (!folder.text().startsWith(backArrow)) {
+                        folder.text(backArrow + folder.text())
+                    }
+                }
+            }
+
+            // check if current folder is different
+            const current = self.data('currentPath')
+            let changeCurrentFolder = false
+
+            if (current.length !== newCurrent.length || !current.every((val, index) => val === newCurrent[index])) {
+                // empty the array
+                current.splice(0, current.length);
+                newCurrent.forEach(item => current.push(item))
+                // update the UI
+                self.customSelectPath('refreshFileList', current)
+            }
+        }
         if (!only_gui) {
             self.trigger('valuechange', value)
         }

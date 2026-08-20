@@ -3472,7 +3472,6 @@ function T3KIntegration(pedalboard) {
         window.Tone3000Client
             .startSelectFlowPopup(pubKey, callbackUrl, options)
             .then((data) => {
-                console.log("T3KSelect:", data);
                 // add the popup to the traked popups
                 t3kOpenPopups.push({effect: effect, parameter: parameter, popup: data})
             })
@@ -3493,30 +3492,9 @@ function T3KIntegration(pedalboard) {
             pluginGui?.effect?.parameters?.forEach(parameter => {
                 // we need to refresh a plugin parameter if it has the same filetype of the senderParameter
                 if (parameter.fileTypes && senderParameter.fileTypes.some(item => parameter.fileTypes.includes(item))) {
-                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter)
+                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter, (pluginKey == senderEffect ? senderSetValue.fullname : undefined))
                 }
             });
-
-            console.log(`refresh plugin filelists ${pluginKey}`)
-        }
-
-
-        if (senderSetValue) {
-            // we just updated the sender effect
-            // set the current value to senderSetValue
-            // HACK: give jquery the time to update the DOM
-            setTimeout(() => {
-                senderGui.settings
-                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + senderParameter.uri + '"]')
-                    .each(function() {
-                        // reattach the widget
-                        let control = $(this)
-                        if (control.customSelectPath) {
-                            // preserve current path if available
-                            currentPath = control.customSelectPath('setValue', senderSetValue.fullname)
-                        }
-                    })
-            }, 250);
         }
     }
 
@@ -3526,7 +3504,7 @@ function T3KIntegration(pedalboard) {
     this.t3kToneSelected = function(effect, code, state, toneId) {
         // Select Flow — user browses TONE3000 and picks a tone
         // Optional: gears, platform, architecture, menubar (same query params as authorize URL)
-        console.log(`t3k cancel instance ${effect}, code ${code}, state ${state}, toneId ${toneId}`)
+        // console.log(`t3k cancel instance ${effect}, code ${code}, state ${state}, toneId ${toneId}`)
         const t3kinfo = findInfoByEffect(effect)
 
         // check if we have a popup registered
@@ -3535,7 +3513,7 @@ function T3KIntegration(pedalboard) {
             return
         }
 
-        deleteEffectPopup(effect)
+        t3kinfo.state = 'downloading'
         t3kinfo.popup.location = "/t3k.html?d=" + Date.now().toString()
 
         // must match the callbackUrl of the request we need to exchange the code for
@@ -3555,18 +3533,18 @@ function T3KIntegration(pedalboard) {
                             tone_id: toneId
                         },
                         success: function (resp) {
-                            console.log(`t3kToneSelected fetch success:`)
-                            console.log(`${resp}`)
                             // refresh plugins file list
                             let setValue = undefined
                             if (resp && resp.length > 0)
                                 setValue = resp[0]
                             self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
                             t3kinfo.popup.close()
-                            new Notification('info', 'Download from Tone3000 completed.', 8000)
+                            deleteEffectPopup(effect)
+                            new Notification('info', 'Download from Tone3000 completed.', 2000)
                         },
                         error: function (xhr, status, error) {
                             t3kinfo.popup.close()
+                            deleteEffectPopup(effect)
                             new Notification('error', 'Error downloading from Tone3000.')
                             console.error(`t3kToneSelected status ${status} error: ${error} `);
                         },

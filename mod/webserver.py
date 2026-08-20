@@ -825,13 +825,13 @@ class EffectT3KFetch(JsonRequestHandler):
     t3kApi = 'https://www.tone3000.com/api/v1'
     agent = 'MOD-Dwarf-Starless/1.0'
 
-    def sanitize_filename(filename: str, replacement: str = "_") -> str:
+    def sanitize_filename(filename: str, replacement: str = "-") -> str:
         # 1. Normalize Unicode (e.g., convert accented characters like 'é' -> 'e')
         filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
         
         # 2. Remove characters that are unsafe across OS (Windows, Linux, macOS)
         # Allows only alphanumeric, hyphens, underscores, and dots
-        filename = re.sub(r'[^a-zA-Z0-9._\- !\+]', replacement, filename)
+        filename = re.sub(r'[^a-zA-Z0-9._\- !\+\(\)\[\]\{\}\.\,\;\:\"\']', replacement, filename)
         
         # 3. Collapse multiple consecutive replacement characters into one
         filename = re.sub(f'{re.escape(replacement)}+', replacement, filename)
@@ -900,7 +900,7 @@ class EffectT3KFetch(JsonRequestHandler):
 
         return models['data'] if models else None
 
-    def download_tone_models_files(self, access_token: str, tone: dict, models: dict) -> dict:
+    def download_tone_models_files(self, instance, access_token: str, tone: dict, models: dict) -> dict:
         """
             Fetch the tone models url to download the files
 
@@ -911,6 +911,7 @@ class EffectT3KFetch(JsonRequestHandler):
             return: the tone models or None
         """
 
+        SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, f'downloading_models_0/{len(models)}', 0))
         files = []
         # choose the download base path from the type of file
         
@@ -926,8 +927,12 @@ class EffectT3KFetch(JsonRequestHandler):
         else:
             model_dir_name = ""
 
+        count = 0
         lastdirname = None
         for model in models:
+            count += 1
+            SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, f'downloading_models_{count}/{len(models)}', int(round(count / len(models) * 100))))
+
             model_url = model['model_url']
             _, ext = os.path.splitext(urllib.parse.urlparse(model_url).path)
             filetype = filetypes.get(ext, None)
@@ -994,15 +999,17 @@ class EffectT3KFetch(JsonRequestHandler):
         tone_id = self.get_argument('tone_id')
         logging.info("T3K fetch effect: %s, tone_id: %s", instance, tone_id)
 
+        SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, 'reading_tone_info', 0))
         tone = self.fetch_tone_metadata(access_token, tone_id)
         if tone.get('a2_models_count', 0) > 0:
             architecture = 2 # it seems the architecture is mandatory only for A2 models
         else:
             architecture = None 
 
+        SESSION.host.msg_callback('t3k-status %s %s %s' % (instance, 'reading_tone_available_models', 0))
         models = self.fetch_tone_models(access_token, tone_id, architecture)
 
-        files = self.download_tone_models_files(access_token, tone, models)
+        files = self.download_tone_models_files(instance, access_token, tone, models)
         self.write(json.dumps(files))
 
 class SDKEffectInstaller(EffectInstaller):
