@@ -3530,9 +3530,124 @@ function T3KIntegration(pedalboard) {
             pluginGui?.effect?.parameters?.forEach(parameter => {
                 // we need to refresh a plugin parameter if it has the same filetype of the senderParameter
                 if (parameter.fileTypes && senderParameter.fileTypes.some(item => parameter.fileTypes.includes(item))) {
-                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter, (pluginKey == senderEffect ? senderSetValue.fullname : undefined))
+                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter, (pluginKey == senderEffect ? senderSetValue?.fullname : undefined))
                 }
             });
+        }
+    }
+
+    this.getToneInfo = async function (access_token, toneId) {
+        try {
+            const tone = await $.ajax({
+                url: 'https://www.tone3000.com/api/v1/tones/' + toneId,
+                type: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + access_token
+                },
+                cache: false,
+                dataType: 'json'
+            })
+
+            return tone
+        } catch (error) {
+            throw new Error(`Error downloading the tone metadata: ${error.statusText}`)
+        }
+    }
+
+    /*
+     * Get the tone models from T3K
+     */
+    this.getModels = async function (access_token, tone) {
+        // now fetch the models
+        try {
+            const models = await $.ajax({
+                url: `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}`,
+                headers: {
+                    'Authorization': 'Bearer ' + access_token
+                },
+                cache: false,
+                dataType: 'json'
+            })
+
+            return models.data
+        } catch (error) {
+            throw new Error(`Error downloading the tone models metadata: ${error.statusText}`)
+        }
+    }
+
+    /*
+     * This function download the models files and upload to the device using the file upload api
+     */
+    this.downloadModelsFiles = async function (access_token, tone, models, progressFunc) {
+        try {
+            const total = models.length
+            const files = []
+            let current = 0
+            let directory = total > 1 ? tone.title : "" // do not place in a subfolder if it's just one file
+
+            progressFunc?.(null, 0, total)
+            for(const model of models) {
+                current += 1
+                progressFunc?.(model, current, total)
+                const url = new URL(model.model_url);
+                const tmpFilename = url.pathname.split('/').pop();
+                const fileExtension = tmpFilename.split('.').pop();
+                let fileName = (total > 1 ? model.name : tone.title)
+
+                const uploadConfig = {
+                    directory: directory,
+                    onDirectoryConflict: current == 1 ? 'rename' : 'merge', // rename directory if exists, the file is always renamed on conflict
+                    filename: (fileName + (fileExtension ? '.' + fileExtension : '')).trim(),
+                    metadata: {
+                        source: 'T3K',
+                        data: {
+                            toneId: tone.id,
+                            modelId: model.id
+                        }
+                    }
+                }
+
+                const response = await new Promise((resolve, reject) => {
+                    var transfer = new SimpleTransference(
+                                        model.model_url,
+                                        '/files/upload',
+                                        {
+                                            from_args: {
+                                                headers: { 'Authorization': 'Bearer ' + access_token }
+                                            },
+                                            to_args: {
+                                                headers: {
+                                                    'Authorization' : 'MOD ' + desktop.cloudAccessToken,
+                                                    'X-Upload-Config': encodeURIComponent(JSON.stringify(uploadConfig))
+                                                }
+                                            }
+                                        })
+
+                    transfer.reauthorizeUpload = desktop.authenticateDevice
+
+                    transfer.reportFinished = function (resp2) {
+                        resolve(resp2)
+                    }
+
+                    transfer.reportError = function (error) {
+                    reject(new Error(error))
+                    }
+
+                    transfer.start()
+                })
+
+                if (!response.ok)
+                    throw new Error(model.name)
+
+                if (current == 1) // place all the other files in the same directory (the server can rename the directory to not overwrite files)
+                    directory = response.result.dirname
+
+                files.push(response.result)
+            }
+
+            return files
+        } catch (error) {
+            throw new Error(`Error downloading the tone models file: ${error}`)
         }
     }
 
@@ -3543,6 +3658,16 @@ function T3KIntegration(pedalboard) {
         // Select Flow — user browses TONE3000 and picks a tone
         // Optional: gears, platform, architecture, menubar (same query params as authorize URL)
         // console.log(`t3k cancel instance ${effect}, code ${code}, state ${state}, toneId ${toneId}`)
+        const cleanup = function(t3kinfo) {
+            t3kinfo.popup.location = 'about:blank'
+            t3kinfo.popup.close()
+            deleteEffectPopup(t3kinfo.effect)
+        }
+        const onError = function(t3kinfo, error) {
+            cleanup(t3kinfo)
+            new Notification('error', 'Error downloading from Tone3000.')
+            console.error(`t3kToneSelected status error: ${error} `);
+        }
         const t3kinfo = findInfoByEffect(effect)
 
         // check if we have a popup registered
@@ -3557,73 +3682,62 @@ function T3KIntegration(pedalboard) {
         // must match the callbackUrl of the request we need to exchange the code for
         const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
         // start the download
-        window.Tone3000Client
+        const t3kClient = window.Tone3000Client
+
+        t3kClient
             .exchangeCode(pubKey, callbackUrl, code, state)
             .then((auth) => {
                 if (auth?.ok) {
                     // fetching the tone info
-                    window.Tone3000Client.setTokens(auth)
-                    $.ajax({
-                        url: `https://www.tone3000.com/api/v1/tones/${toneId}`,
-                        type: 'GET',
-                        headers: {
-                            'Authorization': 'Bearer ' + auth.tokens.access_token
-                        },
-                        success: function (tone) {
+                    t3kClient.setTokens(auth)
+                    self
+                        .getToneInfo(auth.tokens.access_token, toneId)
+                        .then((tone) => {
                             // update the popup with the info of the tone
                             const title = tone.title
                             const des = tone.description
                             const user = tone.user?.display_name
                             const image = tone.images?.[0]
 
-                            t3kinfo.popup.setToneInfo(user, title, des, image)
-                            // now fetch the models
-                            $.ajax({
-                                url: '/effect/t3k/fetch',
-                                type: 'POST',
-                                data: {
-                                    effect: effect,
-                                    access_token: auth.tokens.access_token,
-                                    tone_id: toneId
-                                },
-                                success: function (models) {
-                                    // refresh plugins file list
-                                    let setValue = undefined
-                                    if (models && models.length > 0) {
-                                        models.sort((a, b) =>  a.fullname.localeCompare(b.fullname))
-                                        // first in alphabetic order
-                                        setValue = models[0]
-                                    }
-                                    self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
-                                    t3kinfo.popup.close()
-                                    deleteEffectPopup(effect)
-                                    new Notification('info', 'Download from Tone3000 completed.', 2000)
-                                },
-                                error: function (xhr, status, error) {
-                                    t3kinfo.popup.close()
-                                    deleteEffectPopup(effect)
-                                    new Notification('error', 'Error downloading from Tone3000.')
-                                    console.error(`t3kToneSelected status ${status} error: ${error} `);
-                                },
-                                cache: false,
-                                dataType: 'json'
-                            })      
-                        },
-                        error: function (xhr, status, error) {
-                            t3kinfo.popup.close()
-                            deleteEffectPopup(effect)
-                            new Notification('error', 'Error downloading from Tone3000.')
-                            console.error(`t3kToneSelected status ${status} error: ${error} `);
-                        },
-                        cache: false,
-                        dataType: 'json'
-                    });
-                } else {
-                    console.error("t3kToneSelected response ko:", response);
+                            t3kinfo.popup?.setToneInfo?.(user, title, des, image)
+                            self
+                                .getModels(auth.tokens.access_token, tone)
+                                .then((models) => {
+                                    // download models and store on the dwarf user files
+                                    self
+                                        .downloadModelsFiles(auth.tokens.access_token, tone, models, function(model, current, count) {
+                                            const msg = `Downloading files ${current}/${count}...`
+                                            const perc = Math.round(current / Math.min(1, count) * 100)
+                                            t3kinfo.popup?.progress?.(msg, perc)
+                                        })
+                                        .then((files) => {
+                                            // refresh plugins file list
+                                            let setValue = undefined
+                                            if (files && files.length > 0) {
+                                                files.sort((a, b) =>  a.fullname.localeCompare(b.fullname))
+                                                // first in alphabetic order
+                                                setValue = files[0]
+                                            }
+                                            self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
+                                            cleanup(t3kinfo)
+                                            new Notification('info', 'Download from Tone3000 completed.', 2000)
+                                        })
+                                        .catch((errDownloadModels) => {
+                                            onError(t3kinfo, errDownloadModels)
+                                        })
+                                })
+                                .catch((errFetchModels) => {
+                                    onError(t3kinfo, errFetchModels)
+                                })
+
+                        })
+                        .catch((errTone) => {
+                            onError(t3kinfo, errTone)
+                        })
                 }
             })
             .catch((error) => {
-                console.error("t3kToneSelected error:", error);
+                onError(t3kinfo, error)
             })
     }
 
