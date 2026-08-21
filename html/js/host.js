@@ -740,8 +740,7 @@ $('document').ready(function() {
         }
 
         if (cmd == "progress") {
-            // tone selected from the t3k integration
-            // the first paramater is the effect instance
+            // long server operation progress
             const stringParse = function(str) {
                 // parse the string like string.split, but also support 'strings with spaces'
                 // returns an array of strings
@@ -779,12 +778,6 @@ $('document').ready(function() {
             const msg = data[1].replace('\_', ' ')
             const progress = parseInt(data[2])
 
-            if (source == "T3K") {
-                const instance  = data[3]
-                const t3k = desktop.pedalboard.data('T3KIntegration')
-
-                t3k.t3kProgress(instance, msg, progress)
-            }
             return
         }
     }

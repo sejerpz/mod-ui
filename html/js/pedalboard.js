@@ -3401,12 +3401,8 @@ function T3KIntegration(pedalboard) {
      * 2. T3K callback the python SERVER when a tone is selected or the popup is closed
      * 3. The SERVER callback the CLIENT to inform the tone selection is done using the websocket connection using the command 't3k-tone-selected' or 't3k-cancel'
      * 4. The CLIENT exchange the code with an auth token using T3K API
-     * 5. The CLIENT call the SERVER to fetch the tones passing the toneId and auth token
+     * 5. The CLIENT call the T3K to fetch the tones and upload to the SERVER
      * 
-     * TODO:
-     * 
-     * Point 3, 4 and 5 can be simplified if the server generate the token verifier.
-     * With that in place the server fetch the tones and the call the client to inform that everything is completed.
      */
     const pubKey = 't3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'
     const self = this
@@ -3550,7 +3546,7 @@ function T3KIntegration(pedalboard) {
 
             return tone
         } catch (error) {
-            throw new Error(`Error downloading the tone metadata: ${error.statusText}`)
+            throw new Error(`Error downloading the tone metadata: ${error}`)
         }
     }
 
@@ -3560,18 +3556,27 @@ function T3KIntegration(pedalboard) {
     this.getModels = async function (access_token, tone) {
         // now fetch the models
         try {
-            const models = await $.ajax({
-                url: `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}`,
-                headers: {
-                    'Authorization': 'Bearer ' + access_token
-                },
-                cache: false,
-                dataType: 'json'
-            })
-
-            return models.data
+            let models = []
+            const pageSize = 50
+            let page = 1
+            let total = 1
+            while (models.length < total) {
+                const pageModels = await $.ajax({
+                    url: `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}&page=${page}&page_size=${pageSize}`,
+                    headers: {
+                        'Authorization': 'Bearer ' + access_token
+                    },
+                    cache: false,
+                    dataType: 'json'
+                })
+                
+                models = models.concat(pageModels.data)
+                total = pageModels.total
+                page += 1
+            }
+            return models
         } catch (error) {
-            throw new Error(`Error downloading the tone models metadata: ${error.statusText}`)
+            throw new Error(`Error downloading the tone models metadata: ${error}`)
         }
     }
 
