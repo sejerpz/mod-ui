@@ -16,11 +16,18 @@ async function randomBase64url(bytes) {
     const buf = crypto.getRandomValues(new Uint8Array(bytes));
     return btoa(String.fromCharCode(...buf))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  
 }
 async function sha256Base64url(input) {
-    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    /*const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
     return btoa(String.fromCharCode(...new Uint8Array(hash)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');*/
+    const hash = CryptoJS.SHA256(input);
+    const base64 = hash.toString(CryptoJS.enc.Base64);
+    return base64
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 }
 async function buildPkceParams() {
     const codeVerifier = await randomBase64url(32);

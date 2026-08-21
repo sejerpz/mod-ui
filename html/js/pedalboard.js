@@ -2542,7 +2542,7 @@ JqueryClass('pedalboard', {
             // because we just closed the plugin settings and the vumeter was removed,
             // but the host is still sending some values for it
             const debounceBaseDate = self.data('currentSettingsWindowClosedTime') || 0
-            if (debounceBaseDate && (Date.now() - debounceBaseDate) < 1000) {
+            if (debounceBaseDate && (Date.now() - debounceBaseDate) < 3000) {
                 console.log("debouncing vumeter creation for port " + port + " because settings window was just closed")
                 return
             }
