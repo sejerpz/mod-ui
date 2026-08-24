@@ -24,17 +24,39 @@ function shouldSkipPort(port) {
     return false;
 }
 
+function supportsT3K(parameter) {
+    return parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir' || type == 'aidadspmodel')
+}
+
 function loadFileTypesList(parameter, dummy, callback) {
     var files = []
-    if (parameter.ranges.default) {
-        var sdef = parameter.ranges.default
-        files.push({
-            'fullname': sdef,
-            'basename': sdef.slice(sdef.lastIndexOf('/')+1),
-        })
+
+    parameter.files = files
+    parameter.basepaths = []
+    const addDefaultParamValues = function() {
+        if (parameter.ranges.default) {
+            var sdef = parameter.ranges.default
+            files.push({
+                'fullname': sdef,
+                'dirname': '',
+                'basename': sdef.slice(sdef.lastIndexOf('/')+1),
+                'icon': '<i class="icon-preset mod-select-path-icon"></i>' // box
+            })
+        }
+        // check if parameters can be suported by T3K
+        parameter.t3k = supportsT3K(parameter)
+        if (parameter.t3k) {
+            // this parameter can be downloaded from T3K
+            files.push({
+                'fullname': 't3k://browse',
+                'dirname': '',
+                'basename': 'Browse tones',
+                'icon': '<img class="t3k-enumerated-option-logo" src="js/lib/t3k/logo/T3K%20logo.png" />'
+            })
+        }
     }
     if (dummy) {
-        parameter.files = files
+        addDefaultParamValues()
         parameter.path = true
         callback()
         return
@@ -45,11 +67,59 @@ function loadFileTypesList(parameter, dummy, callback) {
             'types': parameter.fileTypes.join(","),
         },
         success: function (data) {
-            parameter.files = files.concat(data.files)
+            const dirs = []
+            const basePaths = []
+            for(let file of data.files) {
+                if (file.dirname && file.dirname.length > 0) {
+                    let dirPath = file.fullname
+                    const lastSlashIndex = Math.max(file.fullname.lastIndexOf('/'), file.fullname.lastIndexOf('\\'));
+
+                    if (lastSlashIndex != -1) {
+                        dirPath = file.fullname.slice(0, lastSlashIndex);
+                    }
+                    if (!dirs.find((value, index) => value === dirPath)) {
+                        dirs.push(dirPath)
+                    }
+                }
+
+                if (!basePaths.find((value, index) => value === file.basepath)) {
+                    basePaths.push(file.basepath)
+                }
+            }
+
+            // file sorting criteria
+            // first directory
+            dirs.sort()
+            for(let dir of dirs) {
+                const lastSlashIndex = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'));
+                let dirname
+
+                if (lastSlashIndex != -1) {
+                    dirname = dir.slice(lastSlashIndex + 1);
+                } else {
+                    dirname = dir
+                }
+                files.push({
+                    'basename': dirname,
+                    'dirname': dirname,
+                    'filetype': 'dir',
+                    'fullname': 'dir://' + dir
+                })
+            }
+
+            // then user downloaded files
+            files = files.concat(data.files)
+            // then plugin resources
+            // then special uris like t3k://
+            addDefaultParamValues()
+
+            parameter.files = files
+            parameter.basepaths = basePaths
             parameter.path = true
             callback()
         },
         error: function () {
+            addDefaultParamValues()
             callback()
         },
         cache: false,
@@ -3346,23 +3416,212 @@ JqueryClass('customSelect', baseWidget, {
 JqueryClass('customSelectPath', baseWidget, {
     init: function (options) {
         var self = $(this)
+        self.data('initialized', false)
+        self.data('icons', {
+            backArrow: `<i class="icon-folder-up mod-select-path-icon"></i>`,
+            folder: `<i class="icon-folder mod-select-path-icon"></i>`,
+            folderOpen: `<i class="icon-folder-open mod-select-path-icon"></i>`,
+            userFile: `<i class="icon-user-file mod-select-path-icon"></i>`,
+        })
+        self.data('currentPath', options.currentPath || [])
+        self.data('port', options.port)
+        self.data('urihandle', options.urihandle)
         self.customSelectPath('config', options)
         self.customSelectPath('setValue', options.port.value, true)
         self.find('[mod-role=enumeration-option]').each(function () {
             var opt = $(this)
+            let icon = undefined
+            const optValue = opt.attr('mod-parameter-value')
+
+            // find the options in the port (parameter) files
+            const file = options.port.files.find(item => item.fullname == optValue)
+
+            if (file && file.icon && file.icon.length > 0) {
+                icon = file.icon
+            }
+
+            if (!icon) {
+                const icons = self.data('icons')
+                if (optValue.startsWith("dir://")) {
+                    icon = icons.folder
+                } else {
+                    icon = icons.userFile
+                }
+            }
+            opt.attr('title', opt.text())
+            opt.html(`${icon}` + opt.html())
             opt.click(function (e) {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
                 }
                 var value = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
-                self.customSelectPath('setValue', value, false)
+                if (value?.startsWith('dir://')) {
+                    const icons = self.data('icons')
+                    const currentPath = self.customSelectPath('getCurrentPath')
+                    let isNavigateBack = false
+
+                    if (currentPath.length > 0) {
+                        // click on the same folder, is a navigate back
+                        isNavigateBack = 'dir://' + currentPath[currentPath.length - 1] == value
+                    }
+                    if (isNavigateBack) {
+                        self.customSelectPath('popDir')
+                        opt.html(opt.html().substr(icons.backArrow.length).replace('icon-folder-open', 'icon-folder'))
+                    } else {
+                        self.customSelectPath('pushDir', value)
+                        opt.html(icons.backArrow + opt.html().replace('icon-folder', 'icon-folder-open'))
+                    }
+                    e.stopPropagation()
+                } else if (value?.indexOf('://', 0) > -1) {
+                    // handle special uri
+                    const urihandle = self.data('urihandle')
+                    if (urihandle) {
+                        urihandle(value)
+                    }
+                } else {
+                    self.customSelectPath('setValue', value, false)
+                }
             })
         })
-        self.click(function () {
+
+        self.off('click.customSelectPath')
+        self.on('click.customSelectPath', function() {
             self.find('.mod-enumerated-list').toggle()
         })
 
+        self.customSelectPath('refreshFileList', self.data('currentPath'))
+        self.data('initialized', true)
         return self
+    },
+
+    getCurrentPath: function() {
+        let self = $(this)
+
+        return self.data('currentPath')
+    },
+
+
+    refreshFileList: function(current) {
+        let self = $(this)
+        let port = self.data('port')
+        let currentPaths
+
+        if (current.length == 0) {
+            currentPaths = port.basepaths
+        } else {
+            // show only files in the current path
+            currentPaths = [ current.join('/') ]
+        }
+
+        let validItems = []
+        for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                if (current.length == 0) {
+                    validItems.push(file)
+                }
+                continue;
+            }
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+
+            // remove last element
+            const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+
+            if (lastSlashIndex != -1) {
+                itemPath = fullname.slice(0, lastSlashIndex);
+            } else {
+                itemPath = fullname
+            }
+
+            for(let currentPath of currentPaths) {
+                if (currentPath === itemPath
+                    || (current.length > 0 && itemIsDir && currentPath == fullname) // always show the current folder since is used to navigate up
+                    || (current.length == 0 && file.dirname == '') // show the default value on root
+                    ) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+         self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+                opt.removeClass('mod-hidden')
+            } else {
+                opt.addClass('mod-hidden')
+            }
+        });
+    },
+
+    pushDir: function(dir) {
+        let self = $(this)
+        let current = self.data('currentPath')
+        let port = self.data('port')
+        // set the value as current folder
+        let currentPath = dir.substr('dir://'.length)
+        current.push(currentPath)
+
+        let validItems = []
+        for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                if (current.length == 0) {
+                    validItems.push(file)
+                }
+                continue;
+            }
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+
+            if (fullname == currentPath) {
+                // always show current folder since is used to navigate Up
+                validItems.push(file)
+            } else {
+                // remove last element
+                const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+
+                if (lastSlashIndex != -1) {
+                    itemPath = fullname.slice(0, lastSlashIndex);
+                } else {
+                    itemPath = fullname
+                }
+
+                if (currentPath === itemPath) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+        self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+                opt.removeClass('mod-hidden')
+            } else {
+                opt.addClass('mod-hidden')
+            }
+        });
+    },
+
+    popDir: function() {
+        let self = $(this)
+        let current = self.data('currentPath')
+        current.pop()
+        self.customSelectPath('refreshFileList', current)
     },
 
     setValue: function (value, only_gui) {
@@ -3382,6 +3641,47 @@ JqueryClass('customSelectPath', baseWidget, {
             valueField.text(selected.text())
         }
 
+        // sync the current folder with the value path
+        if (self.data('initialized')) {
+            let parts = value.split('/')
+            let path = ""
+            let parentPath = ""
+            let newCurrent = []
+
+            for(let index = 0; index < parts.length - 1; index++) {
+                if (index > 0) path += '/'
+                path += parts[index]
+                const folder = self.find("[mod-role=enumeration-option][mod-parameter-value='dir://" + path + "']")
+                if (folder.length > 0) {
+                    if (parentPath.length > 0) {
+                        // puth the other folders
+                        newCurrent.push(parts[index])
+                    } else {
+                        // push the root
+                        newCurrent.push(path)
+                    }
+                    parentPath = path
+                    // update the element UI
+                    const backArrow = self.data('icons').backArrow
+
+                    if (!folder.html().startsWith(backArrow)) {
+                        folder.html(backArrow + folder.html())
+                    }
+                }
+            }
+
+            // check if current folder is different
+            const current = self.data('currentPath')
+            let changeCurrentFolder = false
+
+            if (current.length !== newCurrent.length || !current.every((val, index) => val === newCurrent[index])) {
+                // empty the array
+                current.splice(0, current.length);
+                newCurrent.forEach(item => current.push(item))
+                // update the UI
+                self.customSelectPath('refreshFileList', current)
+            }
+        }
         if (!only_gui) {
             self.trigger('valuechange', value)
         }
