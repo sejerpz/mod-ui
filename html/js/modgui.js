@@ -1674,6 +1674,17 @@ function GUI(effect, options) {
                         } else {
                             elem.find('.file-list-btn-expand').hide()
                         }
+
+                        elem.find('.file-list-btn-t3k').click(function () {
+                            const uri = $(this).attr('mod-parameter-uri')
+                            const parameter = self.effect.parameters.find((p) => p.uri == uri)
+
+                            if (parameter) {
+                                // TODO T3K: check if file type can be downloaded from tone3000
+                                const t3k = desktop.pedalboard.data('T3KIntegration')
+                                t3k.startSelectFlow(instance, parameter)
+                            }
+                        })
                     })
                 }
 
@@ -1845,6 +1856,9 @@ function GUI(effect, options) {
                     value: port.value
                 })
             }
+
+            // T3K Integration
+
             // ready!
             self.jsStarted = true
             self.triggerJS({ type: 'start', parameters: jsParameters, ports: jsPorts })
@@ -1968,6 +1982,101 @@ function GUI(effect, options) {
         if (handle.length > 0) {
             element.draggable(drag_options)
             element.click(options.click)
+        }
+    }
+
+    this.assignParameterControlFunctionality = function(instance, control, uri, onlySetValues) {
+        var parameter = self.parameters[uri]
+
+        if (parameter)
+        {
+            /*  */ if (parameter.type === "http://lv2plug.in/ns/ext/atom#Bool") {
+                parameter.valuetype = 'b'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Int") {
+                parameter.valuetype = 'i'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Long") {
+                parameter.valuetype = 'l'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Float") {
+                parameter.valuetype = 'f'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Double") {
+                parameter.valuetype = 'g'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#String") {
+                parameter.valuetype = 's'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Path") {
+                parameter.valuetype = 'p'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#URI") {
+                parameter.valuetype = 'u'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Vector") {
+                parameter.valuetype = 'v'
+            } else {
+                return
+            }
+
+            if (parameter.control || parameter.string)
+            {
+                // Set the display formatting of this control
+                if (parameter.string)
+                    parameter.format = '%s'
+                else if (parameter.units.render)
+                    parameter.format = parameter.units.render.replace('%f', '%.2f')
+                else
+                    parameter.format = '%.2f'
+
+                if (parameter.properties.indexOf("integer") >= 0) {
+                    parameter.format = parameter.format.replace(/%\.\d+f/, '%d')
+                }
+
+                var valueField = element.find('[mod-role=input-parameter-value][mod-parameter-uri="' + uri + '"]')
+                parameter.valueFields.push(valueField)
+
+                if (valueField.length > 0 && parameter.properties.indexOf("toggled") < 0)
+                {
+                    self.setupValueField(valueField, parameter, function (value) {
+                        self.lv2PatchSet(uri, parameter.valuetype, value, control)
+                        // setWritableParameterValue() skips this control as it's the same as the 'source'
+                        control.controlWidget('setValue', value, true)
+                    })
+                }
+            }
+            else if (parameter.path)
+            {
+                // TODO?
+            }
+            else
+            {
+                return
+            }
+
+            let currentPath = undefined
+            if (control.customSelectPath) {
+                // preserve current path if available
+                currentPath = control.customSelectPath('getCurrentPath')
+            }
+            control.controlWidget({
+                dummy: onlySetValues,
+                port: parameter,
+                currentPath: currentPath ,
+                change: function (e, value) {
+                    self.lv2PatchSet(uri, parameter.valuetype, value, control)
+                },
+                urihandle: function(value) {
+                    console.log(`handle special uri ${value}`)
+                    const t3k = desktop.pedalboard.data('T3KIntegration')
+                    t3k.startSelectFlow(instance, parameter)
+                }
+            })
+
+            if (instance) {
+                control.attr("mod-instance", instance)
+            }
+
+            parameter.widgets.push(control)
+
+            self.setWritableParameterValue(uri, parameter.valuetype, parameter.value, control, true)
+        }
+        else
+        {
+            control.text('No such parameter: ' + uri)
         }
     }
 
@@ -2097,87 +2206,7 @@ function GUI(effect, options) {
         element.find('[mod-role=input-parameter]').each(function () {
             var control = $(this)
             var uri = $(this).attr('mod-parameter-uri')
-            var parameter = self.parameters[uri]
-
-            if (parameter)
-            {
-                /*  */ if (parameter.type === "http://lv2plug.in/ns/ext/atom#Bool") {
-                    parameter.valuetype = 'b'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Int") {
-                    parameter.valuetype = 'i'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Long") {
-                    parameter.valuetype = 'l'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Float") {
-                    parameter.valuetype = 'f'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Double") {
-                    parameter.valuetype = 'g'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#String") {
-                    parameter.valuetype = 's'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Path") {
-                    parameter.valuetype = 'p'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#URI") {
-                    parameter.valuetype = 'u'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Vector") {
-                    parameter.valuetype = 'v'
-                } else {
-                    return
-                }
-
-                if (parameter.control || parameter.string)
-                {
-                    // Set the display formatting of this control
-                    if (parameter.string)
-                        parameter.format = '%s'
-                    else if (parameter.units.render)
-                        parameter.format = parameter.units.render.replace('%f', '%.2f')
-                    else
-                        parameter.format = '%.2f'
-
-                    if (parameter.properties.indexOf("integer") >= 0) {
-                        parameter.format = parameter.format.replace(/%\.\d+f/, '%d')
-                    }
-
-                    var valueField = element.find('[mod-role=input-parameter-value][mod-parameter-uri="' + uri + '"]')
-                    parameter.valueFields.push(valueField)
-
-                    if (valueField.length > 0 && parameter.properties.indexOf("toggled") < 0)
-                    {
-                        self.setupValueField(valueField, parameter, function (value) {
-                            self.lv2PatchSet(uri, parameter.valuetype, value, control)
-                            // setWritableParameterValue() skips this control as it's the same as the 'source'
-                            control.controlWidget('setValue', value, true)
-                        })
-                    }
-                }
-                else if (parameter.path)
-                {
-                    // TODO?
-                }
-                else
-                {
-                    return
-                }
-
-                control.controlWidget({
-                    dummy: onlySetValues,
-                    port: parameter,
-                    change: function (e, value) {
-                        self.lv2PatchSet(uri, parameter.valuetype, value, control)
-                    }
-                })
-
-                if (instance) {
-                    control.attr("mod-instance", instance)
-                }
-
-                parameter.widgets.push(control)
-
-                self.setWritableParameterValue(uri, parameter.valuetype, parameter.value, control, true)
-            }
-            else
-            {
-                control.text('No such parameter: ' + uri)
-            }
+            self.assignParameterControlFunctionality(instance, control, uri, onlySetValues)
         })
 
         if (onlySetValues) {
@@ -2420,6 +2449,65 @@ function GUI(effect, options) {
         }
 
         return data
+    }
+
+    this.refreshPluginFileListParameter = function(instance, parameteri, setValue) {
+
+        loadFileTypesList(parameteri, false, function() {
+            let options = ""
+            var parameter = self.parameters[parameteri.uri]
+            // update indexed parameter with new files
+            $.extend(parameter, parameteri)
+            // delete previous widgets
+            parameter.widgets = []
+
+            for(let file of parameter.files) {
+                options +=
+                    '<div mod-role="enumeration-option" mod-parameter-value="' + file.fullname +'">' + file.basename + '</div>\n'
+            }
+
+            // need to update the values in the icon UI
+            self.icon
+                .find('.mod-enumerated[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                .find('.mod-enumerated-list')
+                .html(options)
+            self.icon
+                .find('[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                .each(function() {
+                    // reattach the widget
+                    let control = $(this)
+                    self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                })
+            // need to update the values in the settings UI
+            if (self.settings) {
+                self.settings
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                    .html(options)
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                        if (setValue) {
+                            if (control.customSelectPath) {
+                                // preserve current path if available
+                                currentPath = control.customSelectPath('setValue', setValue)
+                            }
+                        }
+                    })
+            }
+
+            // need to update the values in the settings for performance mode
+            if (self.settingsPerformance) {
+                self.settingsPerformance
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                    .html(options)
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                    })
+            }
+        })
     }
 
     this.jsData = {}
