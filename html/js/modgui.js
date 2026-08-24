@@ -40,7 +40,7 @@ function loadFileTypesList(parameter, dummy, callback) {
                 'fullname': sdef,
                 'dirname': '',
                 'basename': sdef.slice(sdef.lastIndexOf('/')+1),
-                'icon': '<i class="icon-preset"></i>' // box
+                'icon': '<i class="icon-preset mod-select-path-icon"></i>' // box
             })
         }
         // check if parameters can be suported by T3K
@@ -3508,10 +3508,10 @@ JqueryClass('customSelectPath', baseWidget, {
         var self = $(this)
         self.data('initialized', false)
         self.data('icons', {
-            backArrow: `<i class="icon-folder-up"></i>`, //"\u{F0A8} ", //"\u{2B05} "
-            folder: `<i class="icon-folder"></i>`, //"\u{1F4C1} ",
-            folderOpen: `<i class="icon-folder-open"></i>`, //"\u{1F4C1} ",
-            userFile: `<i class="icon-user-file"></i>`, //"\u{1F4C4} "
+            backArrow: `<i class="icon-folder-up mod-select-path-icon"></i>`, //"\u{F0A8} ", //"\u{2B05} "
+            folder: `<i class="icon-folder mod-select-path-icon"></i>`, //"\u{1F4C1} ",
+            folderOpen: `<i class="icon-folder-open mod-select-path-icon"></i>`, //"\u{1F4C1} ",
+            userFile: `<i class="icon-user-file mod-select-path-icon"></i>`, //"\u{1F4C4} "
         })
         self.data('currentPath', options.currentPath || [])
         self.data('port', options.port)
@@ -3556,10 +3556,10 @@ JqueryClass('customSelectPath', baseWidget, {
                     }
                     if (isNavigateBack) {
                         self.customSelectPath('popDir')
-                        opt.html(opt.html().substr(icons.backArrow.length))
+                        opt.html(opt.html().substr(icons.backArrow.length).replace('icon-folder-open', 'icon-folder'))
                     } else {
                         self.customSelectPath('pushDir', value)
-                        opt.html(icons.backArrow + opt.html())
+                        opt.html(icons.backArrow + opt.html().replace('icon-folder', 'icon-folder-open'))
                     }
                     e.stopPropagation()
                 } else if (value?.indexOf('://', 0) > -1) {

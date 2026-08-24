@@ -2416,7 +2416,7 @@ class FilesUpload(SimpleFileReceiver):
         source_file = os.path.join(self.destination_dir, basename)
         config = json.loads(urllib.parse.unquote(self.request.headers.get("X-Upload-Config", "{}")))
 
-        logging.debug("******* file 2 upload %s config '%s'", source_file, config)
+        logging.info("FilesUpload %s destination filename ''%s''", source_file, config.get('filename', '') if config else 'no config available')
         if not os.path.exists(source_file):
             callback()
             return
@@ -2446,11 +2446,9 @@ class FilesUpload(SimpleFileReceiver):
         model_base_name, ext = os.path.splitext(model_file_name)
         filetype = config.get('filetype', None)
 
-        logging.debug("******* filetype: %s", filetype)
         if filetype is None:
             # try from the extension
             filetype = filetypes.get(ext, 'ir')
-            logging.debug("******* filetype from ext '%s': ", ext, filetype)
 
         directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
         if directory is None:
@@ -2483,7 +2481,6 @@ class FilesUpload(SimpleFileReceiver):
 
         os.makedirs(dirname, exist_ok=True)
 
-        logging.debug("********** destination: %s", fullname)
         shutil.move(source_file, fullname)
 
         self.result = {

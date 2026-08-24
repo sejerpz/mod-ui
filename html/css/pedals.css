@@ -1350,3 +1350,13 @@ body > .mod-settings.mod-window-visible {
     margin: 0px 4px;
 }
 
+.mod-select-path-icon {
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+[mod-role="enumeration-option"].selected > .mod-select-path-icon,
+[mod-role="enumeration-option"]:hover > .mod-select-path-icon {
+    opacity: 1;
+    transition: opacity 0.2s ease;
+}

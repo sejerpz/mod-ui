@@ -121,21 +121,21 @@
       "src": "fontawesome"
     },
     {
-      "uid": "81db033e704eb7c586a365559d7c0f36",
-      "css": "preset",
-      "code": 61895,
-      "src": "fontawesome"
-    },
-    {
-      "uid": "8b80d36d4ef43889db10bc1f0dc9a862",
-      "css": "user-file",
-      "code": 59410,
-      "src": "fontawesome"
-    },
-    {
       "uid": "6855131631509e8795730ce062045ea1",
       "css": "folder-up",
       "code": 61608,
+      "src": "fontawesome"
+    },
+    {
+      "uid": "21b42d3c3e6be44c3cc3d73042faa216",
+      "css": "preset",
+      "code": 61918,
+      "src": "fontawesome"
+    },
+    {
+      "uid": "3fce1eca43f917c8f23e532749abae5d",
+      "css": "user-file",
+      "code": 62142,
       "src": "fontawesome"
     }
   ]
