@@ -10,6 +10,10 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
+import urllib.parse
+import re
+import unicodedata
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
@@ -794,6 +798,27 @@ class EffectRefresh(JsonRequestHandler):
         SESSION.host.reload_pedalboard(affected_uris)
 
         self.write(True)
+
+class EffectT3KSelect(JsonRequestHandler):
+    """This is the select callback handler from tone3k integration"""
+    def get(self, instance):
+        code = self.get_query_argument('code', default=None)
+        state = self.get_query_argument('state', default=None)
+        tone_id = int(self.get_query_argument('tone_id', default=0))
+        canceled = bool(self.get_query_argument('canceled', default=False))
+
+        # if state != session.get('t3k_state'):
+        #     raise ValueError('State mismatch. Possible CSRF attack.')
+        logging.debug(" T3Keffect select callback: %s, code %s, state %s, tone_id %s, canceled %s", instance, code, state, tone_id, canceled)
+        if canceled:
+            # User exited without selecting a tone.
+            # If code is present, you can still exchange it for tokens.
+            # If code is absent, the user closed before signing in.
+            SESSION.host.msg_callback('t3k-cancel %s' % (instance))
+        else:
+            SESSION.host.msg_callback('t3k-tone-selected %s %s %s %s' % (instance, code, state, tone_id))
+
+        self.write('')
 
 class SDKEffectInstaller(EffectInstaller):
     def set_default_headers(self):
@@ -2350,6 +2375,124 @@ class TokensSave(JsonRequestHandler):
 
         self.write(True)
 
+class FilesUpload(SimpleFileReceiver):
+    """
+    This is used by the web interface to upload a user file
+
+    Returns the path to the saved file
+    """
+    base_path = basepath = os.path.join(USER_FILES_DIR)
+    filetypes = {
+        ".nam": "nammodel",
+        ".wav": "cabsim",
+        ".aidax": "aidadspmodel"
+    }
+
+    @staticmethod
+    def sanitize_filename(filename: str, replacement: str = "-") -> str:
+        # 1. Normalize Unicode (e.g., convert accented characters like 'é' -> 'e')
+        filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
+
+        # 2. Remove characters that are unsafe across OS (Windows, Linux, macOS)
+        # Allows only alphanumeric, hyphens, underscores, and dots
+        filename = re.sub(r'[^a-zA-Z0-9._\- !\+\(\)\[\]\{\}\.\,\;\:\"\']', replacement, filename)
+
+        # 3. Collapse multiple consecutive replacement characters into one
+        filename = re.sub(re.escape(replacement) + '+', replacement, filename)
+
+        # 4. Strip leading/trailing whitespaces, dots, and replacement characters
+        filename = filename.strip(' .' + replacement)
+
+        # 5. Fallback for empty strings
+        return filename or "unnamed_file"
+
+    @property
+    def destination_dir(self):
+        return '/tmp'
+
+    @web.asynchronous
+    @gen.engine
+    def process_file(self, basename, callback=lambda:None):
+        source_file = os.path.join(self.destination_dir, basename)
+        config = json.loads(urllib.parse.unquote(self.request.headers.get("X-Upload-Config", "{}")))
+
+        logging.info("FilesUpload %s destination filename ''%s''", source_file, config.get('filename', '') if config else 'no config available')
+        if not os.path.exists(source_file):
+            callback()
+            return
+
+        if not os.path.exists(self.destination_dir):
+            os.mkdir(self.destination_dir)
+
+        # directory: subfolder where save the file,
+        # onDirectoryConflict: what to do if directory already exists: 'rename' or merge
+        # filename: filename
+        # metadata:
+        #     are saved in the same folder with the same name of the filename and the extension from the source (eg. t3k)
+        #     the metadata file content is the values inside the data tag JSON format
+        #     {
+        #       source: 'T3K',
+        #       data: {
+        #           toneId: tone.id,
+        #           modelId: model.id
+        #       }
+        #
+        filetypes = {
+            ".nam": "nammodel",
+            ".wav": "cabsim",
+            ".aidax": "aidadspmodel"
+        }
+        model_file_name = FilesUpload.sanitize_filename(config.get('filename', basename))
+        model_base_name, ext = os.path.splitext(model_file_name)
+        filetype = config.get('filetype', None)
+
+        if filetype is None:
+            # try from the extension
+            filetype = filetypes.get(ext, 'ir')
+
+        directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
+        if directory is None:
+            logging.error("no directory found for filetype: %s, extension: %s", filetype, ext)
+        configDirectory = config.get('directory', "")
+        if configDirectory:
+            model_dir_name = FilesUpload.sanitize_filename(configDirectory)
+        else:
+            model_dir_name = ""
+        basepath = os.path.join(USER_FILES_DIR, directory) # eg. /user-files/NAM Models/
+        dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/VOX AC 30/
+        onDirectoryConflict = config.get('onDirectoryConflict', 'merge').lower()
+        logging.debug("model_file_name %s, model_base_name %s, ext %s, directory %s, model_dir_name %s, basepath %s, dirname %s",
+                      model_file_name, model_base_name, ext, directory, model_dir_name, basepath, dirname)
+        if model_dir_name != "" and onDirectoryConflict == 'rename':
+            index = 0
+            while os.path.exists(dirname):
+                index += 1
+                model_dir_name = FilesUpload.sanitize_filename(configDirectory) + " {:02d}".format(index)
+                dirname = os.path.join(basepath, model_dir_name)
+
+        model_name = FilesUpload.sanitize_filename(model_base_name)
+        fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
+        index = 0
+        while os.path.exists(fullname):
+            index += 1
+            model_name = FilesUpload.sanitize_filename(model_base_name) + " {:02d}".format(index)
+            model_file_name = model_name + ext
+            fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
+
+        os.makedirs(dirname, exist_ok=True)
+
+        shutil.move(source_file, fullname)
+
+        self.result = {
+            'fullname': fullname,
+            'dirname': model_dir_name,
+            'basename': model_file_name,
+            'basepath': basepath,
+            'filetype': filetype,
+        }
+        if callable:
+            callback()
+
 class FilesList(JsonRequestHandler):
     complete_audiofile_exts = (
         # through libsndfile
@@ -2424,13 +2567,16 @@ class FilesList(JsonRequestHandler):
             if datadir is None:
                 continue
 
-            for root, dirs, files in os.walk(os.path.join(USER_FILES_DIR, datadir)):
+            basepath = os.path.join(USER_FILES_DIR, datadir)
+            for root, dirs, files in os.walk(basepath):
                 for name in tuple(name for name in sorted(files) if name.lower().endswith(extensions)):
                     fullname = os.path.join(root, name)
                     fullnames.append(fullname)
                     retfiles[fullname] = {
                         'fullname': fullname,
+                        'dirname': root[len(basepath) + 1:],
                         'basename': name,
+                        'basepath': basepath,
                         'filetype': filetype,
                     }
 
@@ -2492,6 +2638,8 @@ application = web.Application(
             (r"/effect/licenses/save/(.*)", EffectLicenseSave),
             (r"/effect/refresh", EffectRefresh),
 
+            (r"/effect/t3k/select/*(/[A-Za-z0-9_/]+[^/])/?", EffectT3KSelect),
+
             (r"/package/uninstall", PackageUninstall),
 
             # pedalboard stuff
@@ -2547,6 +2695,7 @@ application = web.Application(
 
             # file listing etc
             (r"/files/list/?", FilesList),
+            (r"/files/upload/?", FilesUpload),
 
             (r"/reset/?", DashboardClean),
 
