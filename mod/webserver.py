@@ -2461,8 +2461,8 @@ class FilesUpload(SimpleFileReceiver):
         basepath = os.path.join(USER_FILES_DIR, directory) # eg. /user-files/NAM Models/
         dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/VOX AC 30/
         onDirectoryConflict = config.get('onDirectoryConflict', 'merge').lower()
-        logging.debug("model_file_name %s, model_base_name %s, ext %s, directory %s, model_dir_name %s, basepath %s, dirname %s",
-                      model_file_name, model_base_name, ext, directory, model_dir_name, basepath, dirname)
+        # logging.debug("model_file_name %s, model_base_name %s, ext %s, directory %s, model_dir_name %s, basepath %s, dirname %s",
+        #               model_file_name, model_base_name, ext, directory, model_dir_name, basepath, dirname)
         if model_dir_name != "" and onDirectoryConflict == 'rename':
             index = 0
             while os.path.exists(dirname):
