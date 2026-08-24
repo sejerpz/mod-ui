@@ -40,7 +40,7 @@ function loadFileTypesList(parameter, dummy, callback) {
                 'fullname': sdef,
                 'dirname': '',
                 'basename': sdef.slice(sdef.lastIndexOf('/')+1),
-                'icon': '<span>\u{1F4E6}</span>' // box
+                'icon': '<i class="icon-preset"></i>' // box
             })
         }
         // check if parameters can be suported by T3K
@@ -3502,9 +3502,17 @@ JqueryClass('customSelect', baseWidget, {
 })
 
 JqueryClass('customSelectPath', baseWidget, {
+ 
+
     init: function (options) {
         var self = $(this)
         self.data('initialized', false)
+        self.data('icons', {
+            backArrow: `<i class="icon-folder-up"></i>`, //"\u{F0A8} ", //"\u{2B05} "
+            folder: `<i class="icon-folder"></i>`, //"\u{1F4C1} ",
+            folderOpen: `<i class="icon-folder-open"></i>`, //"\u{1F4C1} ",
+            userFile: `<i class="icon-user-file"></i>`, //"\u{1F4C4} "
+        })
         self.data('currentPath', options.currentPath || [])
         self.data('port', options.port)
         self.data('urihandle', options.urihandle)
@@ -3518,33 +3526,40 @@ JqueryClass('customSelectPath', baseWidget, {
             // find the options in the port (parameter) files
             const file = options.port.files.find(item => item.fullname == optValue)
 
-            if (file && file.icon) {
+            if (file && file.icon && file.icon.length > 0) {
                 icon = file.icon
             }
 
             if (!icon) {
+                const icons = self.data('icons')
                 if (optValue.startsWith("dir://")) {
-                    icon = "\u{1F4C1} " // folder
+                    icon = icons.folder //"icon-folder" //"\u{1F4C1} " // folder
                 } else {
-                    icon = "\u{1F4C4} " // file
+                    icon = icons.userFile //"icon-preset" //"\u{1F4C4} " // file
                 }
             }
             opt.attr('title', opt.text())
-            opt.html(icon + opt.text())
+            opt.html(`${icon}` + opt.html())
             opt.click(function (e) {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
                 }
                 var value = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
                 if (value?.startsWith('dir://')) {
-                    const backArrow = "\u{2B05} " //21B0} " // "
+                    const icons = self.data('icons')
+                    const currentPath = self.customSelectPath('getCurrentPath')
+                    let isNavigateBack = false
 
-                    if (opt.text().startsWith(backArrow)) {
+                    if (currentPath.length > 0) {
+                        // click on the same folder, is a navigate back
+                        isNavigateBack = 'dir://' + currentPath[currentPath.length - 1] == value
+                    }
+                    if (isNavigateBack) {
                         self.customSelectPath('popDir')
-                        opt.text(opt.text().substr(backArrow.length))
+                        opt.html(opt.html().substr(icons.backArrow.length))
                     } else {
                         self.customSelectPath('pushDir', value)
-                        opt.text(backArrow + opt.text())
+                        opt.html(icons.backArrow + opt.html())
                     }
                     e.stopPropagation()
                 } else if (value?.indexOf('://', 0) > -1) {
@@ -3736,12 +3751,11 @@ JqueryClass('customSelectPath', baseWidget, {
                         newCurrent.push(path)
                     }
                     parentPath = path
-                    // the back arrow is used to differentiate between push and pop dir on click
-                    // since we pushed I update also the text accordly
-                    const backArrow = "\u{2B05} " //21B0} " // "
+                    // update the element UI
+                    const backArrow = self.data('icons').backArrow
 
-                    if (!folder.text().startsWith(backArrow)) {
-                        folder.text(backArrow + folder.text())
+                    if (!folder.html().startsWith(backArrow)) {
+                        folder.html(backArrow + folder.html())
                     }
                 }
             }

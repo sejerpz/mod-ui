@@ -820,198 +820,6 @@ class EffectT3KSelect(JsonRequestHandler):
 
         self.write('')
 
-class EffectT3KFetch(JsonRequestHandler):
-    """Start the tone fetch from tone3000 web site, the auth exchange started from the browser this is the callback"""
-    t3kApi = 'https://www.tone3000.com/api/v1'
-    agent = 'MOD-Dwarf-Starless/1.0'
-
-    @staticmethod
-    def sanitize_filename(filename: str, replacement: str = "-") -> str:
-        # 1. Normalize Unicode (e.g., convert accented characters like 'é' -> 'e')
-        filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
-        
-        # 2. Remove characters that are unsafe across OS (Windows, Linux, macOS)
-        # Allows only alphanumeric, hyphens, underscores, and dots
-        filename = re.sub(r'[^a-zA-Z0-9._\- !\+\(\)\[\]\{\}\.\,\;\:\"\']', replacement, filename)
-        
-        # 3. Collapse multiple consecutive replacement characters into one
-        filename = re.sub(f'{re.escape(replacement)}+', replacement, filename)
-        
-        # 4. Strip leading/trailing whitespaces, dots, and replacement characters
-        filename = filename.strip(f' .{replacement}')
-        
-        # 5. Fallback for empty strings
-        return filename or "unnamed_file"
-
-    def fetch_tone_metadata(self, access_token: str, tone_id: int) -> dict:
-        """
-            Fetch tone metadata using T3K API
-        
-            access_token: a valid access_token for T3K API
-            tone_id: the id to download
-
-            return: the tone metadata or None
-        """
-
-        req = urllib.request.Request(
-            self.t3kApi+ f'/tones/{tone_id}', 
-            headers = {
-                'User-Agent': self.agent,
-                'Authorization': f'Bearer {access_token}'
-            }
-        )
-
-        # 3. Perform synchronous GET request
-        with urllib.request.urlopen(req, timeout=10) as response:
-            response_bytes = response.read()
-            tone = json.loads(response_bytes.decode('utf-8', errors='replace'))
-
-        return tone or None
-
-    def fetch_tone_models(self, access_token: str, tone_id: int, architecture: int | None = None) -> dict:
-        """
-            Fetch the tone models url to download the files
-
-            access_token: a valid access_token for T3K API
-            tone_id: the id to download
-            
-            return: the tone models or None
-        """
-        params = {'tone_id': tone_id}
-
-        if architecture:
-            params['architecture'] = architecture # it seems the architecture is mandatory only for A2 models
-               
-        query_string = urllib.parse.urlencode(params)
-        url = self.t3kApi + f"/models?{query_string}"
-
-        req = urllib.request.Request(
-            url,
-            headers = {
-                'User-Agent': self.agent,
-                'Authorization': f'Bearer {access_token}',
-                'Accept': 'application/json',
-            },
-            method='GET'
-        )
-        with urllib.request.urlopen(req, timeout=1000) as response:
-            response_bytes = response.read()
-            js = response_bytes.decode('utf-8', errors='replace')
-            models = json.loads(response_bytes.decode('utf-8', errors='replace'))
-
-        return models['data'] if models else None
-
-    def download_tone_models_files(self, instance, access_token: str, tone: dict, models: dict) -> dict:
-        """
-            Fetch the tone models url to download the files
-
-            access_token: a valid access_token for T3K API
-            tone: the tone metadata
-            models: the models metadata that contains a list of url to download
-            
-            return: the tone models or None
-        """
-
-        SESSION.host.notify_progress('T3K', f'Downloading files 0/{len(models)}...', 0, instance)
-        files = []
-        # choose the download base path from the type of file
-        
-        filetypes = {
-            ".nam": "nammodel",
-            ".wav": "cabsim",
-            ".aidax": "aidadspmodel"
-        }
-
-        if len(models) > 1:
-            # place T3K boundle in a separate subfolder
-            model_dir_name = EffectT3KFetch.sanitize_filename(tone['title']) # eg. VOX AC 30/
-        else:
-            model_dir_name = ""
-
-        count = 0
-        lastdirname = None
-        for model in models:
-            count += 1
-            SESSION.host.notify_progress('T3K', f'Downloading files {count}/{len(models)}...', int(round(count / len(models) * 100)), instance)
-
-            model_url = model['model_url']
-            _, ext = os.path.splitext(urllib.parse.urlparse(model_url).path)
-            filetype = filetypes.get(ext, None)
-            directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
-            basepath = os.path.join(USER_FILES_DIR, directory) # eg. /user-files/NAM Models/
-            dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/VOX AC 30/
-            if model_dir_name != "" and dirname != lastdirname:
-                # resolve dirname conflicts only the first time it changes
-                index = 0
-                while os.path.exists(dirname):
-                    index += 1
-                    model_dir_name = f"{EffectT3KFetch.sanitize_filename(tone['title'])} {index:02d}"
-                    dirname = os.path.join(basepath, model_dir_name)
-                lastdirname = dirname
-
-            model_name = EffectT3KFetch.sanitize_filename(model['name'])
-            model_file_name = f"{model_name}{ext}" # eg. VOX AC 30 Clean.nam
-            fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
-
-            index = 0
-            while os.path.exists(fullname):
-                index += 1
-                model_name = f"{EffectT3KFetch.sanitize_filename(model['name'])} {index:02d}"
-                model_file_name = f"{model_name}{ext}" # eg. VOX AC 30 Clean.nam
-                fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
-
-            logging.info("T3K model downloading: %s -> %s", model_url, fullname)
-
-            req = urllib.request.Request(
-                model_url,
-                headers = {
-                    'User-Agent': self.agent,
-                    'Authorization': f'Bearer {access_token}',
-                    'Accept': 'application/json',
-                },
-                method='GET'
-            )
-
-            # create download folder if not exists
-            os.makedirs(dirname, exist_ok=True)
-            with urllib.request.urlopen(req) as response:
-                # read the streaming
-                with open(fullname, 'wb') as f:
-                    while True:
-                        chunk = response.read(8192)  # 8 KB buffer
-                        if not chunk:
-                            break
-                        f.write(chunk)
-
-            file = {
-                'fullname': fullname,
-                'dirname': model_dir_name,
-                'basename': model_file_name,
-                'basepath': basepath,
-                'filetype': filetype,
-            }
-            files.append(file)
-
-        return files
-
-    def post(self):
-        instance = self.get_argument('effect')
-        access_token = self.get_argument('access_token')
-        tone_id = self.get_argument('tone_id')
-        logging.info("T3K fetch effect: %s, tone_id: %s", instance, tone_id)
-
-        SESSION.host.notify_progress('T3K', 'Download initializing...', 0, instance)
-        tone = self.fetch_tone_metadata(access_token, tone_id)
-        if tone.get('a2_models_count', 0) > 0:
-            architecture = 2 # it seems the architecture is mandatory only for A2 models
-        else:
-            architecture = None 
-
-        models = self.fetch_tone_models(access_token, tone_id, architecture)
-
-        files = self.download_tone_models_files(instance, access_token, tone, models)
-        self.write(json.dumps(files))
-
 class SDKEffectInstaller(EffectInstaller):
     def set_default_headers(self):
         if 'Origin' not in self.request.headers.keys():
@@ -2590,10 +2398,10 @@ class FilesUpload(SimpleFileReceiver):
         filename = re.sub(r'[^a-zA-Z0-9._\- !\+\(\)\[\]\{\}\.\,\;\:\"\']', replacement, filename)
 
         # 3. Collapse multiple consecutive replacement characters into one
-        filename = re.sub(f'{re.escape(replacement)}+', replacement, filename)
+        filename = re.sub(re.escape(replacement) + '+', replacement, filename)
 
         # 4. Strip leading/trailing whitespaces, dots, and replacement characters
-        filename = filename.strip(f' .{replacement}')
+        filename = filename.strip(' .' + replacement)
 
         # 5. Fallback for empty strings
         return filename or "unnamed_file"
@@ -2608,7 +2416,7 @@ class FilesUpload(SimpleFileReceiver):
         source_file = os.path.join(self.destination_dir, basename)
         config = json.loads(urllib.parse.unquote(self.request.headers.get("X-Upload-Config", "{}")))
 
-        logging.debug("******* file upload %s config '%s'", source_file, config)
+        logging.debug("******* file 2 upload %s config '%s'", source_file, config)
         if not os.path.exists(source_file):
             callback()
             return
@@ -2636,8 +2444,17 @@ class FilesUpload(SimpleFileReceiver):
         }
         model_file_name = FilesUpload.sanitize_filename(config.get('filename', basename))
         model_base_name, ext = os.path.splitext(model_file_name)
-        filetype = filetypes.get(ext, 'ir')
+        filetype = config.get('filetype', None)
+
+        logging.debug("******* filetype: %s", filetype)
+        if filetype is None:
+            # try from the extension
+            filetype = filetypes.get(ext, 'ir')
+            logging.debug("******* filetype from ext '%s': ", ext, filetype)
+
         directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
+        if directory is None:
+            logging.error("no directory found for filetype: %s, extension: %s", filetype, ext)
         configDirectory = config.get('directory', "")
         if configDirectory:
             model_dir_name = FilesUpload.sanitize_filename(configDirectory)
@@ -2825,7 +2642,6 @@ application = web.Application(
             (r"/effect/refresh", EffectRefresh),
 
             (r"/effect/t3k/select/*(/[A-Za-z0-9_/]+[^/])/?", EffectT3KSelect),
-            (r"/effect/t3k/fetch", EffectT3KFetch),
 
             (r"/package/uninstall", PackageUninstall),
 

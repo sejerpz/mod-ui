@@ -3560,9 +3560,14 @@ function T3KIntegration(pedalboard) {
             const pageSize = 50
             let page = 1
             let total = 1
+
+            let baseurl = `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}`
+            if (tone.a2_models_count > 0)
+                baseurl += '&architecture=2'
+
             while (models.length < total) {
                 const pageModels = await $.ajax({
-                    url: `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}&page=${page}&page_size=${pageSize}`,
+                    url: `${baseurl}&page=${page}&page_size=${pageSize}`,
                     headers: {
                         'Authorization': 'Bearer ' + access_token
                     },
@@ -3570,6 +3575,8 @@ function T3KIntegration(pedalboard) {
                     dataType: 'json'
                 })
                 
+                if (!pageModels.data || pageModels.data.length == 0)
+                    throw new Error('no models on data')
                 models = models.concat(pageModels.data)
                 total = pageModels.total
                 page += 1
@@ -3599,10 +3606,18 @@ function T3KIntegration(pedalboard) {
                 const fileExtension = tmpFilename.split('.').pop();
                 let fileName = (total > 1 ? model.name : tone.title)
 
+                if (tone.gear == 'cab') {
+                    filetype = 'cabsim'
+                } else if (tone.gear == 'space') {
+                    filetype = 'ir'
+                } else {
+                    filetype = 'nammodel'
+                }
                 const uploadConfig = {
                     directory: directory,
                     onDirectoryConflict: current == 1 ? 'rename' : 'merge', // rename directory if exists, the file is always renamed on conflict
                     filename: (fileName + (fileExtension ? '.' + fileExtension : '')).trim(),
+                    filetype: filetype,
                     metadata: {
                         source: 'T3K',
                         data: {
