@@ -82,7 +82,7 @@ function SimpleTransference(from, to, options) {
         var req = $.ajax($.extend({
             type: 'GET',
             url: self.origin,
-            success: self.upload,
+            success: to.startsWith('file://') ? self.saveAs : self.upload,
             dataType: 'binary',
             cache: false,
             global: false,
@@ -109,6 +109,28 @@ function SimpleTransference(from, to, options) {
             },
         }, self.options.from_args))
         self.request = req
+    }
+
+    this.saveAs = function (file) {
+        console.log('save to browser: ', file)
+
+        var saveBlob = (function () {
+            var a = document.createElement("a");
+            document.body.appendChild(a);
+            a.style = "display: none";
+            return function (blob, fileName) {
+                var url = window.URL.createObjectURL(blob);
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            };
+        }());
+
+        const lastSlashIndex = to.lastIndexOf('/');
+        const filename = to.substring(lastSlashIndex + 1);
+        saveBlob(file, filename);
     }
 
     this.upload = function (file) {

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2012-2025 MOD Audio UG
+// SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #ifndef MOD_UTILS_H_INCLUDED
@@ -16,6 +16,10 @@ extern "C" {
 #else
 #define MOD_API __attribute__ ((visibility("default")))
 #endif
+
+// is SUPPORT_NRPN is enabled then CC values can contain a NRPN number
+// bit 15 is set to signify it is a NRPN, bits 0-13 are the nrpn number
+# define SUPPORT_NRPN (1)
 
 typedef enum {
     kPluginLicenseNonCommercial = 0,
@@ -42,6 +46,12 @@ typedef struct {
     const char* homepage;
     const char* email;
 } PluginAuthor;
+
+typedef struct {
+    bool valid;
+    const char* symbol;
+    const char* name;
+} PluginPortGroup;
 
 typedef struct {
     bool valid;
@@ -77,13 +87,6 @@ typedef struct {
 } PluginGUI_Mini;
 
 typedef struct {
-    bool valid;
-    const char* uri;
-    const char* symbol;
-    const char* name;
-} PluginPortGroup;
-
-typedef struct {
     float min;
     float max;
     float def;
@@ -111,11 +114,11 @@ typedef struct {
     PluginPortUnits units;
     const char* comment;
     const char* designation;
-    const char* group;
     const char* const* properties;
     int rangeSteps;
     const PluginPortScalePoint* scalePoints;
     const char* shortName;
+    const char* groupSymbol;
 } PluginPort;
 
 typedef struct {
@@ -193,9 +196,9 @@ typedef struct {
     const char* const* bundles;
     PluginGUI gui;
     PluginPorts ports;
-    const PluginPortGroup* portGroups;
     const PluginParameter* parameters;
     const PluginPreset* presets;
+    const PluginPortGroup* portGroups;
 } PluginInfo;
 
 typedef struct {
@@ -229,11 +232,16 @@ typedef struct {
     int minorVersion;
     int release;
     int builder;
+    const char* name;
 } PluginInfo_Essentials;
 
 typedef struct {
     int8_t channel;
+#if SUPPORT_NRPN    
+    uint16_t control;
+#else
     uint8_t control;
+#endif    
     // ranges added in v1.2, flag needed for old format compatibility
     bool hasRanges;
     float minimum;
@@ -245,11 +253,26 @@ typedef struct {
     const char* symbol;
     float value;
     PedalboardMidiControl midiCC;
+    bool snapshotable; // if true, this port is snapshotable
 } PedalboardPluginPort;
 
 typedef struct {
     bool valid;
+    const char* uri;
+    bool readable;
+    bool writable;
+    bool snapshotable; // if true, this parameter is snapshotable
+} PedalboardPluginParameter;
+
+typedef struct  {
+    bool visible;
+    int index;
+} PerformancePluginInfo;
+
+typedef struct {
+    bool valid;
     bool bypassed;
+    bool bypass_snapshotable;
     int instanceNumber;
     const char* instance;
     const char* uri;
@@ -257,7 +280,11 @@ typedef struct {
     float x;
     float y;
     const PedalboardPluginPort* ports;
+    const PedalboardPluginParameter* parameters;
     const char* preset;
+    bool preset_snapshotable;
+    const char *label;
+    PerformancePluginInfo performance;
 } PedalboardPlugin;
 
 typedef struct {
@@ -379,6 +406,10 @@ MOD_API const PluginInfo_Mini* const* get_all_plugins(void);
 // get a specific plugin
 // NOTE: may return null
 MOD_API const PluginInfo* get_plugin_info(const char* uri);
+
+// get a specific minimal plugin info
+// NOTE: may return null
+MOD_API const PluginInfo_Mini* get_plugin_info_mini(const char* uri);
 
 // get a specific plugin (non-cached specific info)
 // NOTE: may return null

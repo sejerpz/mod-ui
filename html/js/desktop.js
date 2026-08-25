@@ -7,6 +7,7 @@ function Desktop(elements) {
     // The elements below are expected to be all defined in HTML and passed as parameter
     elements = $.extend({
         titleBox: $('<div>'),
+        performanceTitleBox: $('<div>'),
         zoomIn: $('<div>'),
         zoomOut: $('<div>'),
         addMidiButton: $('<div>'),
@@ -21,6 +22,10 @@ function Desktop(elements) {
         saveAsButton: $('<div>'),
         resetButton: $('<div>'),
         cvAddressingButton: $('<div>'),
+        pbAddressingButton: $('<div>'),
+        compareAButton: $('<div>'),
+        compareBButton: $('<div>'),
+        compareTakeButton: $('<div>'),
         snapshotSaveButton: $('<div>'),
         snapshotSaveAsButton: $('<div>'),
         snapshotManageButton: $('<div>'),
@@ -37,6 +42,8 @@ function Desktop(elements) {
         pedalboardTrigger: $('<div>'),
         fileManagerBox: $('<div>'),
         fileManagerBoxTrigger: $('<div>'),
+        performanceBox: $('<div>'),
+        performanceBoxTrigger: $('<div>'),
         pedalboardBox: $('<div>'),
         pedalboardBoxTrigger: $('<div>'),
         bankBox: $('<div>'),
@@ -46,6 +53,7 @@ function Desktop(elements) {
         bankSearchResult: $('<div>'),
         shareButton: $('<div>'),
         shareWindow: $('<div>'),
+        inputBox: $('<div>'),
         presetSaveBox: $('<div>'),
         devicesIcon: $('<div>'),
         devicesWindow: $('<div>'),
@@ -58,6 +66,7 @@ function Desktop(elements) {
         bufferSizeButton: $('<div>'),
         xrunsButton: $('<div>'),
         cpuStatsButton: $('<div>'),
+        helpButton: $('<div>'),
     }, elements)
 
     this.installationQueue = new InstallationQueue()
@@ -135,6 +144,30 @@ function Desktop(elements) {
         midiPortsList: elements.midiPortsList,
     })
 
+    this.saveConfigValue = function (key, value, callback) {
+        $.ajax({
+            url: '/config/set',
+            type: 'POST',
+            data: {
+                key  : key,
+                value: value,
+            },
+            success: function () {
+              if (callback) {
+                callback(true)
+                PREFERENCES[key] = value
+              }
+            },
+            error: function () {
+              if (callback) {
+                callback(false)
+              }
+            },
+            cache: false,
+            dataType: 'json'
+        })
+    }
+
     this.hardwareManager = new HardwareManager({
         address: function (instanceAndSymbol, addressing, callback) {
             $.ajax({
@@ -178,14 +211,25 @@ function Desktop(elements) {
                 label = self.pedalboard.pedalboard('getLabel', instance)
             }
 
+            // overview
+            if (port == null) {
+                context = {
+                    label: label,
+                    name: 'Overview'
+                }
+                return Mustache.render(TEMPLATES.addressing, context)
+            }
+
+            // bypass & presets
             if (port.symbol == ':bypass' || port.symbol == ':presets') {
                 context = {
                     label: label,
-                    name: port.symbol == ':bypass' ? "On/Off" : port.name
+                    name: port.symbol == ':bypass' ? "On/Off" :  port.name
                 }
                 return Mustache.render(TEMPLATES.bypass_addressing, context)
             }
 
+            // all the other ports
             context = {
                 label: label,
                 name: port.shortName
@@ -195,6 +239,7 @@ function Desktop(elements) {
         isApp: function() {
             return self.isApp;
         },
+        saveConfigValue: this.saveConfigValue
     })
 
     this.pedalPresets = new SnapshotsManager({
@@ -203,7 +248,9 @@ function Desktop(elements) {
         pedalPresetsOverlay: elements.pedalPresetsOverlay,
         hardwareManager: self.hardwareManager,
         renamedCallback: function (name) {
-            self.titleBox.text((self.title || 'Untitled') + " - " + (name || 'Default'))
+            const newTitle = (self.title || 'Untitled') + " - " + (name || 'Default')
+            self.titleBox.text(newTitle)
+            self.performanceTitleBox.text(newTitle)
         }
     })
 
@@ -218,6 +265,7 @@ function Desktop(elements) {
     this.pedalboardPresetName = ''
     this.pedalboardDemoPluginsNotified = false
     this.loadingPeldaboardForFirstTime = true
+    this.licenseManager = null
 
     this.pedalboard = self.makePedalboard(elements.pedalboard, elements.effectBox)
 
@@ -247,6 +295,7 @@ function Desktop(elements) {
     })
 
     this.titleBox = elements.titleBox
+    this.performanceTitleBox  = elements.performanceTitleBox
 
     this.ParameterSet = function (paramchange) {
         $.ajax({
@@ -367,6 +416,7 @@ function Desktop(elements) {
         $('#wrapper').css('z-index', -1)
         $('#plugins-library').css('z-index', -1)
         $('#cloud-plugins-library').css('z-index', -1)
+        $('#performance').css('z-index', -1)
         $('#pedalboards-library').css('z-index', -1)
         $('#bank-library').css('z-index', -1)
         $('#main-menu').css('z-index', -1)
@@ -416,6 +466,8 @@ function Desktop(elements) {
                                     return;
                                 }
 
+                                var license_info = resp.license_info;
+
                                 if (resp['upgrade']) {
                                     $.ajax({
                                         method: 'GET',
@@ -446,6 +498,15 @@ function Desktop(elements) {
                                             from_args: {
                                                 headers: { 'Authorization' : 'MOD ' + resp.access_token }
                                             }
+                                        }
+                                        if (self.licenseManager === null) {
+                                            self.licenseManager = new LicenseManager()
+                                            self.licenseManager.addLicenses(license_info, function(installed) {
+                                                if (installed > 0) {
+                                                    var s = installed > 1 ? 's' : ''
+                                                    new Notification('info', installed + ' plugin'+s+' licensed')
+                                                }
+                                            })
                                         }
                                         callback(true, opts);
                                     },
@@ -544,7 +605,7 @@ function Desktop(elements) {
             self.hardwareManager.open("/pedalboard", port, label)
         },
         setNewBeatsPerMinuteValue: function (bpm) {
-          self.hardwareManager.setBeatsPerMinuteValue(bpm)
+            self.hardwareManager.setBeatsPerMinuteValue(bpm)
         },
         removeBPMHardwareMapping: function(syncMode) {
           var instanceAndSymbol = "/pedalboard/:bpm"
@@ -702,30 +763,6 @@ function Desktop(elements) {
         })
     }
 
-    this.saveConfigValue = function (key, value, callback) {
-        $.ajax({
-            url: '/config/set',
-            type: 'POST',
-            data: {
-                key  : key,
-                value: value,
-            },
-            success: function () {
-              if (callback) {
-                callback(true)
-                PREFERENCES[key] = value
-              }
-            },
-            error: function () {
-              if (callback) {
-                callback(false)
-              }
-            },
-            cache: false,
-            dataType: 'json'
-        })
-    }
-
     this.setupApp = function () {
         self.isApp = true
         $('#mod-bank').hide()
@@ -762,8 +799,11 @@ function Desktop(elements) {
 
     this.effectBox = self.makeEffectBox(elements.effectBox,
                                         elements.effectBoxTrigger)
+    this.performanceBox = self.makePerformanceBox(elements.performanceBox,
+                                                elements.performanceBoxTrigger)                                        
     this.cloudPluginBox = self.makeCloudPluginBox(elements.cloudPluginBox,
                                                   elements.cloudPluginBoxTrigger)
+
     this.pedalboardBox = self.makePedalboardBox(elements.pedalboardBox,
                                                 elements.pedalboardBoxTrigger)
     this.bankBox = self.makeBankBox(elements.bankBox,
@@ -815,7 +855,7 @@ function Desktop(elements) {
         var installPlugin = function (uri, data) {
             missingCount++
 
-            self.installationQueue.installUsingURI(uri, 'auto', function (resp, bundlename) {
+            self.installationQueue.installUsingURI(uri, function (resp, bundlename) {
                 if (! resp.ok) {
                     error = true
                 }
@@ -877,8 +917,8 @@ function Desktop(elements) {
             url: startsWith(pedalboard_id, 'https://') ? pedalboard_id : (SITEURL + '/pedalboards/' + pedalboard_id),
             contentType: 'application/json',
             success: function (resp) {
-                if (!resp.data.stable && PREFERENCES['show-labs-plugins'] !== "true") {
-                    new Notification('error', 'This pedalboard contains one or more community maintained MOD Labs plugins. To load it, you need to enable MOD Labs plugins in <a href="settings">Settings</a> -> Advanced');
+                if (resp.data.stable === false && PREFERENCES['show-unstable-plugins'] !== "true") {
+                    new Notification('error', 'This pedalboard contains beta plugins. To load it, you need to enable beta plugins in <a href="settings">Settings</a> -> Advanced');
                     return;
                 }
                 self.reset(function () {
@@ -981,6 +1021,9 @@ function Desktop(elements) {
         }
     })
 
+    this.inputBox = elements.inputBox.inputBox({})
+
+
     elements.addMidiButton.click(function () {
         self.showMidiDeviceList()
     })
@@ -1002,6 +1045,19 @@ function Desktop(elements) {
       self.cvAddressing = !self.cvAddressing
       self.pedalboard.pedalboard('setCvAddressing', self.cvAddressing)
       $(this).toggleClass('selected')
+    })
+    elements.pbAddressingButton.click(function () {
+        console.log('show bindings');
+        const port = {
+            symbol: ':overview',
+            properties : [ ],
+            scalePoints: [ ],
+            ranges: {
+                minimum: 0,
+                maximum: 0
+            }
+        }
+        self.hardwareManager.open_overview("/pedalboard", desktop.pedalboard.data('plugins'))
     })
     elements.resetButton.click(function () {
         self.reset(function () {
@@ -1053,7 +1109,9 @@ function Desktop(elements) {
                     }
                     self.pedalboardPresetId = resp.id
                     self.pedalboardPresetName = resp.title
-                    self.titleBox.text((self.title || 'Untitled') + " - " + resp.title)
+                    const newTitle = (self.title || 'Untitled') + " - " + resp.title
+                    self.titleBox.text(newTitle)
+                    self.performanceTitleBox.text(newTitle)
                     new Notification('info', 'Pedalboard snapshot saved', 2000)
                 },
                 error: function () {
@@ -1309,6 +1367,7 @@ function Desktop(elements) {
 
     elements.settingsIcon.statusTooltip()
     elements.pedalboardTrigger.statusTooltip()
+    elements.performanceBoxTrigger.statusTooltip()
     elements.pedalboardBoxTrigger.statusTooltip()
     elements.bankBoxTrigger.statusTooltip()
     elements.cloudPluginBoxTrigger.statusTooltip()
@@ -1335,6 +1394,228 @@ function Desktop(elements) {
             self.ccDeviceManager.showUpdateWindow()
         },
     })
+
+    this.compareCurrentStatus = undefined
+
+    this.compareStatusChanged = function (status) {
+        self.compareCurrentStatus = status
+        if (status == 'A') {
+            elements.compareAButton.addClass('js-ab-compare-snapshot-selected')
+            elements.compareBButton.removeClass('js-ab-compare-snapshot-selected')
+        } else if (status == 'B') {
+            elements.compareAButton.removeClass('js-ab-compare-snapshot-selected')
+            elements.compareBButton.addClass('js-ab-compare-snapshot-selected')
+        } else if (status == 'init') {
+            elements.compareAButton.removeClass('js-ab-compare-snapshot-selected js-ab-compare-snapshot-disabled')
+            elements.compareBButton.removeClass('js-ab-compare-snapshot-selected js-ab-compare-snapshot-disabled')
+        } else {
+            // empty state
+            elements.compareAButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .addClass('js-ab-compare-snapshot-disabled')
+            elements.compareBButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .addClass('js-ab-compare-snapshot-disabled')
+        }
+
+        if (self.currentSettingsWindow) {
+            self.currentSettingsWindow.updateCompareSnapshotStatus(status)
+        }
+    }
+
+    this.compareSnapshotSwitch = function (shapshotId) {
+        $.ajax({
+            type: 'GET',
+            url: '/compare/snapshot/switch?id=' + shapshotId,
+            success: function (ok) {
+                new Notification('info', 'Switched to snapshot ' + shapshotId, 2000)
+            },
+            error: function () {
+                new Notification('error', 'Failed to switch to snapshot ' + shapshotId, 2000)
+            },
+            cache: false,
+            dataType: 'json',
+        })
+    }
+
+    this.compareSnapshotTake = function (callback) {
+        $.ajax({
+            type: 'GET',
+            url: '/compare/snapshot/take',
+            success: function (ok) {
+                if (callback) {
+                    callback(ok)
+                }
+            },
+            error: function () {
+                if (callback) {
+                    callback(false)
+                }
+            },
+            cache: false,
+            dataType: 'json',
+        })
+    }
+
+    this.setPortVUMeterValue = function(port, db) {
+        if (self.currentSettingsWindow) {
+            self.currentSettingsWindow.setPortVUMeterValue(port, db)
+        } else {
+            self.pedalboard.pedalboard('setPortVUMeterValue', port, db)
+        }
+    }
+
+    // true if help mode is active, meaning that the next click on the desktop should be treated as a help click and not propagate to the clicked element
+    this.helpModeActive = false
+    
+    // this function updates the help window content based on the provided helpId
+    this.updateHelpWindow = function (helpId) {
+        if (helpId) {
+            $('.mod-help-footer').text(`help id: ${helpId}`)
+            $('.mod-help-content').load('help/' + helpId + '.md?v=' + Date.now(), function (response, status, xhr) {
+                if (status == "error") {
+                    if (xhr.status == 404) {
+                        $('.mod-help-content').load('help/missing-page.md?v=' + Date.now(), function (response, status, xhr) {
+                            if (status == "error") {
+                                $('.mod-help-content').html(`<p>Error loading missing help page: ${xhr.status} ${xhr.statusText}</p>`)
+                            } else {
+                                response = response.replace(/{{HELP_ID}}/g, helpId).replace(/{{VERSION}}/g, Date.now().toString())
+                                const htmlText = marked.parse(response)
+                                $('.mod-help-content').html(htmlText)
+                            }
+                        });
+                    } else {
+                        $('.mod-help-content').html(`<p>Error loading help page: ${xhr.status} ${xhr.statusText}</p>`)
+                    }
+                } else {
+                    // success, nothing to do
+                    response = response.replace(/{{VERSION}}/g, Date.now().toString())
+                    const htmlText = marked.parse(response)
+                    $('.mod-help-content').html(htmlText)
+                }
+            });
+        } else {
+            $('.mod-help-footer').text("no help id")
+            $('.mod-help-content').load('help/missing-help-id.md?v=' + Date.now(), function (response, status, xhr) {
+                if (status == "error") {
+                    $('.mod-help-content').html(`<p>Error loading missing help-id page: ${xhr.status} ${xhr.statusText}</p>`)
+                } else {
+                    const htmlText = marked.parse(response)
+                    $('.mod-help-content').html(htmlText)
+                }
+            });
+        }
+    }
+
+    // this function is called when the user clicks somewhere on the desktop while help mode is active. 
+    // It checks if the click or any of its parent elements has a data-help-id attribute, and if so, 
+    // it updates the help window with the corresponding content. If not, it shows a default help page.
+    this.helpClickHandler = function (ev) {
+        if (ev.target == elements.helpButton[0])
+            return // let the click propagate and toggle help window
+
+        // check if the target is inside the help window, if so, do nothing
+        if ($(ev.target).closest('.mod-help-overlay').length > 0) {
+            return
+        }
+
+        ev.stopPropagation()
+        ev.preventDefault()
+
+        if (ev.target.id == "wrapper")
+            return // this is the main div wrapper, no help id is allowed here, so do nothing
+
+        let helpId = undefined
+        let target = ev.target
+
+        while (target && !helpId) {
+            helpId = $(target).data('helpId')
+            target = target.parentElement
+        }
+
+        self.updateHelpWindow(helpId)
+    }
+
+    /*
+     * this function is called when the user presses a key while help mode is active.
+     * If the key is Escape, it deactivates help mode and removes the active class from the help button.
+     */
+    this.helpButttonKeyboardHandler = function (ev) {
+        if (ev.key === "Escape") {
+            self.setHelpModeActive(false)
+            elements.helpButton.removeClass('active')
+        }
+    }
+
+    // this function activates or deactivates help mode. 
+    // When activated, it adds a click listener to the body that will handle help clicks, and shows the help overlay. 
+    // When deactivated, it removes the click listener and hides the overlay.
+    this.setHelpModeActive = function (active) {
+        self.helpModeActive = active
+
+        if (self.helpModeActive) {
+            document.body.addEventListener('click', self.helpClickHandler, true)
+            // add also a keyboard listener for escape key to exit help mode
+            document.body.addEventListener('keydown', self.helpButttonKeyboardHandler, true)
+            $('.mod-help-overlay').removeClass('mod-hidden')
+        } else {
+            document.body.removeEventListener('click', self.helpClickHandler, true)
+            // remove also the keyboard listener for escape key
+            document.body.removeEventListener('keydown', self.helpButttonKeyboardHandler, true)
+            $('.mod-help-overlay').addClass('mod-hidden')
+        }
+    }
+
+    elements.helpButton.click(function (ev) {
+        const helpButton = $(ev.target)
+
+        helpId = helpButton.data('helpId') || "help-button"
+        self.updateHelpWindow(helpId)
+        self.setHelpModeActive(!self.helpModeActive)
+        self.helpModeActive ? helpButton.addClass('active') : helpButton.removeClass('active')
+    });
+    
+
+    elements.compareAButton.click(function () {
+        if (elements.compareAButton.hasClass('js-ab-compare-snapshot-disabled'))
+            return
+
+        self.compareSnapshotSwitch('A')
+    })
+    elements.compareBButton.click(function () {
+        if (elements.compareBButton.hasClass('js-ab-compare-snapshot-disabled'))
+            return
+
+        self.compareSnapshotSwitch('B')
+    })
+    elements.compareTakeButton.click(function () {
+        self.compareSnapshotTake(function(ok) {
+            if (ok) {
+                self.compareSnapshotSwitch('B')
+            } else {
+                new Notification('error', 'Failed to take snapshot', 2000)
+            }
+        })
+    })
+
+    this.onPedalboardLoadComplete = function (callback) {
+      if (callback) {
+        callback()
+      }
+    }
+
+    // this callback is called when the pedalboard is loaded for the first time
+    this.onPedalboardFirstLoadComplete = function (callback) {
+        self.effectBox.effectBox('search', function () {
+            setTimeout(function () {
+                    if (self.isTouchDevice) {
+                        elements.performanceBoxTrigger.click()
+                    }
+                    // if is a touch device, open performance view by default
+                    self.onPedalboardLoadComplete(callback)
+            }, 500)
+        })
+    }
 
     var prevent = function (ev) {
         ev.preventDefault()
@@ -1501,6 +1782,7 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
                     self.pedalboardPresetName = ''
                     self.pedalboardDemoPluginsNotified = false
                     self.titleBox.text('Untitled')
+                    self.performanceTitleBox.text('Untitled')
                     self.titleBox.addClass("blend")
                     self.transportControls.resetControlsEnabled()
                     self.setPedalboardAsModified(false)
@@ -1547,6 +1829,57 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
             ws.send(sprintf("plugin_pos %s %f %f", instance, x, y))
         },
 
+        /*
+         * Set the label of a plugin instance
+         * label: string or null, undefined, empty string to reset to default
+         */
+        pluginLabelSet: function (instance, label) {
+            self.setPedalboardAsModified(true)
+            ws.send(sprintf("plugin_label %s %s", instance, label?.replace(/ /g, '_')))
+        },
+
+        /*
+         * Set if the plugin port should be included in snapshots for save & restore
+         *
+         * instance: plugin instance
+         * portSymbol: plugin port symbol
+         * value: true to include in snapshot, else false
+         */
+        pluginPortSnapshotableSet: function (instance, portSymbol, value) {
+            self.setPedalboardAsModified(true)
+            ws.send(sprintf("port_prop_set %s %s %s %s", instance, portSymbol, 'snapshotable', value ? '1' : '0'))
+        },
+
+        /*
+         * Set if the plugin parameter should be included in snapshots for save & restore
+         *
+         * instance: plugin instance
+         * paramUri: plugin parameter symbol
+         * value: true to include in snapshot, else false
+         */
+        pluginParameterSnapshotableSet: function (instance, paramUri, value) {
+            self.setPedalboardAsModified(true)
+            ws.send(sprintf("param_prop_set %s %s %s %s", instance, paramUri, 'snapshotable', value ? '1' : '0'))
+        },
+
+        /*
+         * Set if the plugin instance should be displayed on the performance view
+         * visible: true to display, else false
+         */
+        performancePluginVisibilitySet: function (instance, visible) {
+            self.setPedalboardAsModified(true)
+            ws.send(sprintf("performance_plugin_visibility %s %s", instance, (visible ? "1" : "0")))
+        },
+
+        /*
+         * Set if the order of the plugin instance in the performance view
+         * index: order
+         */
+        performancePluginIndexSet: function (instance, index) {
+            self.setPedalboardAsModified(true)
+            ws.send(sprintf("performance_plugin_index %s %d", instance, index))
+        },
+
         windowSize: function (width, height) {
             // FIXME
             if (ws && width > 0 && height > 0) {
@@ -1555,17 +1888,12 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
         },
 
         pedalboardFinishedLoading: function (callback) {
-            if (! self.loadingPeldaboardForFirstTime) {
-                callback()
-                return
+            if (self.loadingPeldaboardForFirstTime) {
+                self.loadingPeldaboardForFirstTime = false
+                self.onPedalboardFirstLoadComplete(callback)
+            } else {
+                self.onPedalboardLoadComplete(callback)
             }
-
-            self.loadingPeldaboardForFirstTime = false
-            self.effectBox.effectBox('search', function () {
-                setTimeout(function () {
-                    callback()
-                }, 500)
-            })
         },
 
         addCVAddressingPluginPort: function (uri, name, callback) {
@@ -1618,6 +1946,29 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
             self.pedalboardDemoPluginsNotified = true
             new Notification('warn', 'This pedalboard contains a trial plugin.<br>Using trial plugins will intentionally mute the audio at regular intervals.')
         },
+
+        compareSnapshotSwitch: function (snapshotId) {
+            self.compareSnapshotSwitch(snapshotId)
+        },
+        compareSnapshotTake: function (callback) {
+            self.compareSnapshotTake(callback)
+        },
+        pluginSettingsWindowOpen: function (pluginGui) {
+            self.currentSettingsWindow = pluginGui
+            pluginGui.setupMonitorVUMeter()
+            pluginGui.updateCompareSnapshotStatus(self.compareCurrentStatus)
+        },
+        pluginSettingsWindowClose: function (pluginGui) {
+            pluginGui.cleanupMonitorVUMeter()
+            // this is used to avoid creating new vumeters (debounce)
+            // since we can have a delay between closing the settings window and the pedalboard sending the next vu meter update
+            self.pedalboard.data("currentSettingsWindowClosedTime", Date.now())
+            self.currentSettingsWindow = undefined
+        },
+        // returns true if help mode is active, false otherwise
+        getHelpModeActive: function () {
+            return self.helpModeActive
+        }
     });
 
     // Bind events
@@ -1695,6 +2046,37 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
                 cache: false
             })
         },
+        download: function (pedalboard, callback) {
+            var transfer = new SimpleTransference('/pedalboard/pack_bundle/?bundlepath=' + escape(pedalboard.bundle),
+                                                    'file://' + pedalboard.bundle + '.tar')
+            transfer.reauthorizeUpload = self.authenticateDevice;
+
+            transfer.reportFinished = function (resp2) {
+                callback({
+                    ok: true,
+                    id: resp.id,
+                })
+            }
+
+            transfer.reportError = function (error) {
+                callback({
+                    ok: false,
+                    error: "Failed to download the pedalboard",
+                })
+            }
+
+            transfer.start()
+        },
+    })
+}
+
+Desktop.prototype.makePerformanceBox = function (el, trigger) {
+    return el.performanceBox({
+        trigger: trigger,
+        windowManager: this.windowManager,
+        pedalboard: this.pedalboard,
+        pedalPresets: this.pedalPresets,
+        saveConfigValue: self.saveConfigValue,
     })
 }
 
@@ -1736,13 +2118,13 @@ Desktop.prototype.makeCloudPluginBox = function (el, trigger) {
                 dataType: 'json'
             })
         },
-        upgradePluginURI: function (uri, usingLabs, callback) {
+        upgradePluginURI: function (uri, callback) {
             self.previousPedalboardList = null
-            self.installationQueue.installUsingURI(uri, usingLabs, callback)
+            self.installationQueue.installUsingURI(uri, callback)
         },
-        installPluginURI: function (uri, usingLabs, callback) {
+        installPluginURI: function (uri, callback) {
             self.previousPedalboardList = null
-            self.installationQueue.installUsingURI(uri, usingLabs, callback)
+            self.installationQueue.installUsingURI(uri, callback)
         }
     })
 }
@@ -1881,6 +2263,7 @@ Desktop.prototype.loadPedalboard = function (bundlepath, callback) {
                 self.pedalboardDemoPluginsNotified = false
                 self.setPedalboardAsModified(false)
                 self.titleBox.text(resp.name);
+                self.performanceTitleBox.text(resp.name);
                 self.titleBox.removeClass("blend");
 
                 callback(true)
@@ -1919,7 +2302,9 @@ Desktop.prototype.saveCurrentPedalboard = function (asNew, callback) {
             self.pedalboardBundle = errorOrPath
             self.pedalboardEmpty = false
             self.setPedalboardAsModified(false)
-            self.titleBox.text(title + " - " + self.pedalboardPresetName)
+            const newTitle = title + " - " + self.pedalboardPresetName
+            self.titleBox.text(newTitle)
+            self.performanceTitleBox.text(newTitle)
 
             if (self.previousPedalboardList != null) {
                 for (var i=0; i<self.previousPedalboardList.length; i++) {
@@ -1948,6 +2333,281 @@ Desktop.prototype.openPresetSaveWindow = function (windowTitle, name, callback) 
             callback(newName)
         })
 }
+
+Desktop.prototype.getDeviceShopToken = function(callback) {
+    var self = this;
+
+    var getToken = function() {
+        $.ajax({
+            url: SITEURL + '/licenses/requests/',
+            cache: false,
+            method: 'GET',
+            headers: {
+                'Authorization' : 'MOD ' + self.cloudAccessToken
+            },
+            success: function(result) {
+                callback(result.id);
+            },
+            error: function(result) {
+                new Notification('error', "Cannot get transaction authorization from Cloud, please contact support", 10000);
+            }
+        });
+    }
+
+    if (self.cloudAccessToken == null) {
+        desktop.authenticateDevice(function (ok) {
+            if (ok && self.cloudAccessToken != null) {
+                getToken()
+            } else {
+                new Notification('error', "Can't authenticate with Cloud to access plugin store", 5000)
+            }
+        })
+    } else {
+        getToken();
+    }
+}
+// TODO cache
+Desktop.prototype.fetchShopProducts = function() {
+    var self = this
+    return new Promise(function(resolve, reject) {
+        var shopClient = ShopifyBuy.buildClient(SHOPIFY_CLIENT_OPTIONS);
+        shopClient.fetchAllProducts().then(function(products) {
+            if (products.length > 0) {
+                self.createCart(shopClient)
+            }
+            resolve(products)
+        }, reject)
+    })
+}
+
+Desktop.prototype.fetchShopProduct = function(uri) {
+    var self = this
+    var shopClient = ShopifyBuy.buildClient(SHOPIFY_CLIENT_OPTIONS);
+    // TODO would be more efficient to query one single product,
+    // but don't know how to query by variant's SKU
+    return shopClient.fetchAllProducts().then(function(products) {
+        for (var i in products) {
+            if (uri == products[i].selectedVariant.attrs.variant.sku) {
+                self.createCart(shopClient)
+                return products[i]
+            }
+        }
+    })
+}
+
+Desktop.prototype.createCart = function(shopClient) {
+    var self = this
+    ShopifyBuy.UI.onReady(shopClient).then(function (ui) {
+        ui.createComponent('cart', {
+            moneyFormat: '%E2%82%AC%7B%7Bamount%7D%7D',
+            options: SHOPIFY_PRODUCT_OPTIONS
+        }).then(function(cart) {
+            self.cart = cart;
+        })
+        self.windowManager.registerShopify(ui);
+    })
+}
+
+Desktop.prototype.createBuyButton = function(shopifyId) {
+    var shopClient = ShopifyBuy.buildClient(SHOPIFY_CLIENT_OPTIONS);
+    ShopifyBuy.UI.onReady(shopClient).then(function (ui) {
+        var node = document.getElementById('product-component-'+shopifyId);
+        var button = $('<div class="shopify-fake-button">ADD TO CART</div>').appendTo(node);
+        ui.createComponent('product', {
+            id: [shopifyId],
+            node: node,
+            moneyFormat: '%E2%82%AC%7B%7Bamount%7D%7D',
+            options: SHOPIFY_PRODUCT_OPTIONS
+        });
+    });
+}
+
+Desktop.prototype.waitForLicenses = function(deviceToken) {
+    var self = this;
+    var poll = function() {
+        $.ajax({
+            url: SITEURL + '/licenses/requests/'+deviceToken,
+            method: 'GET',
+            headers: {
+                'Authorization' : 'MOD ' + self.cloudAccessToken
+            },
+            success: function(result) {
+                if (self.licenseManager === null || !result.fulfilled) {
+                    setTimeout(poll, 5000);
+                    return;
+                }
+                self.licenseManager.addLicenses(result.license_info, function() {
+                    var s = result.license_info.length > 1 ? 's' : ''
+                    var msg = result.license_info.length + ' new plugin'+s+' purchased'
+                    new Notification('info', msg);
+                    var uris = result.license_info.map(function(l) { return l.plugin_uri });
+                    if (self.cart) {
+                        self.cart.empty()
+                        self.cart.close()
+                    }
+                })
+            },
+            error: function() {
+                new Notification('error', "Can't get licenses from Cloud, please reload interface after finishing your purchase");
+            }
+        });
+    }
+    setTimeout(poll, 5000);
+}
+
+Desktop.prototype.license = function(uri) {
+    var container = $('[mod-uri="'+escape(uri)+'"]')
+    container.find('.price').removeClass('price').addClass('licensed').html('')
+    container.find('.description-price').removeClass('description-price').addClass('description-licensed').html('')
+    container.find('.demo-mask').remove()
+    container.find('.buy-button').remove()
+    container.find('button').each(function(index, button) {
+        $(button).html($(button).html().replace(/\s+Trial/, ''))
+    });
+
+    this.pedalboard.pedalboard('license', uri)
+}
+
+/*
+ * Ask user for a text input
+ * windowTitle: title of the window
+ * value: default value
+ * callback: function(newValue) called when user clicks ok
+ * okLabel: label of the ok button (default: 'Ok')
+ */
+Desktop.prototype.openInputBoxWindow = function (windowTitle, value, callback, okLabel, validateCallback) {
+    this.inputBox.inputBox('show', windowTitle, value, callback, okLabel, validateCallback)
+}
+
+JqueryClass('inputBox', {
+    init: function (options) {
+        var self = $(this)
+
+        options = $.extend({
+          
+        }, options)
+
+        self.data(options)
+        self.data('disabled', false)
+
+        var done = function () {
+            // call the user callback
+            self.inputBox('_onResult', false)
+            return false
+        }
+
+        self.find('.js-done').click(done).prop('disabled',true)
+        self.find('.js-cancel').click(function () {
+            if (self.data('disabled')) {
+                return false
+            }
+            self.inputBox('_onResult', true)
+            self.hide()
+            return false
+        })
+
+        self.find('input').keyup(function () {
+            var value = self.find('input').val()
+            const isValid = self.inputBox('_validate', value)
+
+            self.find('.js-done').prop('disabled', isValid ? false : true);
+        })
+
+        self.keydown(function (e) {
+            if (self.data('disabled')) {
+                return false
+            }
+            if (e.keyCode == 13) {
+                return done()
+            }
+            if (e.keyCode == 27) {
+                self.inputBox('_onResult', true)
+                self.hide()
+                return false
+            }
+        })
+
+        return self
+    },
+
+
+    /*
+     * Show the input box
+     * windowTitle: title of the window
+     * value: default value
+     * callback: function(newValue) called when user clicks ok
+     * okLabel: label of the ok button (default: 'Ok')
+     * isValidCallback: optional function(newValue) called when user changes the text, should return true if the value is valid
+     */
+    show: function (windowTitle, value, callback, okLabel, isValidCallback) {
+        var self = $(this)
+
+        if (!okLabel) {
+            okLabel = 'Save'
+        }
+        var saveButton = self.find('.js-done')
+        saveButton.text(okLabel)
+        self.find('input').val(value)
+        self.data('callback', callback)
+        self.data('isValidCallback', isValidCallback)
+        if (windowTitle) {
+            self.find('h1').text(windowTitle)
+        }
+        self.show()
+        self.focus()
+        const input = self.find('input')
+        
+        input.focus(function() { $(this).select(); } )
+        input.focus()
+    },
+
+    _validate: function (value) {
+        var self = $(this)
+        const isValidCallback = self.data('isValidCallback')
+        let isValid = true
+
+        if (isValidCallback) {
+            isValid = isValidCallback(value)
+        } else {
+            // default validation: non empty
+            isValid = value && value.length > 0
+        }
+
+        return isValid
+    },
+    
+    _onResult: function (cancelled) {
+        var self  = $(this)
+        var newValue = self.find('input').val()
+
+        if (!cancelled) {
+            if (!self.inputBox('_validate', newValue)) {
+                new Bug("Input not valid")
+                return
+            }
+        }
+        
+        self.data('disabled', true)
+        self.find('.js-cancel').prop('disabled', true)
+        self.find('.js-done').prop('disabled', true)
+        let returnValue = undefined
+        
+        try {
+            returnValue = self.data('callback')(newValue, cancelled)
+        } catch (e) {
+            console.warn('Input box callback failed:', e)
+        }
+
+        if (returnValue !== false) {
+            self.hide()
+        }
+        self.data('disabled', false)
+        self.find('.js-cancel').prop('disabled', false)
+        self.find('.js-done').prop('disabled', false)
+
+        return
+    }
+})
 
 JqueryClass('saveBox', {
     init: function (options) {

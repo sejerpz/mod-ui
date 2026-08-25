@@ -24,17 +24,39 @@ function shouldSkipPort(port) {
     return false;
 }
 
+function supportsT3K(parameter) {
+    return parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir' || type == 'aidadspmodel')
+}
+
 function loadFileTypesList(parameter, dummy, callback) {
     var files = []
-    if (parameter.ranges.default) {
-        var sdef = parameter.ranges.default
-        files.push({
-            'fullname': sdef,
-            'basename': sdef.slice(sdef.lastIndexOf('/')+1),
-        })
+
+    parameter.files = files
+    parameter.basepaths = []
+    const addDefaultParamValues = function() {
+        if (parameter.ranges.default) {
+            var sdef = parameter.ranges.default
+            files.push({
+                'fullname': sdef,
+                'dirname': '',
+                'basename': sdef.slice(sdef.lastIndexOf('/')+1),
+                'icon': '<i class="icon-preset mod-select-path-icon"></i>' // box
+            })
+        }
+        // check if parameters can be suported by T3K
+        parameter.t3k = supportsT3K(parameter)
+        if (parameter.t3k) {
+            // this parameter can be downloaded from T3K
+            files.push({
+                'fullname': 't3k://browse',
+                'dirname': '',
+                'basename': 'Browse tones',
+                'icon': '<img class="t3k-enumerated-option-logo" src="js/lib/t3k/logo/T3K%20logo.png" />'
+            })
+        }
     }
     if (dummy) {
-        parameter.files = files
+        addDefaultParamValues()
         parameter.path = true
         callback()
         return
@@ -45,11 +67,59 @@ function loadFileTypesList(parameter, dummy, callback) {
             'types': parameter.fileTypes.join(","),
         },
         success: function (data) {
-            parameter.files = files.concat(data.files)
+            const dirs = []
+            const basePaths = []
+            for(let file of data.files) {
+                if (file.dirname && file.dirname.length > 0) {
+                    let dirPath = file.fullname
+                    const lastSlashIndex = Math.max(file.fullname.lastIndexOf('/'), file.fullname.lastIndexOf('\\'));
+
+                    if (lastSlashIndex != -1) {
+                        dirPath = file.fullname.slice(0, lastSlashIndex);
+                    }
+                    if (!dirs.find((value, index) => value === dirPath)) {
+                        dirs.push(dirPath)
+                    }
+                }
+
+                if (!basePaths.find((value, index) => value === file.basepath)) {
+                    basePaths.push(file.basepath)
+                }
+            }
+
+            // file sorting criteria
+            // first directory
+            dirs.sort()
+            for(let dir of dirs) {
+                const lastSlashIndex = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'));
+                let dirname
+
+                if (lastSlashIndex != -1) {
+                    dirname = dir.slice(lastSlashIndex + 1);
+                } else {
+                    dirname = dir
+                }
+                files.push({
+                    'basename': dirname,
+                    'dirname': dirname,
+                    'filetype': 'dir',
+                    'fullname': 'dir://' + dir
+                })
+            }
+
+            // then user downloaded files
+            files = files.concat(data.files)
+            // then plugin resources
+            // then special uris like t3k://
+            addDefaultParamValues()
+
+            parameter.files = files
+            parameter.basepaths = basePaths
             parameter.path = true
             callback()
         },
         error: function () {
+            addDefaultParamValues()
             callback()
         },
         cache: false,
@@ -87,7 +157,9 @@ function loadDependencies(gui, effect, dummy, callback) { //source, effect, bund
         $.ajax({
             url: '/effect/get_non_cached',
             data: {
-                uri: effect.uri
+                uri: effect.uri,
+                instance: gui.instance,
+                pedalboard_metadata: 'all'
             },
             success: function (data) {
                 effect.licensed = data.licensed
@@ -237,6 +309,20 @@ function GUI(effect, options) {
         presetDelete: function (uri, bundlepath, callback) {
             callback()
         },
+        compareSnapshotSwitch: function (slot) {
+            console.log("GUI: compareSnapshotSwitch", slot)
+        },
+        compareSnapshotTake: function () {
+            console.log("GUI: compareSnapshotTake")
+        },
+        changePortMonitoring: function (port, mode, callback) {
+            console.log("GUI: changePortMonitoring", port, mode)
+            if (callback) {
+                callback()
+            }
+        },
+        isPortMonitored: function (port, callback) {
+        },
         bypassed: true,
         defaultIconTemplate: 'Template missing',
         defaultSettingsTemplate: 'Template missing',
@@ -249,9 +335,7 @@ function GUI(effect, options) {
 
     self.dependenciesCallbacks = []
 
-    if (options.loadDependencies) {
-        self.dependenciesLoaded = false
-
+    self.deferredLoadDependencies = () => {
         loadDependencies(this, effect, options.dummy, function () {
             self.dependenciesLoaded = true
             for (var i in self.dependenciesCallbacks) {
@@ -259,12 +343,24 @@ function GUI(effect, options) {
             }
             self.dependenciesCallbacks = []
         })
+    }
+
+    if (options.loadDependencies) {
+        self.dependenciesLoaded = false
+
+        // wait untill the instance is set
+        // the instance is set on render
+        // after that the real render will be called ad a callback
+        if (self.instance) {
+            self.deferredLoadDependencies();
+        }
     } else {
         self.dependenciesLoaded = true
     }
 
     self.effect = effect
     self.instance = null
+    self.label = null
 
     self.bypassed = options.bypassed
     self.currentPreset = ""
@@ -519,6 +615,221 @@ function GUI(effect, options) {
         }
     }
 
+    this.setPortPropertyValue = function (symbol, property, value) {
+        var port = self.controls[symbol]
+
+        if (!port) {
+            console.error("setPortPropertyValue: unknown port", symbol)
+        }
+        let parsedValue = undefined;
+
+        if (property == "snapshotable") {
+            let elemId;
+            parsedValue = (value == "1" || value == "true" || value == 1 || value == true)
+
+            // update the snapshotable icon
+            if (symbol == ":bypass") {
+                elemId = '[mod-role=bypass-snapshotable]'
+            } else if (symbol == ":presets") {
+                elemId = '[mod-role=presets-snapshotable]'
+            } else {
+                elemId = '[mod-role=input-control-snapshotable][mod-port-symbol=' + symbol + ']'
+            }
+
+            // update the UI
+            const snapshotIconCallback = function(icon, isActive) {
+                if (isActive) {
+                    icon.addClass("active")
+                } else {
+                    icon.removeClass("active")
+                }
+            }
+            // settings: port snapshotable status
+            self.settings.find(elemId).each(function() {
+                var elem = $(this)
+
+                snapshotIconCallback(elem, parsedValue)
+            })
+            // performance view: port snapshotable status
+            self.settingsPerformance.find(elemId).each(function() {
+                var elem = $(this)
+
+                snapshotIconCallback(elem, parsedValue)
+            })
+        } else {
+            console.error("setPortPropertyValue: unsupported property", property)
+        }
+
+        if (parsedValue === undefined) {
+            console.error("setPortPropertyValue: property", property, " unknown value ", value)
+        } else {
+            let idx = port.properties.findIndex(function(p) { return p.hasOwnProperty(property) })
+            if (idx >= 0) {
+                port.properties[idx][property] = parsedValue
+            } else {
+                const prop = {}
+                
+                prop[property] = parsedValue
+                port.properties.push(prop)
+            }
+        }
+
+        if (property == "snapshotable") {
+            this.updateGlobalSnapshotableStatus()
+        }
+    }
+
+
+    this.setParameterPropertyValue = function (uri, property, value) {
+        var param = self.parameters[uri]
+
+        if (!param) {
+            console.error("setParameterPropertyValue: unknown parameter", uri)
+        }
+        let parsedValue = undefined;
+
+        if (property == "snapshotable") {
+            let elemId = "[mod-role=parameter-snapshotable][mod-parameter-uri='" + uri + "']"
+            parsedValue = (value == "1" || value == "true" || value == 1 || value == true)
+
+            // update the UI
+            const snapshotIconCallback = function(icon, isActive) {
+                if (isActive) {
+                    icon.addClass("active")
+                } else {
+                    icon.removeClass("active")
+                }
+            }
+            // settings: port snapshotable status
+            self.settings.find(elemId).each(function() {
+                var elem = $(this)
+
+                snapshotIconCallback(elem, parsedValue)
+            })
+            // performance view: port snapshotable status
+            self.settingsPerformance.find(elemId).each(function() {
+                var elem = $(this)
+
+                snapshotIconCallback(elem, parsedValue)
+            })
+        } else {
+            console.error("setParameterPropertyValue: unsupported property", property)
+        }
+
+        if (parsedValue === undefined) {
+            console.error("setParameterPropertyValue: property", property, " unknown value ", value)
+        } else {
+            let idx = param.properties.findIndex(function(p) { return p.hasOwnProperty(property) })
+            if (idx >= 0) {
+                param.properties[idx][property] = parsedValue
+            } else {
+                const prop = {}
+
+                prop[property] = parsedValue
+                param.properties.push(prop)
+            }
+        }
+
+        if (property == "snapshotable") {
+            this.updateGlobalSnapshotableStatus()
+        }
+    }
+
+    this.updateGlobalSnapshotableStatus = function () {
+        // global snapshotable status
+        let status = undefined
+
+        for(let key in self.controls) {
+            const p = self.controls[key]
+            const idx = p.properties.findIndex(function(prop) {
+                return prop.hasOwnProperty('snapshotable')
+            })
+            let propVal = false;
+
+            if (idx >= 0)
+                propVal = p.properties[idx].snapshotable
+
+            if (propVal === true) {
+                if (status === undefined)
+                    status = "allOn"
+                else if (status == "allOff") {
+                    status = "mixed"
+                    break; // exit the for
+                }
+            } else {
+                if (status === undefined)
+                    status = "allOff"
+                else if (status == "allOn") {
+                    status = "mixed"
+                    break; // exit the for
+                }
+            }
+        }
+
+        if (status != "mixed") {
+            // check parameters too only if all ports are on or off
+            for(let key in self.parameters) {
+                const p = self.parameters[key]
+                const idx = p.properties.findIndex(function(prop) {
+                    return prop.hasOwnProperty('snapshotable')
+                })
+                let propVal = false;
+
+                if (idx >= 0)
+                    propVal = p.properties[idx].snapshotable
+
+                if (propVal === true) {
+                    if (status === undefined)
+                        status = "allOn"
+                    else if (status == "allOff") {
+                        status = "mixed"
+                        break; // exit the for
+                    }
+                } else {
+                    if (status === undefined)
+                        status = "allOff"
+                    else if (status == "allOn") {
+                        status = "mixed"
+                        break; // exit the for
+                    }
+                }
+            }
+        }
+
+        let setStatusFunc;
+
+        if (status == "allOn") {
+            setStatusFunc = function (icon) {
+                icon.addClass('active')
+                icon.removeClass('mixed')
+            }
+        } else if (status == "allOff") {
+            setStatusFunc = function (icon) {
+                icon.removeClass('mixed')
+                icon.removeClass('active')
+            }
+        } else {
+            setStatusFunc = function (icon) {
+                icon.addClass('mixed')
+                icon.removeClass('active')
+            }
+        }
+
+        // icon on the contructor gui (visible only when hovering a plugin)
+        self.icon.find('.plugin-global-snapshot').each(function() {
+            let icon = $(this)
+
+            setStatusFunc(icon)
+        })
+
+        // icon on the setting page
+        self.settings.find('.plugin-global-snapshot').each(function() {
+            let icon = $(this)
+
+            setStatusFunc(icon)
+        })
+    }
+
     this.setOutputPortValue = function (symbol, value) {
         self.triggerJS({ type: 'change', symbol: symbol, value: value })
     }
@@ -682,38 +993,49 @@ function GUI(effect, options) {
             presetElem,
             presetElems = [
             self.icon.find('[mod-role=presets]'),
-            self.settings.find('.mod-presets')
+            self.settings.find('.mod-presets'),
+            self.settingsPerformance.find('.mod-presets'),
         ]
         for (var i in presetElems) {
             presetElem = presetElems[i]
             presetElem.find('[mod-role=enumeration-option]').removeClass("selected")
             if (value) {
-                bundlepath = presetElem.find('[mod-role=enumeration-option][mod-uri="' + value + '"]').addClass("selected").attr('mod-path')
+                let selectedPreset = presetElem.find('[mod-role=enumeration-option][mod-uri="' + value + '"]')
+                bundlepath = selectedPreset
+                                .addClass("selected")
+                                .attr('mod-path')
+                if (selectedPreset.length) {
+                    selectedPreset[0].scrollIntoView({
+                        behavior: 'smooth', // 'auto' or 'smooth'
+                        block: 'nearest',   // 'start', 'center', 'end', or 'nearest'
+                        inline: 'nearest'   // 'start', 'center', 'end', or 'nearest'
+                    });
+                }
             }
-        }
 
-        if (value) {
-            // TODO: implement addressing for single presets
-            //presetElem.find('.preset-btn-assign-sel').removeClass("disabled")
+            if (value) {
+                // TODO: implement addressing for single presets
+                //presetElem.find('.preset-btn-assign-sel').removeClass("disabled")
 
-            if (bundlepath) {
-                presetElem.find('.preset-btn-save').removeClass("disabled")
+                if (bundlepath) {
+                    presetElem.find('.preset-btn-save').removeClass("disabled")
+                } else {
+                    presetElem.find('.preset-btn-save').addClass("disabled")
+                }
+
+                if (bundlepath && presetElem.data('enabled')) {
+                    presetElem.find('.preset-btn-rename').removeClass("disabled")
+                    presetElem.find('.preset-btn-delete').removeClass("disabled")
+                } else {
+                    presetElem.find('.preset-btn-rename').addClass("disabled")
+                    presetElem.find('.preset-btn-delete').addClass("disabled")
+                }
             } else {
                 presetElem.find('.preset-btn-save').addClass("disabled")
-            }
-
-            if (bundlepath && presetElem.data('enabled')) {
-                presetElem.find('.preset-btn-rename').removeClass("disabled")
-                presetElem.find('.preset-btn-delete').removeClass("disabled")
-            } else {
                 presetElem.find('.preset-btn-rename').addClass("disabled")
                 presetElem.find('.preset-btn-delete').addClass("disabled")
+                presetElem.find('.preset-btn-assign-sel').addClass("disabled")
             }
-        } else {
-            presetElem.find('.preset-btn-save').addClass("disabled")
-            presetElem.find('.preset-btn-rename').addClass("disabled")
-            presetElem.find('.preset-btn-delete').addClass("disabled")
-            presetElem.find('.preset-btn-assign-sel').addClass("disabled")
         }
     }
 
@@ -797,9 +1119,296 @@ function GUI(effect, options) {
         }
     }
 
+    /*
+     * Change this plugin label and update all the UI components
+     *
+     * newName: new label value null -> restore defaults
+     */
+    this.setLabel = function(newName) {
+        if (newName && newName.trim().length > 0) {
+            self.label = newName.trim()
+        } else {
+            self.label = null
+        }
+
+        var templateData = self.getTemplateData(effect, true)
+        // update the UI label & settings label
+        self.icon?.find('.mod-plugin-name > h1')?.text(templateData.label)
+        // this is the same rule implemented on settings.html template
+        const settingsLabel = templateData.userLabel ? " - " + templateData.userLabel  : ""
+        self.settings?.find('.mod-pedal-settings .plugin-label')?.text(settingsLabel)
+        self.settingsTemplate?.find('.mod-pedal-settings .plugin-label')?.text(settingsLabel)
+
+        // let the host know about this change
+        desktop.pedalboard.data('pluginLabelSet')(self.instance, self.label ?? "")
+    }
+
     this.preRender = function () {
         self.controls = self.makePortIndexes(effect.ports.control.input)
         self.parameters = self.makeParameterIndexes(effect.parameters)
+    }
+
+    this.presetItemClicked = function(presetItem, presetElem, e) {
+        if (!presetElem.data('enabled'))
+            return presetElem.customSelect('prevent', e)
+
+        var value = presetItem.attr('mod-uri')
+        options.presetLoad(value)
+        self.selectPreset(value)
+    }
+
+    this.setPresetEnabled = function (presetItem, enabled, callback) {
+        const uri = presetItem.attr('mod-uri')
+
+        if (!uri) {
+            console.error("Trying to set preset enabled state with no uri", presetItem)
+            return
+        }
+
+        console.log(`set ${uri} enabled: ${enabled}`)
+        $.ajax({
+            url: '/pedalboard/effect_preset_config/set',
+            method: 'POST',
+            data: {
+                instance_id: self.instance,
+                uri: presetItem.attr('mod-uri'),
+                enabled: enabled ? 1 : 0,
+            },
+            success: function (resp) {
+                if (callback) {
+                    callback(resp)
+                }
+            },
+            error: function (resp) {
+                console.log("effect_preset_config set error", resp)
+            },
+            cache: false,
+            dataType: 'json'
+        })
+    }
+
+    /* this function handle presets UI on both settings and performance view */
+    this.handleSettingsPresets = function(presetElem, presets) {
+        presetElem.data('enabled', true)
+
+        presetElem.find('.radio-preset-factory').click(function () {
+            presetElem.find('.mod-preset-user').hide()
+            presetElem.find('.mod-preset-factory').show()
+        })
+        presetElem.find('.radio-preset-user').click(function () {
+            presetElem.find('.mod-preset-factory').hide()
+            presetElem.find('.mod-preset-user').show()
+        })
+        presetElem.find('[mod-role=enumeration-option]').each(function () {
+            $(this).click((e) => {
+                self.presetItemClicked($(this), presetElem, e)
+            })
+            const enabled = (presets.factory.find(p => p.uri === $(this).attr('mod-uri'))
+                             || presets.user.find(p => p.uri === $(this).attr('mod-uri')))?.enabled ?? true
+
+            const checkbox = $(this).find('.mod-preset-check')
+            checkbox.click((e) => {
+                e.stopPropagation() // avoid triggering the preset selection when clicking the checkbox
+                const enabled =  e.target.checked
+
+                self.setPresetEnabled(checkbox, enabled, function (resp) {
+                    if (!resp) {
+                        // in case of error revert the checkbox state
+                        e.target.checked = !enabled
+                    }
+                })
+            })
+            .prop('checked', enabled)
+        })
+        var totalPresetCount = self.effect.presets.length
+
+        if (totalPresetCount == 1) {
+            presetElem.find('.preset-btn-assign-all').addClass("disabled")
+
+        } else if (presets.factory.length == 0) {
+            presetElem.find('.mod-enumerated-title').find('span').hide()
+            presetElem.find('.mod-preset-factory').hide()
+            presetElem.find('.mod-preset-user').show()
+
+            if (presets.user.length == 0) {
+                presetElem.find('.preset-btn-assign-all').addClass("disabled")
+            }
+        }
+
+    }
+
+    /*
+     * This function sets up a VU meter for monitoring the audio output of this plugin instance.
+     * It creates a VUMeter object, appends it to the plugin settings, and requests the host to monitor
+     * the audio output ports of this plugin instance. 
+     * 
+     * If the host is already monitoring the ports, it will start sending audio level values to this plugin instance.
+     * 
+     * It's called by the desktop when the plugin settings are opened, 
+     * and it should be cleaned up when the settings are closed.
+     * 
+     * It will monitor ports if they are not already monitored, 
+     * and will enable monitoring for each output port of the plugin instance.
+     * 
+     * It will clenaup only the ports that were enabled for monitoring by this function,
+     * when the settings are closed, to avoid interfering with other plugins that may be using the same ports.
+     */
+    this.setupMonitorVUMeter = function () {
+        const vumeter = new VUMeter("100%", "22px", { orientation: "horizontal" })
+        const vumeter_container = self.settings?.find(".js-plugin-vumeter")
+
+        vumeter.dbMarkers = [0, -3, -6, -12, -20, -40];
+        vumeter.setLabel("")
+        vumeter_container.append(vumeter.getElement())
+
+        vumeter.setLevel(-60)
+        self.vumeter = vumeter
+
+        // request host to monitor the audio output ports of this plugin instance
+        // if not already monitored, the host will start sending the audio level 
+        // values to this plugin instance
+
+        self.monitoredPorts = self.monitoredPorts || []
+        self.monitoredPortsIteration = 1
+
+        for(var port of self.effect.ports.audio.output) {
+            const portSymbol = self.instance + '/' + port.symbol
+            let monitoredPort = {
+                portSymbol: portSymbol,
+                alreadyMonitored: options.isPortMonitored(portSymbol),
+                lastValue: -999.0,
+                iteration: 0
+            }
+
+            self.monitoredPorts.push(monitoredPort)
+
+            if (!monitoredPort.alreadyMonitored) {
+                options.changePortMonitoring(portSymbol, 'enable')
+            }
+        }
+    }
+
+    this.setPortVUMeterValue = function(port, db) {
+        if (self.vumeter) {
+            // check if the port is a port of this instance, if not ignore the value
+            if (!port.startsWith(self.instance + "/")) {
+                return
+            }
+
+            // check if port is a selected output port, if not ignore the value
+            const selectedPort = self.settings.find('.mod-monitors-ports-dropdown').val()
+
+            if ((self.instance + "/" + selectedPort) === port) {
+                self.vumeter.setLevel(db)
+            } else if (selectedPort === "all") {
+                // if all ports are selected, we can show the max value of all output ports
+                // first store the last value of this port, then calculate the max value of all output ports
+                let max = -999.0
+                let portWithValues = 0;
+
+                for (let monitoredPort of self.monitoredPorts) {
+                    if (monitoredPort.portSymbol === port) {
+                        max = Math.max(max, db)
+                        monitoredPort.lastValue = db
+                        // got a value for this iteration
+                        monitoredPort.iteration = self.monitoredPortsIteration
+                        portWithValues++
+                    } else if (monitoredPort.iteration == self.monitoredPortsIteration) {
+                        // already have a value setted for this iterations
+                        max = Math.max(max, monitoredPort.lastValue)
+                        portWithValues++
+                    }
+                }
+
+                if (portWithValues == self.monitoredPorts.length) {
+                    // al value collected, we visualize the peak (max) of all outputs
+                    self.vumeter.setLevel(max)
+                    // prepare for next iteration (avoid to cleanup all the values)
+                    self.monitoredPortsIteration++
+                }
+            }
+        }
+    }
+
+    this.cleanupMonitorVUMeter = function (callback) {
+        if (self.vumeter) {
+            self.vumeter.getElement().remove();
+            delete self.vumeter
+        }
+
+        // cleanup the monitored ports that were enabled in the setupMonitorVUMeter function
+        if (self.monitoredPorts && self.monitoredPorts.length > 0) {
+
+            function cleanupMonitoredPort() {
+                // cleanup the first port in the array
+                const monitoredPort = self.monitoredPorts.shift();
+                
+                if (!monitoredPort) {
+                    // FINISH: all port removed
+                    if (callback) {
+                        callback()
+                    }
+                } else {
+                    // cleanup
+                    if (monitoredPort.alreadyMonitored) {
+                        // no need to cleanup go to the next
+                        cleanupMonitoredPort();
+                    } else {
+                        // cleanup and wait
+                        options.changePortMonitoring(monitoredPort.portSymbol, 'disable', function (status) {
+                            if (status) {
+                                console.log("GUI Port monitoring: FAIL to disabled for port", monitoredPort.portSymbol);
+                            }
+                            
+                            // recoursion: next element
+                            setTimeout(cleanupMonitoredPort, 750);
+                        });
+                    }
+                }
+            }
+
+            // start everything: cleanup the first port
+            cleanupMonitoredPort();
+        } else {
+            // nothing to cleanup just call the callback
+            if (callback) {
+                callback()
+            }
+        }
+    }
+
+    this.updateCompareSnapshotStatus = function (status) {
+        const compareAButton = self.settings.find('.js-ab-compare-snapshot-a')
+        const compareBButton = self.settings.find('.js-ab-compare-snapshot-b')
+        const compareTakeButton = self.settings.find('.js-ab-compare-snapshot-take')
+
+        // initialize the compare buttons state based on the current slot
+        if (status == 'A') {
+            compareAButton
+                .addClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+            compareBButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+        } else if (status == 'B') {
+            compareAButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+            compareBButton
+                .addClass('js-ab-compare-snapshot-selected')
+                .removeClass('js-ab-compare-snapshot-disabled')
+        } else if (status == 'init') {
+            compareAButton.removeClass('js-ab-compare-snapshot-selected js-ab-compare-snapshot-disabled')
+            compareBButton.removeClass('js-ab-compare-snapshot-selected js-ab-compare-snapshot-disabled')
+        } else {
+            // empty state
+            compareAButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .addClass('js-ab-compare-snapshot-disabled')
+            compareBButton
+                .removeClass('js-ab-compare-snapshot-selected')
+                .addClass('js-ab-compare-snapshot-disabled')
+        }
     }
 
     this.render = function (instance, callback, skipNamespace) {
@@ -814,6 +1423,7 @@ function GUI(effect, options) {
                 self.icon = $('<div class="mod-pedal">')
             }
 
+            self.icon.data('helpId', 'mod-pedal-icon')
             var templateData = self.getTemplateData(effect, skipNamespace)
             self.icon.html(Mustache.render(effect.gui.iconTemplate || options.defaultIconTemplate, templateData))
 
@@ -841,6 +1451,7 @@ function GUI(effect, options) {
 
             if (instance) {
                 self.settings = $('<div class="mod-settings" mod-instance="' + instance + '">')
+                self.settingsPerformance = $('<div class="mod-settings" mod-instance="' + instance + '">')
             } else {
                 self.settings = $('<div class="mod-settings">')
             }
@@ -862,179 +1473,299 @@ function GUI(effect, options) {
             var totalPresetCount = self.effect.presets.length
 
             self.settings.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            // add to template data that this is the performaceView so the UI can adapt
+            templateData['isPerformanceView'] = true;
+            self.settingsPerformance.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            // remove to mantain the templateData as clean as possible
+            delete templateData['isPerformanceView'];
 
             self.assignControlFunctionality(self.settings, false)
+            self.assignControlFunctionality(self.settingsPerformance, false)
 
             var presetElem = self.settings.find('.mod-presets')
+            var presetElemPerfView = self.settingsPerformance.find('.mod-presets')
+            var compareAButton = self.settings.find('.js-ab-compare-snapshot-a')
+            var compareBButton = self.settings.find('.js-ab-compare-snapshot-b')
+            var compareTakeButton = self.settings.find('.js-ab-compare-snapshot-take')
 
-            if (instance &&
-                (totalPresetCount > 0 || self.effect.parameters.length + self.effect.ports.control.input.length > 0))
+            if (instance)
             {
-                presetElem.data('enabled', true)
+                self.updateCompareSnapshotStatus(undefined)
 
-                var getCurrentPresetItem = function () {
-                    if (! self.currentPreset) {
-                        return null
-                    }
-                    var opt = presetElem.find('[mod-role=enumeration-option][mod-uri="' + self.currentPreset + '"]')
-                    if (opt.length == 0) {
-                        return null
-                    }
-                    return opt
-                }
-
-                var presetItemClicked = function (e) {
-                    if (!presetElem.data('enabled'))
-                        return presetElem.customSelect('prevent', e)
-
-                    var value = $(this).attr('mod-uri')
-                    options.presetLoad(value)
-                }
-
-                presetElem.find('.preset-btn-save').click(function () {
-                    if ($(this).hasClass('disabled')) {
+                compareAButton.click(function () {
+                    if (compareBButton.hasClass('js-ab-compare-snapshot-disabled'))
                         return
-                    }
-                    var item = getCurrentPresetItem()
-                    if (! item) {
+
+                    options.compareSnapshotSwitch('A')
+                });
+
+                compareBButton.click(function () {
+                    if (compareBButton.hasClass('js-ab-compare-snapshot-disabled'))
                         return
+
+                    options.compareSnapshotSwitch('B')
+                });
+                compareTakeButton.click(function () {
+                    options.compareSnapshotTake(function(ok) {
+                        if (ok) {
+                            options.compareSnapshotSwitch('B')
+                        } else {
+                            new Notification('error', 'Failed to take snapshot', 2000)
+                        }
+                    })
+                });
+
+                if (totalPresetCount > 0 || self.effect.parameters.length + self.effect.ports.control.input.length > 0)
+                {
+                    self.handleSettingsPresets(presetElem, presets)
+                    self.handleSettingsPresets(presetElemPerfView, presets)
+
+                    var getCurrentPresetItem = function () {
+                        if (! self.currentPreset) {
+                            return null
+                        }
+                        var opt = presetElem.find('[mod-role=enumeration-option][mod-uri="' + self.currentPreset + '"]')
+                        if (opt.length == 0) {
+                            return null
+                        }
+                        return opt
                     }
-                    var name = item.text() || "Untitled",
-                        path = item.attr('mod-path'),
-                        uri  = item.attr('mod-uri')
-                    if (! path || ! uri) {
-                        return
-                    }
-                    options.presetSaveReplace(uri, path, name, function (resp) {
-                        if (! resp.ok) {
+
+                    /* we only need to handle preset save/rename/delete in the setting view and not in the performance view */
+                    presetElem.find('.preset-btn-save').click(function () {
+                        if ($(this).hasClass('disabled')) {
                             return
                         }
-                        item.attr('mod-path', resp.bundle)
-                        item.attr('mod-uri', resp.uri)
-                    })
-                })
-
-                presetElem.find('.preset-btn-save-as').click(function () {
-                    if (desktop == null) {
-                        return
-                    }
-                    var name = "",
-                        item = getCurrentPresetItem()
-                    if (item) {
-                        name = item.text()
-                    }
-                    desktop.openPresetSaveWindow("Saving Preset", name, function (newName) {
-                        options.presetSaveNew(newName, function (resp) {
-                            var newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'">'+newName+'</div>')
-                            newItem.appendTo(presetElem.find('.mod-preset-user')).click(presetItemClicked)
-
-                            presetElem.find('.radio-preset-user').click()
-                            presetElem.find('.preset-btn-assign-all').removeClass("disabled")
-
-                            totalPresetCount += 1
-                            self.selectPreset(resp.uri)
-                        })
-                    })
-                })
-
-                presetElem.find('.preset-btn-rename').click(function () {
-                    if (desktop == null) {
-                        return
-                    }
-                    if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
-                        return
-                    }
-                    var item = getCurrentPresetItem()
-                    if (! item) {
-                        return
-                    }
-                    var name = name = item.text(),
-                        path = item.attr('mod-path'),
-                        uri  = item.attr('mod-uri')
-                    if (! path || ! uri) {
-                        return
-                    }
-                    desktop.openPresetSaveWindow("Renaming Preset", name, function (newName) {
-                        options.presetSaveReplace(uri, path, newName, function (resp) {
+                        var item = getCurrentPresetItem()
+                        if (! item) {
+                            return
+                        }
+                        var name = item.text() || "Untitled",
+                            path = item.attr('mod-path'),
+                            uri  = item.attr('mod-uri')
+                        if (! path || ! uri) {
+                            return
+                        }
+                        options.presetSaveReplace(uri, path, name, function (resp) {
+                            if (! resp.ok) {
+                                return
+                            }
                             item.attr('mod-path', resp.bundle)
                             item.attr('mod-uri', resp.uri)
-                            item.text(newName)
+                            item.find(".mod-preset-label")
+                                .attr('mod-uri', resp.uri)
+                            item.find('.mod-preset-check')
+                                .attr('mod-uri', resp.uri)
+                                .attr('id', 'preset-' + resp.uri)
                         })
                     })
-                })
 
-                presetElem.find('.preset-btn-delete').click(function () {
-                    if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
-                        return
-                    }
-                    var item = getCurrentPresetItem()
-                    if (! item) {
-                        return
-                    }
-                    var path = item.attr('mod-path')
-                    if (! path) {
-                        return
-                    }
-                    options.presetDelete(self.currentPreset, path, function () {
-                        self.selectPreset("")
-                        item.remove()
-
-                        totalPresetCount -= 1
-
-                        if (totalPresetCount == 1) {
-                            presetElem.find('.preset-btn-assign-all').addClass("disabled")
+                    presetElem.find('.preset-btn-save-as').click(function () {
+                        if (desktop == null) {
+                            return
                         }
+                        var name = "",
+                            item = getCurrentPresetItem()
+                        if (item) {
+                            name = item.find(".mod-preset-label").text() || "Undefined"
+                        }
+                        desktop.openPresetSaveWindow("Saving Preset", name, function (newName) {
+                            options.presetSaveNew(newName, function (resp) {
+                                const newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'" class="mod-preset"><input type="checkbox" id="preset-'+resp.uri+'" class="mod-preset-check" mod-uri="'+resp.uri+'" checked><label class="mod-preset-label">'+newName+'</label></div>')
+                                //var newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'">'+newName+'</div>')
+                                newItem.appendTo(presetElem.find('.mod-preset-user')) // .click((e) => self.presetItemClicked(newItem, presetElem, e))
+
+                                newItem.click((e) => self.presetItemClicked(newItem, presetElem, e))
+                                const checkbox = newItem.find('.mod-preset-check')
+                                checkbox.click((e) => {
+                                    e.stopPropagation() // avoid triggering the preset selection when clicking the checkbox
+                                    const enabled =  e.target.checked
+
+                                    self.setPresetEnabled(checkbox, enabled, function (resp) {
+                                        if (!resp) {
+                                            // in case of error revert the checkbox state
+                                            e.target.checked = !enabled
+                                        }
+                                    })
+                                }).prop('checked', true)
+
+                                presetElem.find('.radio-preset-user').click()
+                                presetElem.find('.preset-btn-assign-all').removeClass("disabled")
+
+                                totalPresetCount += 1
+                                self.selectPreset(resp.uri)
+                            })
+                        })
                     })
-                })
 
-                presetElem.find('.radio-preset-factory').click(function () {
-                    presetElem.find('.mod-preset-user').hide()
-                    presetElem.find('.mod-preset-factory').show()
-                })
-                presetElem.find('.radio-preset-user').click(function () {
-                    presetElem.find('.mod-preset-factory').hide()
-                    presetElem.find('.mod-preset-user').show()
-                })
-                presetElem.find('[mod-role=enumeration-option]').each(function () {
-                    $(this).click(presetItemClicked)
-                })
+                    presetElem.find('.preset-btn-rename').click(function () {
+                        if (desktop == null) {
+                            return
+                        }
+                        if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
+                            return
+                        }
+                        var item = getCurrentPresetItem()
+                        if (! item) {
+                            return
+                        }
+                        var name = name = item.find(".mod-preset-label").text() || "Undefined"
+                            path = item.attr('mod-path'),
+                            uri  = item.attr('mod-uri')
+                        if (! path || ! uri) {
+                            return
+                        }
+                        desktop.openPresetSaveWindow("Renaming Preset", name, function (newName) {
+                            options.presetSaveReplace(uri, path, newName, function (resp) {
+                                item.attr('mod-path', resp.bundle)
+                                item.attr('mod-uri', resp.uri)
+                                item.find(".mod-preset-label")
+                                    .text(newName)
+                                item.find('.mod-preset-check')
+                                    .attr('mod-uri', resp.uri)
+                                    .attr('id', 'preset-' + resp.uri)
+                            })
+                        })
+                    })
 
-                if (totalPresetCount == 1) {
-                    presetElem.find('.preset-btn-assign-all').addClass("disabled")
+                    presetElem.find('.preset-btn-delete').click(function () {
+                        if ($(this).hasClass('disabled') || ! presetElem.data('enabled')) {
+                            return
+                        }
+                        var item = getCurrentPresetItem()
+                        if (! item) {
+                            return
+                        }
+                        var path = item.attr('mod-path')
+                        if (! path) {
+                            return
+                        }
+                        options.presetDelete(self.currentPreset, path, function () {
+                            self.selectPreset("")
+                            item.remove()
 
-                } else if (presets.factory.length == 0) {
-                    presetElem.find('.mod-enumerated-title').find('span').hide()
-                    presetElem.find('.mod-preset-factory').hide()
-                    presetElem.find('.mod-preset-user').show()
+                            totalPresetCount -= 1
 
-                    if (presets.user.length == 0) {
-                        presetElem.find('.preset-btn-assign-all').addClass("disabled")
-                    }
-                }
-            }
-            else
-            {
-                presetElem.hide()
-            }
-
-            if (instance && self.effect.parameters.length)
-            {
-                self.settings.find('.mod-file-list').each(function () {
-                    var elem = $(this)
-                    var list = elem.find('.mod-enumerated-list')
-                    if (list.length == 1 && list[0].childElementCount > 5) {
-                        elem.find('.file-list-btn-expand').click(function () {
-                            if (elem.hasClass('expanded')) {
-                                elem.removeClass('expanded')
-                            } else {
-                                elem.addClass('expanded')
+                            if (totalPresetCount == 1) {
+                                presetElem.find('.preset-btn-assign-all').addClass("disabled")
                             }
                         })
-                    } else {
-                        elem.find('.file-list-btn-expand').hide()
-                    }
+                    })
+                }
+                else
+                {
+                    presetElem.hide()
+                    presetElemPerfView.hide()
+                }
+
+                if (self.effect.parameters.length)
+                {
+                    self.settings.find('.mod-file-list').each(function () {
+                        var elem = $(this)
+                        var list = elem.find('.mod-enumerated-list')
+                        if (list.length == 1 && list[0].childElementCount > 5) {
+                            elem.find('.file-list-btn-expand').click(function () {
+                                if (elem.hasClass('expanded')) {
+                                    elem.removeClass('expanded')
+                                } else {
+                                    elem.addClass('expanded')
+                                }
+                            })
+                        } else {
+                            elem.find('.file-list-btn-expand').hide()
+                        }
+
+                        elem.find('.file-list-btn-t3k').click(function () {
+                            const uri = $(this).attr('mod-parameter-uri')
+                            const parameter = self.effect.parameters.find((p) => p.uri == uri)
+
+                            if (parameter) {
+                                // TODO T3K: check if file type can be downloaded from tone3000
+                                const t3k = desktop.pedalboard.data('T3KIntegration')
+                                t3k.startSelectFlow(instance, parameter)
+                            }
+                        })
+                    })
+                }
+
+            }
+
+            var editButton = self.settings.find('.mod-pedal-settings .mod-edit')
+            if (instance && editButton.length == 1) {
+                editButton.click(function () {
+                    console.log("Edit clicked")
+                    desktop.openInputBoxWindow("Rename", self.label || self.effect.name, function(newName, cancelled) {
+                        if (cancelled)
+                            return
+
+                        self.setLabel(newName)
+                    },
+                    "Rename", 
+                    function(value) {
+                        return true; // always valid
+                    })
                 })
             }
+
+            // global plugin snapshot icon
+            self.settings.find('.plugin-global-snapshot').each(function () {
+                var control = $(this)
+
+                control.click(function () {
+                    let newSnapshotable = false;
+
+                    if (control.hasClass("active") || control.hasClass("mixed")) {
+                        // all snapshotable on or mixed -> turn all off
+                        newSnapshotable = false;
+                    } else {
+                        // all snapshotable off -> turn all on
+                        newSnapshotable = true;
+                    }
+
+                    desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, ":bypass", newSnapshotable)
+                    desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, ":presets", newSnapshotable)
+                    for(let key in templateData.effect.ports.control.input) {
+                        const port = templateData.effect.ports.control.input[key];
+                        const symbol = port.symbol;
+
+                        console.log("Toggling global snapshotable for", self.instance, " new:", newSnapshotable ? "ON" : "OFF")
+                        desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, newSnapshotable)
+                    }
+
+                    //TODO: update the parameters
+                })
+            })
+
+            // snapshot icon click
+            self.settings.find('[mod-role=bypass-snapshotable],[mod-role=presets-snapshotable],[mod-role=input-control-snapshotable],[mod-role=parameter-snapshotable]').each(function () {
+                var control = $(this)
+
+                control.click(function () {
+                    const hasSnapshotable = control.hasClass("active")
+
+                    if (control.attr('mod-role') == 'parameter-snapshotable') {
+                        const uri = control.attr('mod-parameter-uri')
+                        if (!uri) {
+                            return
+                        }
+                        desktop.pedalboard.data('pluginParameterSnapshotableSet')(self.instance, uri, hasSnapshotable ? false : true)
+                    } else {
+                        let symbol;
+                        if (control.attr('mod-role') == 'bypass-snapshotable') {
+                            symbol = ":bypass"
+                        } else if (control.attr('mod-role') == 'presets-snapshotable') {
+                            symbol = ":presets"
+                        } else {
+                            symbol = control.attr('mod-port-symbol')
+                        }
+
+                        if (!symbol) {
+                            return
+                        }
+                        desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, hasSnapshotable ? false : true)
+                    }
+                })
+            })
 
             if (! instance) {
                 self.settings.find(".js-close").hide()
@@ -1125,6 +1856,9 @@ function GUI(effect, options) {
                     value: port.value
                 })
             }
+
+            // T3K Integration
+
             // ready!
             self.jsStarted = true
             self.triggerJS({ type: 'start', parameters: jsParameters, ports: jsPorts })
@@ -1136,6 +1870,8 @@ function GUI(effect, options) {
             render()
         } else {
             self.dependenciesCallbacks.push(render)
+            // fire the loadDependencies now that we have the instance id
+            self.deferredLoadDependencies()
         }
     }
 
@@ -1143,6 +1879,7 @@ function GUI(effect, options) {
         var render = function () {
             self.preRender()
             var icon = $('<div class="mod-pedal dummy ignore-arrive">')
+            icon.data('helpId', 'mod-pedal-icon')
             icon.html(Mustache.render(effect.gui.iconTemplate || options.defaultIconTemplate,
                       self.getTemplateData(effect, false)))
             icon.find('[mod-role="input-audio-port"]').addClass("mod-audio-input")
@@ -1158,6 +1895,8 @@ function GUI(effect, options) {
             render()
         } else {
             self.dependenciesCallbacks.push(render)
+            // fire the loadDependencies now
+            self.deferredLoadDependencies()
         }
     }
 
@@ -1243,6 +1982,101 @@ function GUI(effect, options) {
         if (handle.length > 0) {
             element.draggable(drag_options)
             element.click(options.click)
+        }
+    }
+
+    this.assignParameterControlFunctionality = function(instance, control, uri, onlySetValues) {
+        var parameter = self.parameters[uri]
+
+        if (parameter)
+        {
+            /*  */ if (parameter.type === "http://lv2plug.in/ns/ext/atom#Bool") {
+                parameter.valuetype = 'b'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Int") {
+                parameter.valuetype = 'i'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Long") {
+                parameter.valuetype = 'l'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Float") {
+                parameter.valuetype = 'f'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Double") {
+                parameter.valuetype = 'g'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#String") {
+                parameter.valuetype = 's'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Path") {
+                parameter.valuetype = 'p'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#URI") {
+                parameter.valuetype = 'u'
+            } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Vector") {
+                parameter.valuetype = 'v'
+            } else {
+                return
+            }
+
+            if (parameter.control || parameter.string)
+            {
+                // Set the display formatting of this control
+                if (parameter.string)
+                    parameter.format = '%s'
+                else if (parameter.units.render)
+                    parameter.format = parameter.units.render.replace('%f', '%.2f')
+                else
+                    parameter.format = '%.2f'
+
+                if (parameter.properties.indexOf("integer") >= 0) {
+                    parameter.format = parameter.format.replace(/%\.\d+f/, '%d')
+                }
+
+                var valueField = element.find('[mod-role=input-parameter-value][mod-parameter-uri="' + uri + '"]')
+                parameter.valueFields.push(valueField)
+
+                if (valueField.length > 0 && parameter.properties.indexOf("toggled") < 0)
+                {
+                    self.setupValueField(valueField, parameter, function (value) {
+                        self.lv2PatchSet(uri, parameter.valuetype, value, control)
+                        // setWritableParameterValue() skips this control as it's the same as the 'source'
+                        control.controlWidget('setValue', value, true)
+                    })
+                }
+            }
+            else if (parameter.path)
+            {
+                // TODO?
+            }
+            else
+            {
+                return
+            }
+
+            let currentPath = undefined
+            if (control.customSelectPath) {
+                // preserve current path if available
+                currentPath = control.customSelectPath('getCurrentPath')
+            }
+            control.controlWidget({
+                dummy: onlySetValues,
+                port: parameter,
+                currentPath: currentPath ,
+                change: function (e, value) {
+                    self.lv2PatchSet(uri, parameter.valuetype, value, control)
+                },
+                urihandle: function(value) {
+                    console.log(`handle special uri ${value}`)
+                    const t3k = desktop.pedalboard.data('T3KIntegration')
+                    t3k.startSelectFlow(instance, parameter)
+                }
+            })
+
+            if (instance) {
+                control.attr("mod-instance", instance)
+            }
+
+            parameter.widgets.push(control)
+
+            self.setWritableParameterValue(uri, parameter.valuetype, parameter.value, control, true)
+        }
+        else
+        {
+            control.text('No such parameter: ' + uri)
         }
     }
 
@@ -1372,87 +2206,7 @@ function GUI(effect, options) {
         element.find('[mod-role=input-parameter]').each(function () {
             var control = $(this)
             var uri = $(this).attr('mod-parameter-uri')
-            var parameter = self.parameters[uri]
-
-            if (parameter)
-            {
-                /*  */ if (parameter.type === "http://lv2plug.in/ns/ext/atom#Bool") {
-                    parameter.valuetype = 'b'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Int") {
-                    parameter.valuetype = 'i'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Long") {
-                    parameter.valuetype = 'l'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Float") {
-                    parameter.valuetype = 'f'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Double") {
-                    parameter.valuetype = 'g'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#String") {
-                    parameter.valuetype = 's'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Path") {
-                    parameter.valuetype = 'p'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#URI") {
-                    parameter.valuetype = 'u'
-                } else if (parameter.type === "http://lv2plug.in/ns/ext/atom#Vector") {
-                    parameter.valuetype = 'v'
-                } else {
-                    return
-                }
-
-                if (parameter.control || parameter.string)
-                {
-                    // Set the display formatting of this control
-                    if (parameter.string)
-                        parameter.format = '%s'
-                    else if (parameter.units.render)
-                        parameter.format = parameter.units.render.replace('%f', '%.2f')
-                    else
-                        parameter.format = '%.2f'
-
-                    if (parameter.properties.indexOf("integer") >= 0) {
-                        parameter.format = parameter.format.replace(/%\.\d+f/, '%d')
-                    }
-
-                    var valueField = element.find('[mod-role=input-parameter-value][mod-parameter-uri="' + uri + '"]')
-                    parameter.valueFields.push(valueField)
-
-                    if (valueField.length > 0 && parameter.properties.indexOf("toggled") < 0)
-                    {
-                        self.setupValueField(valueField, parameter, function (value) {
-                            self.lv2PatchSet(uri, parameter.valuetype, value, control)
-                            // setWritableParameterValue() skips this control as it's the same as the 'source'
-                            control.controlWidget('setValue', value, true)
-                        })
-                    }
-                }
-                else if (parameter.path)
-                {
-                    // TODO?
-                }
-                else
-                {
-                    return
-                }
-
-                control.controlWidget({
-                    dummy: onlySetValues,
-                    port: parameter,
-                    change: function (e, value) {
-                        self.lv2PatchSet(uri, parameter.valuetype, value, control)
-                    }
-                })
-
-                if (instance) {
-                    control.attr("mod-instance", instance)
-                }
-
-                parameter.widgets.push(control)
-
-                self.setWritableParameterValue(uri, parameter.valuetype, parameter.value, control, true)
-            }
-            else
-            {
-                control.text('No such parameter: ' + uri)
-            }
+            self.assignParameterControlFunctionality(instance, control, uri, onlySetValues)
         })
 
         if (onlySetValues) {
@@ -1593,9 +2347,13 @@ function GUI(effect, options) {
         if (!data.brand) {
             data.brand = options.gui.brand || ""
         }
-        if (!data.label) {
-            data.label = options.gui.label || ""
+        if (!data.userLabel) {
+            data.userLabel = this.label
         }
+        if (!data.label) {
+            data.label =  data.userLabel || options.gui.label  || ""
+        }
+
         if (!data.color) {
             data.color = options.gui.color
         }
@@ -1655,6 +2413,26 @@ function GUI(effect, options) {
             data.effect.all_control_in_ports = []
         }
 
+        // create an array of output ports
+        // with a more human friendly label
+        data.effect.monitor_ports = []
+        if (data.effect.ports.audio.output) {
+            if (data.effect.ports.audio.output.length > 1) {
+                // if more than one output add a special "all" output port
+                data.effect.monitor_ports.push({
+                    symbol: "all",
+                    label: "All outputs (peak)"
+                })
+            }
+            for (let port of data.effect.ports.audio.output) {
+
+                if (!port['label']) {
+                    port['label'] = port['name'].replace('_', ' ')
+                }
+                data.effect.monitor_ports.push(port)
+            }
+        }
+
         for (var i in data.effect.parameters) {
             var parameter = data.effect.parameters[i]
 
@@ -1671,6 +2449,65 @@ function GUI(effect, options) {
         }
 
         return data
+    }
+
+    this.refreshPluginFileListParameter = function(instance, parameteri, setValue) {
+
+        loadFileTypesList(parameteri, false, function() {
+            let options = ""
+            var parameter = self.parameters[parameteri.uri]
+            // update indexed parameter with new files
+            $.extend(parameter, parameteri)
+            // delete previous widgets
+            parameter.widgets = []
+
+            for(let file of parameter.files) {
+                options +=
+                    '<div mod-role="enumeration-option" mod-parameter-value="' + file.fullname +'">' + file.basename + '</div>\n'
+            }
+
+            // need to update the values in the icon UI
+            self.icon
+                .find('.mod-enumerated[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                .find('.mod-enumerated-list')
+                .html(options)
+            self.icon
+                .find('[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                .each(function() {
+                    // reattach the widget
+                    let control = $(this)
+                    self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                })
+            // need to update the values in the settings UI
+            if (self.settings) {
+                self.settings
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                    .html(options)
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                        if (setValue) {
+                            if (control.customSelectPath) {
+                                // preserve current path if available
+                                currentPath = control.customSelectPath('setValue', setValue)
+                            }
+                        }
+                    })
+            }
+
+            // need to update the values in the settings for performance mode
+            if (self.settingsPerformance) {
+                self.settingsPerformance
+                    .find('.mod-enumerated-list[mod-role="input-parameter"][mod-parameter-uri="' + parameter.uri + '"]')
+                    .html(options)
+                    .each(function() {
+                        // reattach the widget
+                        let control = $(this)
+                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                    })
+            }
+        })
     }
 
     this.jsData = {}
@@ -1744,6 +2581,21 @@ function GUI(effect, options) {
             self.jsCallback = null
             console.log("A plugin javascript code is broken and has been disabled, reason:\n", err)
         }
+    }
+
+    /*
+     * Options for the performance view.
+     *
+     * Returns an object with these properties:
+     *    "index": plugin index in the view
+     *    "visible": true always shown in the plugin list
+     *
+     */
+    this.getPerformanceOptions = function() {
+        if (!options.performance)
+            options.performance = {"index": 0, "visible": true}
+
+        return options.performance
     }
 }
 
@@ -2652,23 +3504,212 @@ JqueryClass('customSelect', baseWidget, {
 JqueryClass('customSelectPath', baseWidget, {
     init: function (options) {
         var self = $(this)
+        self.data('initialized', false)
+        self.data('icons', {
+            backArrow: `<i class="icon-folder-up mod-select-path-icon"></i>`,
+            folder: `<i class="icon-folder mod-select-path-icon"></i>`,
+            folderOpen: `<i class="icon-folder-open mod-select-path-icon"></i>`,
+            userFile: `<i class="icon-user-file mod-select-path-icon"></i>`,
+        })
+        self.data('currentPath', options.currentPath || [])
+        self.data('port', options.port)
+        self.data('urihandle', options.urihandle)
         self.customSelectPath('config', options)
         self.customSelectPath('setValue', options.port.value, true)
         self.find('[mod-role=enumeration-option]').each(function () {
             var opt = $(this)
+            let icon = undefined
+            const optValue = opt.attr('mod-parameter-value')
+
+            // find the options in the port (parameter) files
+            const file = options.port.files.find(item => item.fullname == optValue)
+
+            if (file && file.icon && file.icon.length > 0) {
+                icon = file.icon
+            }
+
+            if (!icon) {
+                const icons = self.data('icons')
+                if (optValue.startsWith("dir://")) {
+                    icon = icons.folder
+                } else {
+                    icon = icons.userFile
+                }
+            }
+            opt.attr('title', opt.text())
+            opt.html(`${icon}` + opt.html())
             opt.click(function (e) {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
                 }
                 var value = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
-                self.customSelectPath('setValue', value, false)
+                if (value?.startsWith('dir://')) {
+                    const icons = self.data('icons')
+                    const currentPath = self.customSelectPath('getCurrentPath')
+                    let isNavigateBack = false
+
+                    if (currentPath.length > 0) {
+                        // click on the same folder, is a navigate back
+                        isNavigateBack = 'dir://' + currentPath[currentPath.length - 1] == value
+                    }
+                    if (isNavigateBack) {
+                        self.customSelectPath('popDir')
+                        opt.html(opt.html().substr(icons.backArrow.length).replace('icon-folder-open', 'icon-folder'))
+                    } else {
+                        self.customSelectPath('pushDir', value)
+                        opt.html(icons.backArrow + opt.html().replace('icon-folder', 'icon-folder-open'))
+                    }
+                    e.stopPropagation()
+                } else if (value?.indexOf('://', 0) > -1) {
+                    // handle special uri
+                    const urihandle = self.data('urihandle')
+                    if (urihandle) {
+                        urihandle(value)
+                    }
+                } else {
+                    self.customSelectPath('setValue', value, false)
+                }
             })
         })
-        self.click(function () {
+
+        self.off('click.customSelectPath')
+        self.on('click.customSelectPath', function() {
             self.find('.mod-enumerated-list').toggle()
         })
 
+        self.customSelectPath('refreshFileList', self.data('currentPath'))
+        self.data('initialized', true)
         return self
+    },
+
+    getCurrentPath: function() {
+        let self = $(this)
+
+        return self.data('currentPath')
+    },
+
+
+    refreshFileList: function(current) {
+        let self = $(this)
+        let port = self.data('port')
+        let currentPaths
+
+        if (current.length == 0) {
+            currentPaths = port.basepaths
+        } else {
+            // show only files in the current path
+            currentPaths = [ current.join('/') ]
+        }
+
+        let validItems = []
+        for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                if (current.length == 0) {
+                    validItems.push(file)
+                }
+                continue;
+            }
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+
+            // remove last element
+            const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+
+            if (lastSlashIndex != -1) {
+                itemPath = fullname.slice(0, lastSlashIndex);
+            } else {
+                itemPath = fullname
+            }
+
+            for(let currentPath of currentPaths) {
+                if (currentPath === itemPath
+                    || (current.length > 0 && itemIsDir && currentPath == fullname) // always show the current folder since is used to navigate up
+                    || (current.length == 0 && file.dirname == '') // show the default value on root
+                    ) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+         self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+                opt.removeClass('mod-hidden')
+            } else {
+                opt.addClass('mod-hidden')
+            }
+        });
+    },
+
+    pushDir: function(dir) {
+        let self = $(this)
+        let current = self.data('currentPath')
+        let port = self.data('port')
+        // set the value as current folder
+        let currentPath = dir.substr('dir://'.length)
+        current.push(currentPath)
+
+        let validItems = []
+        for(let file of port.files) {
+            if (file.fullname.startsWith('t3k://')) {
+                if (current.length == 0) {
+                    validItems.push(file)
+                }
+                continue;
+            }
+            // check if file path is direct child of current path
+            // if yes add to files to show
+            let fullname = file.fullname
+            let itemIsDir = fullname.startsWith('dir://')
+
+            if (itemIsDir) {
+                fullname = fullname.substr('dir://'.length)
+            }
+
+            if (fullname == currentPath) {
+                // always show current folder since is used to navigate Up
+                validItems.push(file)
+            } else {
+                // remove last element
+                const lastSlashIndex = Math.max(fullname.lastIndexOf('/'), fullname.lastIndexOf('\\'));
+
+                if (lastSlashIndex != -1) {
+                    itemPath = fullname.slice(0, lastSlashIndex);
+                } else {
+                    itemPath = fullname
+                }
+
+                if (currentPath === itemPath) {
+                    validItems.push(file)
+                }
+            }
+        }
+
+        self.find('[mod-role=enumeration-option]').each(function () {
+            let opt = $(this)
+            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+
+            if (validItems.find((file) => item === file.fullname)) {
+                opt.removeClass('mod-hidden')
+            } else {
+                opt.addClass('mod-hidden')
+            }
+        });
+    },
+
+    popDir: function() {
+        let self = $(this)
+        let current = self.data('currentPath')
+        current.pop()
+        self.customSelectPath('refreshFileList', current)
     },
 
     setValue: function (value, only_gui) {
@@ -2688,6 +3729,47 @@ JqueryClass('customSelectPath', baseWidget, {
             valueField.text(selected.text())
         }
 
+        // sync the current folder with the value path
+        if (self.data('initialized')) {
+            let parts = value.split('/')
+            let path = ""
+            let parentPath = ""
+            let newCurrent = []
+
+            for(let index = 0; index < parts.length - 1; index++) {
+                if (index > 0) path += '/'
+                path += parts[index]
+                const folder = self.find("[mod-role=enumeration-option][mod-parameter-value='dir://" + path + "']")
+                if (folder.length > 0) {
+                    if (parentPath.length > 0) {
+                        // puth the other folders
+                        newCurrent.push(parts[index])
+                    } else {
+                        // push the root
+                        newCurrent.push(path)
+                    }
+                    parentPath = path
+                    // update the element UI
+                    const backArrow = self.data('icons').backArrow
+
+                    if (!folder.html().startsWith(backArrow)) {
+                        folder.html(backArrow + folder.html())
+                    }
+                }
+            }
+
+            // check if current folder is different
+            const current = self.data('currentPath')
+            let changeCurrentFolder = false
+
+            if (current.length !== newCurrent.length || !current.every((val, index) => val === newCurrent[index])) {
+                // empty the array
+                current.splice(0, current.length);
+                newCurrent.forEach(item => current.push(item))
+                // update the UI
+                self.customSelectPath('refreshFileList', current)
+            }
+        }
         if (!only_gui) {
             self.trigger('valuechange', value)
         }

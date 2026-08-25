@@ -272,8 +272,9 @@ function getDividerOptions(port, minBpm, maxBpm) {
  * @return {Boolean}
  */
 function hasTempoRelatedDynamicScalePoints(port) {
-  return port.properties.indexOf("tempoRelatedDynamicScalePoints") > -1 &&
-         tempoDividerUnits.indexOf(port.units.symbol) > -1
+  return port 
+         && port.properties.indexOf("tempoRelatedDynamicScalePoints") > -1 
+         && tempoDividerUnits.indexOf(port.units.symbol) > -1
 }
 
 /**
@@ -282,5 +283,5 @@ function hasTempoRelatedDynamicScalePoints(port) {
  * @return {Boolean}
  */
 function hasStrictBounds(port) {
-  return port.properties.indexOf("hasStrictBounds") > -1
+  return port && port.properties.indexOf("hasStrictBounds") > -1
 }

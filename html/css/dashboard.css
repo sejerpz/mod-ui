@@ -697,6 +697,49 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     background-position:right center;
 }
 
+/* INPUT BOX POP-UP */
+.input-box-popup {
+    background:rgba(0,0,0,.75);
+    bottom:0;
+    left:0;
+    position:absolute;
+    right:0;
+    top:0;
+    z-index:1001;
+}
+
+.input-box-popup .box {
+    background:white;
+    left:50%;
+    margin:-150px -168px;
+    padding:18px;
+    position:absolute;
+    top:50%;
+    width:300px;
+}
+
+.input-box-popup h1 {
+    font-size:18px;
+    line-height:1;
+    margin:0 0 18px 0;
+    padding:0;
+    text-transform:uppercase;
+}
+
+
+.input-box-popup .actions {
+    border-color:#ddd;
+    border-style:solid;
+    border-width:1px 0 0 0;
+    margin:9px 0 0 0;
+    padding:18px 0 0 0;
+    text-align:right;
+}
+
+.input-box-popup input[type="text"] {
+    width:190px;
+}
+
 
 /* SAVE POP-UP */
 .save-popup {
@@ -1359,6 +1402,70 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     color: white !important;
 }
 
+/* = PEDALBOARD - AB COMPARE
+================================================ */
+
+#pedalboard-info .js-ab-compare {
+    float: right;
+}
+
+.js-ab-compare {
+    display: inline-flex;
+    margin-top: 6px;
+}
+
+.js-ab-compare-snapshot {
+    font-size: 14px;
+    line-height: 30px;
+    width: 32px;
+    text-align: center;
+    border: solid;
+    border-color: rgb(51, 51, 51);
+    height: 32px;
+    cursor: pointer;
+}
+
+.js-ab-compare-snapshot:hover {
+    color: white;
+    background-color: rgb(51, 51, 51);
+}
+
+.js-ab-compare-snapshot-a {
+    border-width:  1px 1px 1px 0px;
+    border-radius: 8px 0px 0px 8px;
+}
+
+.js-ab-compare-snapshot-take {
+    border-width: 1px;
+}
+
+.js-ab-compare-snapshot-b {
+    border-width:  1px 1px 1px 0px;
+    border-radius: 0px 8px 8px 0px;
+}
+
+.js-ab-compare-snapshot-selected  {
+    background-color: rgb(136, 57, 150);
+    color: white;
+}
+
+.js-ab-compare-snapshot-selected:hover  {
+    background-color: rgb(182, 84, 199);
+    cursor: default;
+    color: white;
+}
+
+.js-ab-compare-snapshot-disabled  {
+    background-color: rgb(51, 51, 51);
+    cursor: default;
+    color: black;
+}
+
+.js-ab-compare-snapshot-disabled:hover  {
+    background-color: rgb(71, 71, 71);
+    color: black;
+}
+
 @media only screen and (max-width: 1468px) {
     #plugins-library .count {
         display: none;
@@ -1369,3 +1476,39 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
         display: none !important;
     }
 }
+
+/* = SELECTION (shift-drag on the board to rubber-band, shift-click to toggle)
+================================================ */
+.mod-selection-box {
+    position: absolute;
+    border: 1px dashed #bbb;
+    background: rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+    z-index: 100000;
+}
+
+/* Selected plugins. Two treatments on purpose: the canvas is css-scaled, so any px
+   length shrinks with the zoom (a 3px outline is 0.75px at the 0.25 min zoom), while
+   filters are not geometric and read the same at every zoom. The filter goes on the
+   wrapper, which is already position:absolute, so it introduces no new containing
+   block for the absolutely positioned knobs inside. The outline goes on the template
+   root, the element pedals.css already treats as the pedal body. */
+#pedalboard-dashboard > .mod-pedal.mod-selected {
+    filter: brightness(1.08);
+}
+/* !important is needed to beat `*{outline:0 !important}` in main.css, which otherwise
+   kills this at any specificity */
+#pedalboard-dashboard > .mod-pedal.mod-selected > div:first-child {
+    outline: 4px solid #cbb4d4 !important;
+    outline-offset: 0;
+}
+/* The part that carries the signal: everything NOT selected fades back. opacity is not
+   a length, so it is zoom independent, and the wrapper is already a stacking context,
+   so this changes no paint order. */
+#pedalboard-dashboard.mod-has-selection > .mod-pedal:not(.mod-selected) {
+    opacity: 0.5;
+}
+#pedalboard-dashboard > .mod-pedal {
+    transition: opacity 0.15s, filter 0.15s;
+}
+

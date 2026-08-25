@@ -18,20 +18,24 @@ else
 fi
 
 # needed since ssh rsa deprecation/breakage
-SSH_OPTIONS="-o PubkeyAcceptedAlgorithms=+ssh-rsa"
+#SSH_OPTIONS="-o PubkeyAcceptedAlgorithms=+ssh-rsa"
 SCP_OPTIONS="${SSH_OPTIONS} -O"
 
 ssh ${SSH_OPTIONS} ${TARGET} mount / -o remount,rw
 
 ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/share/mod/html/css
 ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/share/mod/html/js
+ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/share/mod/html/help
+ssh ${SSH_OPTIONS} ${TARGET} mkdir -p /usr/share/mod/html/help/img
 ssh ${SSH_OPTIONS} ${TARGET} mkdir -p /usr/share/mod/html/css/fontello/{css,font} /usr/share/mod/html/js/{lib/slick/fonts,utils}
 
 ssh ${SSH_OPTIONS} ${TARGET} rm -f  /usr/lib/python3.*/site-packages/mod/*.py*
 ssh ${SSH_OPTIONS} ${TARGET} rm -f  /usr/lib/python3.*/site-packages/mod/communication/*.py*
-ssh ${SSH_OPTIONS} ${TARGET} rm -f  /usr/lib/python3.*/site-packages/modtools/*.py*
+#ssh ${SSH_OPTIONS} ${TARGET} rm -f  /usr/lib/python3.*/site-packages/modtools/*.py*
 
 scp ${SCP_OPTIONS} html/*.html                   ${TARGET}:/usr/share/mod/html/
+scp ${SCP_OPTIONS} html/help/*.md                ${TARGET}:/usr/share/mod/html/help/
+scp ${SCP_OPTIONS} html/help/img/*.*                 ${TARGET}:/usr/share/mod/html/help/img/
 scp ${SCP_OPTIONS} html/include/*.html           ${TARGET}:/usr/share/mod/html/include/
 scp ${SCP_OPTIONS} html/resources/*.html         ${TARGET}:/usr/share/mod/html/resources/
 scp ${SCP_OPTIONS} html/css/*.css                ${TARGET}:/usr/share/mod/html/css/
@@ -51,6 +55,6 @@ scp ${SCP_OPTIONS} modtools/*.py                 ${TARGET}:/usr/lib/python3.*/si
 
 ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/lib/python3.*/site-packages/mod/__pycache__
 ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/lib/python3.*/site-packages/mod/communication/__pycache__
-ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/lib/python3.*/site-packages/modtools/__pycache__
+#ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/lib/python3.*/site-packages/modtools/__pycache__
 
 echo "all ok"

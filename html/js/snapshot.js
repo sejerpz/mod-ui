@@ -222,6 +222,24 @@ function SnapshotsManager(options) {
         return false
     }
 
+    /*
+     * Load a snapshot on the mod
+     */
+    this.loadPreset = function(presetId, presetName) {
+        $.ajax({
+            url: '/snapshot/load',
+            type: 'GET',
+            data: {
+                id: presetId,
+            },
+            success: function () {
+                new Notification("info", "Snapshot " + presetName + " loaded", 2000)
+            },
+            error: function () {},
+            cache: false,
+        })
+    }
+
     this.optionClicked = function (e) {
         self.hideRenameOverlay()
 
@@ -239,18 +257,7 @@ function SnapshotsManager(options) {
             options.pedalPresetsWindow.find('.js-delete').removeClass('disabled')
         }
 
-        $.ajax({
-            url: '/snapshot/load',
-            type: 'GET',
-            data: {
-                id: selectId,
-            },
-            success: function () {
-                new Notification("info", "Snapshot " + prtitle + " loaded", 2000)
-            },
-            error: function () {},
-            cache: false,
-        })
+        self.loadPreset(selectId, prtitle)
     }
 
     this.hideRenameOverlay = function () {

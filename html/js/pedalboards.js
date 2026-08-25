@@ -123,6 +123,7 @@ JqueryClass('pedalboardBox', {
             viewModes: self.find('.view-modes'),
             viewModeList: self.find('#view-mode-list'),
             viewModeGrid: self.find('#view-mode-grid'),
+            dev_mode: false,
             list: function (callback) {
                 callback([])
             },
@@ -130,6 +131,9 @@ JqueryClass('pedalboardBox', {
                 callback([])
             },
             remove: function (pedalboard, callback) {
+                callback()
+            },
+            download: function (pedalboard, callback) {
                 callback()
             },
             load: function (bundlepath, broken, callback) {
@@ -174,6 +178,8 @@ JqueryClass('pedalboardBox', {
         self.find('.js-close').click(function () {
             self.window('close')
         })
+
+        self.data('dev_mode', PREFERENCES['dev-mode'] == "on")
 
         options.viewModes.pedalboardsModeSelector(options.resultCanvasUser,
                                                   options.resultCanvasFactory,
@@ -238,6 +244,18 @@ JqueryClass('pedalboardBox', {
                 e.stopPropagation();
                 return false
             })
+            const download = rendered.find('.js-download')
+
+            if (self.data('dev_mode')) {
+                download.click(function (e) {
+                    self.data('download')(pedalboard, function () {
+                        rendered.download()
+                    })
+                    e.stopPropagation();
+                    return false
+                })
+                download.removeClass('mod-hidden')
+            }
         }
 
         canvas.append(rendered)

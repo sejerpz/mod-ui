@@ -1,15 +1,49 @@
 <div class="mod-pedal-settings">
     <header class="clearfix">
-        <h1 class="alignleft">{{effect.name}}</h1>
-        <button class="js-close alignright btn btn-danger">Close</button>
+        <h1 class="alignleft {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">{{effect.name}}
+            <span class="plugin-label">{{#userLabel}} - {{userLabel}}{{/userLabel}}</span>
+            <span class="mod-edit"></span>
+            <span class="plugin-global-snapshot icon-camera"></span>
+        </h1>
+        <div class="mod-toolbar alignright  {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">
+            <div class="js-ab-compare" style="display: inline-flex; margin-top: 6px;">
+                <div class="js-ab-compare-snapshot js-ab-compare-snapshot-a js-ab-compare-snapshot-selected">
+                    A
+                </div>
+                <div class="js-ab-compare-snapshot js-ab-compare-snapshot-take">
+                    <i class="icon-camera"></i>
+                </div>
+                <div class="js-ab-compare-snapshot js-ab-compare-snapshot-b">
+                    B
+                </div>
+            </div>
+            <button class="js-close btn btn-danger">Close</button>
+        </div>
     </header>
+    <div class="mod-monitors clearfix">
+        <div class="mod-monitors-ports form-group clearfix">
+            <label>Monitor</label>
+            <div class="mod-controls">
+                <select class="mod-monitors-ports-dropdown form-control" name="audio-ports">
+                    {{#effect.monitor_ports}}
+                    <option value="{{symbol}}">{{label}}</option>
+                    {{/effect.monitor_ports}}
+                </select>
+            </div>
+        </div>
+
+        <div class="mod-monitor-container js-plugin-vumeter clearfix">
+        </div>
+    </div>
     <div class="mod-controls clearfix">
         <div class="mod-control-group clearfix">
             <div class="mod-switch bypass">
                 <span class="mod-switch-title">ON/OFF</span>
                 <div class="mod-light on" mod-role="bypass-light"></div>
+                <div class="mod-switch-background"></div>
                 <div class="mod-switch-image" mod-role="bypass"></div>
-                <div class="mod-address" mod-role="bypass-address"></div>
+                <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="bypass-address"></div>
+                <span class="mod-knob-snapshot-status icon-camera" mod-role="bypass-snapshotable"></span>
             </div>
 
             <!-- PRESET LIST -->
@@ -26,24 +60,30 @@
                         </span>
                     </form>
                 </span>
-                <div class="mod-enumerated-list mod-preset-factory" mod-widget="custom-select">
+                <span class="mod-knob-snapshot-status icon-camera" mod-role="presets-snapshotable"></span>
+                <div class="mod-enumerated-list mod-preset-factory mod-presets" mod-widget="custom-select">
                     {{#presets.factory}}
-                    <div mod-role="enumeration-option" mod-uri="{{uri}}">{{label}}</div>
+                    <div mod-role="enumeration-option" mod-uri="{{uri}}" mod-path="{{path}}" class="mod-preset">
+                        <input type="checkbox" id="preset-{{uri}}" class="mod-preset-check" mod-uri="{{uri}}" checked>
+                        <label class="mod-preset-label">{{label}}</label>
+                    </div>
                     {{/presets.factory}}
                 </div>
-                <div class="mod-enumerated-list mod-preset-user mod-hidden" mod-widget="custom-select">
+                <div class="mod-enumerated-list mod-preset-user mod-hidden mod-presets" mod-widget="custom-select">
                     {{#presets.user}}
-                    <div mod-role="enumeration-option" mod-uri="{{uri}}" mod-path="{{path}}">{{label}}</div>
+                    <div mod-role="enumeration-option" mod-uri="{{uri}}" mod-path="{{path}}" class="mod-preset">
+                        <input type="checkbox" id="preset-{{uri}}" class="mod-preset-check" mod-uri="{{uri}}" checked>
+                        <label class="mod-preset-label">{{label}}</label>
+                    </div>
                     {{/presets.user}}
                 </div>
-                <footer>
+                <footer class="{{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">
                     <button class="btn btn-xs btn-primary preset-btn-save disabled" title="Save"></button>
                     <button class="btn btn-xs btn-primary preset-btn-save-as" title="Save as"></button>
                     <button class="btn btn-xs btn-primary preset-btn-rename disabled" title="Rename"></button>
                     <button class="btn btn-xs btn-primary preset-btn-delete disabled" title="Delete"></button>
-                    <button class="btn btn-xs btn-primary preset-btn-assign-sel disabled mod-hidden">Assign selected</button>
                     <span class="assign-all">
-                        <button class="btn btn-xs btn-primary preset-btn-assign-all" mod-role="presets-address">Assign all</button>
+                        <button class="btn btn-xs btn-primary preset-btn-assign-all" mod-role="presets-address">Assign selected</button>
                     </span>
                 </footer>
             </div>
@@ -54,7 +94,13 @@
             {{#path}}
             <div class="mod-enumerated mod-file-list">
                 <span class="mod-enumerated-title">{{label}}</span>
+                <span class="mod-knob-snapshot-status icon-camera" mod-parameter-uri="{{uri}}" mod-role="parameter-snapshotable"></span>
                 <div class="mod-file-list-buttons">
+                    {{#t3k}}
+                    <button class="btn btn-xs btn-primary file-list-btn-t3k" title="T3K Browse tones" mod-parameter-uri="{{uri}}">
+                        <img src="js/lib/t3k/logo/T3K%20logo.png" style="height: 18px;width: 36px;"/>
+                    </button>
+                    {{/t3k}}
                     <button class="btn btn-xs btn-primary file-list-btn-expand" title="Expand">EXP</button>
                 </div>
                 <div class="mod-enumerated-list" mod-role="input-parameter" mod-parameter-uri="{{uri}}" mod-widget="custom-select-path">
@@ -67,6 +113,7 @@
             {{#string}}
             <div class="mod-string">
                 <span class="mod-string-title">{{label}}</span>
+                <span class="mod-knob-snapshot-status icon-camera" mod-parameter-uri="{{uri}}" mod-role="parameter-snapshotable"></span>
                 <div class="mod-string-content" mod-role="input-parameter" mod-parameter-uri="{{uri}}" mod-widget="string">
                     <textarea autocomplete=off spellcheck=false class="mod-string-value" mod-role="input-parameter-value" mod-parameter-uri="{{uri}}"></textarea>
                 </div>
@@ -76,6 +123,7 @@
             {{^toggled}}
             <div class="mod-knob" title="{{comment}}">
                 <span class="mod-knob-title">{{shortName}}</span>
+                <span class="mod-knob-snapshot-status icon-camera" mod-parameter-uri="{{uri}}" mod-role="parameter-snapshotable"></span>
                 <span class="mod-knob-min-value" mod-role="input-control-minimum" mod-parameter-uri="{{uri}}"></span>
                 <span class="mod-knob-max-value" mod-role="input-control-maximum" mod-parameter-uri="{{uri}}"></span>
                 <span class="mod-knob-current-value" mod-role="input-parameter-value" mod-parameter-uri="{{uri}}"></span>
@@ -85,6 +133,7 @@
             {{#toggled}}
             <div class="mod-switch" title="{{comment}}">
                 <span class="mod-switch-title">{{shortName}}</span>
+                <span class="mod-knob-snapshot-status icon-camera" mod-parameter-uri="{{uri}}" mod-role="parameter-snapshotable"></span>
                 <div class="mod-switch-image" mod-role="input-parameter" mod-parameter-uri="{{uri}}" mod-widget="film"></div>
             </div>
             {{/toggled}}
@@ -94,38 +143,53 @@
 
             {{#effect.ports.control.input}}
             {{#enumeration}}
-            <div class="mod-enumerated">
-                <span class="mod-enumerated-title">{{shortName}}</span>
-                <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+            <div class="mod-enumerated{{#group}} mod-group{{#groupStart}} mod-group-start{{/groupStart}} mod-group-{{groupCssIndex}}{{#groupEnd}} mod-group-end{{/groupEnd}}{{/group}}">
+                <span class="mod-enumerated-title{{#group}} mod-group-item-title{{/group}}">{{shortName}}</span>
+                <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
                 <div class="mod-enumerated-list" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="custom-select">
                     {{#scalePoints}}
                     <div mod-role="enumeration-option" mod-port-value="{{value}}">{{label}}</div>
                     {{/scalePoints}}
                 </div>
+                <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
             </div>
             {{/enumeration}}
             {{^enumeration}}
                 {{^trigger}}
                     {{^toggled}}
-                    <div class="mod-knob" title="{{comment}}">
-                        <span class="mod-knob-title">{{shortName}}</span>
+                    <div class="mod-knob{{#group}} mod-group{{#groupStart}} mod-group-start{{/groupStart}} mod-group-{{groupCssIndex}}{{#groupEnd}} mod-group-end{{/groupEnd}}{{/group}}" title="{{comment}}">
+                        <span class="mod-knob-title{{#group}} mod-group-item-title{{/group}}">{{shortName}}</span>
                         <span class="mod-knob-min-value" mod-role="input-control-minimum" mod-port-symbol="{{symbol}}"></span>
                         <span class="mod-knob-max-value" mod-role="input-control-maximum" mod-port-symbol="{{symbol}}"></span>
                         <span class="mod-knob-current-value" mod-role="input-control-value" mod-port-symbol="{{symbol}}"></span>
+                        {{#group}}
+                        <div class="mod-knob-background" style="background-color: var(--group-{{groupCssIndex}}-color);"></div>
+                        {{/group}}
+                        {{^group}}
+                        <div class="mod-knob-background"></div>
+                        {{/group}}
                         {{#integer}}
                         <div class="mod-knob-image mod-knob-image-steps-{{steps}}" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
                         {{/integer}}
                         {{^integer}}
                         <div class="mod-knob-image" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
                         {{/integer}}
-                        <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
                     </div>
                     {{/toggled}}
                     {{#toggled}}
-                    <div class="mod-switch" title="{{comment}}">
-                        <span class="mod-switch-title">{{shortName}}</span>
+                    <div class="mod-switch{{#group}} mod-group{{#groupStart}} mod-group-start{{/groupStart}} mod-group-{{groupCssIndex}}{{#groupEnd}} mod-group-end{{/groupEnd}}{{/group}}" title="{{comment}}">
+                        <span class="mod-switch-title{{#group}} mod-group-item-title{{/group}}">{{shortName}}</span>
+                        {{#group}}
+                        <div class="mod-switch-background" style="background-color: var(--group-{{groupCssIndex}}-color);"></div>
+                        {{/group}}
+                        {{^group}}
+                        <div class="mod-switch-background"></div>
+                        {{/group}}
                         <div class="mod-switch-image" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
-                        <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
                     </div>
                     {{/toggled}}
                 {{/trigger}}
@@ -133,7 +197,8 @@
                 <div class="mod-switch" title="{{comment}}">
                     <span class="mod-switch-title">{{shortName}}</span>
                     <div class="mod-footswitch-image" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
-                    <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                    <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                    <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
                 </div>
                 {{/trigger}}
             {{/enumeration}}

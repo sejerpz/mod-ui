@@ -60,6 +60,8 @@
 
         .hmi-table {
           width: 100%;
+          table-layout: fixed;
+          text-wrap: nowrap;
 
           th:first-child {
             background-color: @red;
@@ -101,12 +103,9 @@
           td {
             padding: 5px;
             cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
 
-            &.selected {
-              background-color: @brand-primary;
-              color: white;
-              box-shadow: 3px 3px 3px @gray-light;
-            }
 
             &.disabled {
               cursor: auto;
@@ -114,11 +113,171 @@
               background-color: @gray-mid-light;
               box-shadow: inset 0 0 3px @gray;
             }
+
+            &.accept-drop {
+              background-color: #f5e6f8;
+            }
+
+            &.binded {
+              background-color: #883996;
+              color: white;
+              opacity: 0.65;
+            }
+
+            &.selected {
+              background-color: @brand-primary;
+              color: white;
+              box-shadow: 3px 3px 3px @gray-light;
+              opacity: 1;
+            }
+
+
+
+          }
+        }
+
+        .midi-table {
+          .no-selection {
+            text-align: center;
+            font-size: 18px;
+            height: 64px;
+            padding-top: 32px;
+          }
+        }
+        .midi-table-overview {
+          width: 100%;
+          table-layout: fixed;
+          text-wrap: nowrap;
+
+          th {
+            background-color: #f0f0f0;
+          }
+
+          th, td {
+            border: solid @gray-dark 1px;
+            text-align: center;
+          }
+
+          tr {
+            height: 32px;
+
+            &.odd {
+              background-color: #f0f0f0;
+            }
+
+            &.selected {
+              background-color: @brand-primary;
+              color: white;
+              box-shadow: 3px 3px 3px @gray-light;
+              opacity: 1;
+            }
+
+          }
+
+          td {
+            padding: 5px;
+            cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
         }
 
         .midi-custom-uri {
           color: @brand-primary;
+        }
+      }
+
+      .cc-table {
+          .no-selection {
+            text-align: center;
+            font-size: 18px;
+            height: 64px;
+            padding-top: 32px;
+          }
+      }
+
+      .cc-table-overview {
+        width: 100%;
+        table-layout: fixed;
+        text-wrap: nowrap;
+
+        th {
+          background-color: #f0f0f0;
+        }
+
+        th, td {
+          border: solid @gray-dark 1px;
+          text-align: center;
+        }
+
+        tr {
+          height: 32px;
+
+          &.odd {
+            background-color: #f0f0f0;
+          }
+
+          &.selected {
+            background-color: @brand-primary;
+            color: white;
+            box-shadow: 3px 3px 3px @gray-light;
+            opacity: 1;
+          }
+
+        }
+
+        td {
+            padding: 5px;
+            cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+      }
+
+      .cv-table {
+        .no-selection {
+          text-align: center;
+          font-size: 18px;
+          height: 64px;
+          padding-top: 32px;
+        }
+      }
+
+      .cv-table-overview {
+        width: 100%;
+        table-layout: fixed;
+        text-wrap: nowrap;
+
+        th {
+          background-color: #f0f0f0;
+        }
+
+        th, td {
+          border: solid @gray-dark 1px;
+          text-align: center;
+        }
+
+        tr {
+          height: 32px;
+
+          &.odd {
+            background-color: #f0f0f0;
+          }
+
+          &.selected {
+            background-color: @brand-primary;
+            color: white;
+            box-shadow: 3px 3px 3px @gray-light;
+            opacity: 1;
+          }
+
+        }
+
+        td {
+          padding: 5px;
+          cursor: pointer;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       }
 
@@ -131,6 +290,8 @@
         border-left: 1px solid @gray-lighter;
         padding-left: 12px;
         margin-left: 12px;
+        position: relative;
+        width: 100%;
 
         .cv-op-mode {
 
@@ -141,6 +302,33 @@
           .mod-controls {
             width: 155px !important;
           }
+        }
+
+        .advanced-pin-toggle {
+            cursor: pointer;
+            display: block !important;
+            float: right;
+            height: 36px;
+            position: absolute;
+            top: -6px;
+            right: -12px;
+            width: 36px;
+            text-align: center;
+            font-size: 1.5em;
+            border-radius: 50%;
+            color: lightgray;
+        }
+
+        .pinned {
+          color: @brand-primary;
+        }
+
+        .no-selection {
+          display: flex;
+          width: 100%;
+          height: 100%;
+          align-items: center;
+          justify-content: center;
         }
       }
     }

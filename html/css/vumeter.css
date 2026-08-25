@@ -1,0 +1,43 @@
+.mod-vumeter {
+    cursor: pointer;
+}
+
+.mod-vumeter-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    z-index: 1;
+}
+
+.mod-vumeter-wrapper.even {
+    top: -100px;
+    position: relative;
+    left: 64px;
+}
+
+.mod-vumeter-wrapper.odd {
+    top: -100px;
+    position: relative;
+    left: 128px;
+}
+
+.mod-vumeter-wrapper.global {
+    height: 100%;
+    padding: 0px 6px 0px 6px;
+    canvas {
+        align-self: stretch;
+    }
+}
+
+.mod-vumeter-clip-indicator {
+    font-size: 14px;
+    text-align: center;
+    color: whitesmoke;
+    transition: color 0.1s;
+}
+
+.mod-vumeter-clip-indicator.active {
+    color: red;
+    font-weight: bold;
+}

@@ -1,7 +1,7 @@
 <div class="mod-pedal-settings-address">
     <div class="mod-spacer"></div>
     <div class="mod-box">
-        <h1 class="pull-left">{{label}} - <strong>{{name}}</strong></h1><span class="js-close close">&times;</span>
+        <h1 class="pull-left">{{label}} - <strong>{{name}}</strong><span class="overview-plugin-name">: PLUGIN NAME</span></h1><span class="js-close close">&times;</span>
         <div class="clearfix"></div>
         <hr style="margin-top:0px" />
         <form class="bottom form">
@@ -20,7 +20,7 @@
                     </div>
                   </div>
                   <div class="mod form-group clearfix">
-                    <label>Assign to</label>
+                    <label class="assign-label">Assign to</label>
                     <select name="type">
                         <option>None</option>
                         <option>Device</option>
@@ -43,6 +43,8 @@
                     In order to map this parameter to a different MIDI control, press "save" and move the desired control on your MIDI device.
                     Press "cancel" to retain the current mapping.
                   </span>
+                  <div class="dynamic-field midi-table form-group clearfix" style="display: none;">
+                  </div>
                   <span class="dynamic-field no-cc" style="display: none;">
                     No Control Chain device detected,
                     please make sure that the cable is firmly seated and connected to the "MAIN" port on the Control Chain device.
@@ -56,6 +58,8 @@
                         <select class="form-control" name="cc-actuator"></select>
                     </div>
                   </div>
+                  <div class="dynamic-field cc-table form-group clearfix" style="display: none;">
+                  </div>
                   <span class="dynamic-field no-cv" style="display: none;">
                     To add a Control Voltage addressing source,
                     press the "Manage CV Ports" button in the top-bar of the Pedalboard Constructor
@@ -66,17 +70,24 @@
                         <select class="form-control" name="cv-port"></select>
                     </div>
                   </div>
+                  <div class="dynamic-field cv-table form-group clearfix" style="display: none;">
+                  </div>
                 </div>
                 <hr class="col-xs-12" style="padding:0;margin:0 0 10px;" />
                 <div class="buttons-container textright clearfix">
-                    <span class="btn btn-danger js-close">Cancel</span>
-                    <span class="btn btn-success js-save">Save</span>
-                    <span class="btn advanced-toggle">Advanced</span>
+                  <span class="btn btn-danger js-close">Cancel</span>
+                  <span class="btn btn-warning js-binding-remove disabled">Delete</span>
+                  <span class="btn btn-success js-save">Save</span>
+                  <span class="btn advanced-toggle">Advanced</span>
                 </div>
               </div>
 
               <div class="advanced-container" style="display: none;">
-                  <div class="form-group clearfix">
+                  <span class="advanced-pin-toggle icon-pin"></span>
+                  <div class="no-selection form-group clearfix">
+                      <div style="font-size: 18px;">Select a binding</div>
+                  </div>
+                  <div class="actuator-label form-group clearfix">
                       <label>Label</label>
                       <div class="mod-controls">
                           <input class="form-control" name="label" type="text"/>

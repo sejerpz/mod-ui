@@ -10,6 +10,10 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
+import urllib.parse
+import re
+import unicodedata
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
@@ -30,15 +34,14 @@ except ImportError:
 from mod.profile import Profile
 from mod.settings import (DESKTOP, LOG, DEV_API,
                           HTML_DIR, DOWNLOAD_TMP_DIR, DEVICE_KEY, DEVICE_WEBSERVER_PORT,
-                          CLOUD_HTTP_ADDRESS, CLOUD_LABS_HTTP_ADDRESS,
-                          PLUGINS_HTTP_ADDRESS, PEDALBOARDS_HTTP_ADDRESS, CONTROLCHAIN_HTTP_ADDRESS,
+                          CLOUD_HTTP_ADDRESS, PLUGINS_HTTP_ADDRESS, PEDALBOARDS_HTTP_ADDRESS, CONTROLCHAIN_HTTP_ADDRESS,
                           USER_BANKS_JSON_FILE,
                           LV2_PLUGIN_DIR, LV2_PEDALBOARDS_DIR, IMAGE_VERSION,
-                          UPDATE_CC_FIRMWARE_FILE, UPDATE_MOD_OS_FILE, UPDATE_MOD_OS_HERLPER_FILE, USING_256_FRAMES_FILE,
+                          UPDATE_CC_FIRMWARE_FILE, UPDATE_MOD_OS_FILE, UPDATE_MOD_OS_HERLPER_FILE,
                           DEFAULT_ICON_TEMPLATE, DEFAULT_SETTINGS_TEMPLATE, DEFAULT_ICON_IMAGE,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
-                          DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE, PEDALBOARDS_LABS_HTTP_ADDRESS)
+                          DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE)
 
 from mod import (
     TextFileFlusher, WINDOWS,
@@ -47,6 +50,7 @@ from mod import (
 )
 from mod.bank import list_banks, save_banks, remove_pedalboard_from_banks
 from mod.session import SESSION
+from mod.licensing import check_missing_licenses, save_license, get_new_licenses_and_flush
 from modtools.utils import (
     kPedalboardInfoUserOnly, kPedalboardInfoFactoryOnly, kPedalboardInfoBoth,
     init as lv2_init, cleanup as lv2_cleanup,
@@ -55,7 +59,7 @@ from modtools.utils import (
     get_all_pedalboards, get_all_user_pedalboard_names, get_broken_pedalboards, get_pedalboard_info,
     get_jack_buffer_size,
     has_pedalboard_cache, reset_get_all_pedalboards_cache, update_cached_pedalboard_version,
-    set_jack_buffer_size, get_jack_sample_rate, set_truebypass_value, set_process_name, reset_xruns
+    get_jack_sample_rate, set_truebypass_value, set_process_name, reset_xruns
 )
 
 try:
@@ -426,6 +430,11 @@ class SystemPreferences(JsonRequestHandler):
         # Workarounds
         self.make_pref("autorestart_hmi", self.OPTION_FILE_EXISTS, "/data/autorestart-hmi")
 
+        # midi controllers
+        self.make_pref("midi_feedback", self.OPTION_FILE_EXISTS, "/data/midi-feedback")
+        self.make_pref("midi_feedback_sync", self.OPTION_FILE_EXISTS, "/data/midi-feedback-sync")
+        self.make_pref("midi_nrpn", self.OPTION_FILE_EXISTS, "/data/midi-nrpn")
+
     def make_pref(self, label, otype, data, valtype=None, valdef=None):
         self.prefs.append({
             "label": label,
@@ -530,7 +539,10 @@ class SystemExeChange(JsonRequestHandler):
                             "jack-mono-copy",
                             "jack-sync-mode",
                             "separate-spdif-outs",
-                            "using-256-frames"):
+                            "using-256-frames",
+                            "midi-feedback",
+                            "midi-feedback-sync",
+                            "midi-nrpn"):
                 self.write(False)
                 return
 
@@ -759,6 +771,55 @@ class EffectList(JsonRequestHandler):
         data = get_all_plugins()
         self.write(data)
 
+class EffectLicenseList(JsonRequestHandler):
+    def post(self):
+        # Receives a list of available licenses from cloud
+        # and returns a list of licenses that are missing
+        licenses = json.loads(self.request.body.decode())
+        missing = check_missing_licenses(licenses)
+        self.write(missing)
+
+class EffectLicenseSave(JsonRequestHandler):
+    def post(self, license_id):
+        save_license(license_id, self.request.body)
+        self.write(True)
+
+class EffectRefresh(JsonRequestHandler):
+    def get(self):
+        # This is called after new licenses are installed
+
+        # First clear LV2 effect cache
+        # TODO clear cache only of affected bundles
+        lv2_cleanup()
+        lv2_init()
+
+        # Reload pedalboard if licenses affect any running plugin
+        affected_uris = get_new_licenses_and_flush()
+        SESSION.host.reload_pedalboard(affected_uris)
+
+        self.write(True)
+
+class EffectT3KSelect(JsonRequestHandler):
+    """This is the select callback handler from tone3k integration"""
+    def get(self, instance):
+        code = self.get_query_argument('code', default=None)
+        state = self.get_query_argument('state', default=None)
+        tone_id = int(self.get_query_argument('tone_id', default=0))
+        canceled = bool(self.get_query_argument('canceled', default=False))
+
+        # if state != session.get('t3k_state'):
+        #     raise ValueError('State mismatch. Possible CSRF attack.')
+        logging.debug(" T3Keffect select callback: %s, code %s, state %s, tone_id %s, canceled %s", instance, code, state, tone_id, canceled)
+        if canceled:
+            # User exited without selecting a tone.
+            # If code is present, you can still exchange it for tokens.
+            # If code is absent, the user closed before signing in.
+            SESSION.host.msg_callback('t3k-cancel %s' % (instance))
+        else:
+            SESSION.host.msg_callback('t3k-tone-selected %s %s %s %s' % (instance, code, state, tone_id))
+
+        self.write('')
+
 class SDKEffectInstaller(EffectInstaller):
     def set_default_headers(self):
         if 'Origin' not in self.request.headers.keys():
@@ -963,11 +1024,22 @@ class EffectRemove(JsonRequestHandler):
 class EffectGet(CachedJsonRequestHandler):
     def get(self):
         uri = self.get_argument('uri')
+        instance = self.get_argument('instance_id', '')
+        pb_metadata = self.get_argument('pedalboard_metadata', '')
 
         try:
             data = get_plugin_info(uri)
-        except:
-            print("ERROR in webserver.py: get_plugin_info for '%s' failed" % uri)
+
+            if pb_metadata == 'all':
+                # patching preset with metadata info
+                presets = data.get('presets', [])
+                for preset in presets:
+                    metadata = SESSION.host.presets_metadata.get(instance, preset['uri'])
+                    if (metadata):
+                        #python union of two dicts
+                        preset.update(metadata)
+        except Exception as e:
+            logging.error("ERROR in webserver.py: get_plugin_info for '%s' failed: %s", uri, e)
             raise web.HTTPError(404)
 
         self.write(data)
@@ -975,14 +1047,37 @@ class EffectGet(CachedJsonRequestHandler):
 class EffectGetNonCached(JsonRequestHandler):
     def get(self):
         uri = self.get_argument('uri')
+        instance = self.get_argument('instance', '')
+        pb_metadata = self.get_argument('pedalboard_metadata', '')
 
         try:
             data = get_non_cached_plugin_info(uri)
-        except:
-            print("ERROR in webserver.py: get_non_cached_plugin_info for '%s' failed" % uri)
+
+            if pb_metadata == 'all':
+                # patching preset with metadata info
+                presets = data.get('presets', [])
+                for preset in presets:
+                    metadata = SESSION.host.presets_metadata.get(instance, preset['uri'])
+                    if (metadata):
+                        #python union of two dicts
+                        preset.update(metadata)
+        except Exception as e:
+            logging.error("ERROR in webserver.py: get_non_cached_plugin_info for '%s' failed: %s", uri, e)
             raise web.HTTPError(404)
 
         self.write(data)
+
+class PortAudioLevelMonitor(JsonRequestHandler):
+    @web.asynchronous
+    @gen.engine
+    def get(self, port, enable):
+        if enable == "toggle":
+            enable = SESSION.host.monitor_audio_port_toggle(port)
+        else:
+            enable = True if enable == "enable" else False
+            SESSION.host.monitor_audio_port(port, enable)
+
+        self.write(enable)
 
 class EffectConnect(JsonRequestHandler):
     @web.asynchronous
@@ -1223,6 +1318,40 @@ class ServerWebSocket(websocket.WebSocketHandler):
             y    = float(data[2])
             SESSION.ws_plugin_position(inst, x, y, self)
 
+        elif cmd == "plugin_label":
+            data = data[1].split(" ",2)
+            inst = data[0]
+            label = data[1].replace("_", " ")
+            SESSION.ws_plugin_label(inst, label, self)
+
+        elif cmd == "port_prop_set":
+            data = data[1].split(" ",4)
+            inst = data[0]
+            portSymbol = data[1]
+            propertyName = data[2]
+            value = data[3]
+            SESSION.ws_port_prop_set(inst, portSymbol, propertyName, value, self)
+
+        elif cmd == "param_prop_set":
+            data = data[1].split(" ",4)
+            inst = data[0]
+            uri = data[1]
+            propertyName = data[2]
+            value = data[3]
+            SESSION.ws_param_prop_set(inst, uri, propertyName, value, self)
+
+        elif cmd == "performance_plugin_visibility":
+            data = data[1].split(" ",2)
+            inst = data[0]
+            visible = True if data[1] == "1" else False
+            SESSION.ws_performance_plugin_visibility(inst, visible, self)
+
+        elif cmd == "performance_plugin_index":
+            data = data[1].split(" ",2)
+            inst = data[0]
+            index = int(data[1])
+            SESSION.ws_performance_plugin_index(inst, index, self)
+
         elif cmd == "pb_size":
             data   = data[1].split(" ",2)
             width  = int(float(data[0]))
@@ -1253,6 +1382,18 @@ class ServerWebSocket(websocket.WebSocketHandler):
         elif cmd == "show_external_ui":
             inst = data[1]
             SESSION.ws_show_external_ui(inst)
+
+        elif cmd == "midi_feedback_enabled":
+            inst = data[1]
+            SESSION.host.send_notmodified("feature_enable midi-feedback " + str(inst))
+
+        elif cmd == "midi_feedback_sync_enabled":
+            inst = data[1]
+            SESSION.host.send_notmodified("feature_enable midi-feedback-sync " + str(inst))
+
+        elif cmd == "midi_nrpn_enabled":
+            inst = data[1]
+            SESSION.host.send_notmodified("feature_enable midi-nrpn " + str(inst))
 
         else:
             print("Unexpected command received over websocket")
@@ -1596,6 +1737,80 @@ class PedalboardTransportSetSyncMode(JsonRequestHandler):
         ok = yield gen.Task(SESSION.web_set_sync_mode, transport_sync)
         self.write(ok)
 
+class PedalboardEffectPresetConfigGet(JsonRequestHandler):
+    @web.asynchronous
+    @gen.engine
+    def post(self):
+        uri = self.get_argument('preset_uri')
+        resp = yield gen.Task(SESSION.web_cv_addressing_plugin_port_remove, uri)
+        self.write(resp)
+
+
+class PedalboardEffectPresetConfigSet(JsonRequestHandler):
+    @web.asynchronous
+    @gen.engine
+    def post(self):
+        instance = self.get_argument('instance_id')
+        uri = self.get_argument('uri')
+        enabled = bool(int(self.get_argument('enabled')))
+        metadata = SESSION.host.presets_metadata.get(instance, uri)
+        metadata['enabled'] = enabled
+        resp = yield gen.Task(SESSION.host.presets_metadata.set, instance, uri, metadata)
+        if (resp and SESSION.host.pedalboard_path != ""):
+            SESSION.host.presets_metadata.save(SESSION.host.pedalboard_path)
+
+        self.write(resp)
+
+        # check if plugin preset in addressed and send an addressing update
+        instance_id = SESSION.host.mapper.get_id_without_creating(instance)
+        addressings = SESSION.host.addressings.get_addressings()
+        for actuator in addressings:
+            addrs = addressings[actuator]
+            if addrs is not None:
+                for addr in addrs:
+                    if addr['port'] == ':presets' and addr['instance_id'] == instance_id:
+                        # update the controller
+                        hw_id = SESSION.host.addressings.hmi_uri2hw_map[actuator]
+                        actuator_subpage  = SESSION.host.addressings.hmi_hwsubpages[hw_id]
+                        addressings_addrs = SESSION.host.addressings.hmi_addressings[actuator]['addrs']
+                        addressing_data = SESSION.host.addressings.get_addressing_for_page(addressings_addrs, SESSION.host.addressings.current_page, actuator_subpage)
+                        SESSION.hmi.control_add(addressing_data, hw_id, actuator, None)
+
+
+class CompareABStatus(JsonRequestHandler):
+    @web.asynchronous
+    @gen.engine
+    def get(self):
+        self.write({
+            'status': SESSION.host.compare_status,
+        })
+
+class CompareABSnapshotTake(JsonRequestHandler):
+    @web.asynchronous
+    @gen.engine
+    def get(self):
+        ok = SESSION.host.compare_snapshot_save()
+        self.write(ok)
+
+class CompareABSnapshotSwitch(JsonRequestHandler):
+    @web.asynchronous
+    @gen.engine
+    def get(self):
+        id = self.get_argument('id').upper()
+        ok = False
+
+        abort_catcher = SESSION.host.abort_previous_loading_progress("web CompareSnapshotSwitch")
+        # save the state of the current snapshot
+        SESSION.host.compare_snapshot_save('A' if id == 'B' else 'B')
+
+        # load the requested snapshot
+        ok = yield gen.Task(SESSION.host.compare_snapshot_load_gen_helper, id, abort_catcher)
+
+        self.write({
+            'ok': ok,
+            'id': id,
+        })
+
 class SnapshotSave(JsonRequestHandler):
     def post(self):
         ok = SESSION.host.snapshot_save()
@@ -1792,10 +2007,8 @@ class TemplateHandler(TimelessRequestHandler):
             'default_settings_template': default_settings_template,
             'default_pedalboard': mod_squeeze(DEFAULT_PEDALBOARD),
             'cloud_url': CLOUD_HTTP_ADDRESS,
-            'cloud_labs_url': CLOUD_LABS_HTTP_ADDRESS,
             'plugins_url': PLUGINS_HTTP_ADDRESS,
             'pedalboards_url': PEDALBOARDS_HTTP_ADDRESS,
-            'pedalboards_labs_url': PEDALBOARDS_LABS_HTTP_ADDRESS,
             'controlchain_url': CONTROLCHAIN_HTTP_ADDRESS,
             'hardware_profile': b64encode(json.dumps(SESSION.get_hardware_actuators()).encode("utf-8")),
             'version': self.get_argument('v'),
@@ -1945,17 +2158,7 @@ class SetBufferSize(JsonRequestHandler):
     def post(self, size):
         size = int(size)
 
-        # If running a real MOD, save this setting for next boot
-        if IMAGE_VERSION is not None:
-            if size == 256:
-                with open(USING_256_FRAMES_FILE, 'w') as fh:
-                    fh.write("# if this file exists, jack will use 256 frames instead of the default 128")
-            elif os.path.exists(USING_256_FRAMES_FILE):
-                os.remove(USING_256_FRAMES_FILE)
-
-            os_sync()
-
-        newsize = set_jack_buffer_size(size)
+        newsize = SESSION.host.set_buffer_size(size)
         self.write({
             'ok'  : newsize == size,
             'size': newsize,
@@ -2172,6 +2375,124 @@ class TokensSave(JsonRequestHandler):
 
         self.write(True)
 
+class FilesUpload(SimpleFileReceiver):
+    """
+    This is used by the web interface to upload a user file
+
+    Returns the path to the saved file
+    """
+    base_path = basepath = os.path.join(USER_FILES_DIR)
+    filetypes = {
+        ".nam": "nammodel",
+        ".wav": "cabsim",
+        ".aidax": "aidadspmodel"
+    }
+
+    @staticmethod
+    def sanitize_filename(filename: str, replacement: str = "-") -> str:
+        # 1. Normalize Unicode (e.g., convert accented characters like 'é' -> 'e')
+        filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
+
+        # 2. Remove characters that are unsafe across OS (Windows, Linux, macOS)
+        # Allows only alphanumeric, hyphens, underscores, and dots
+        filename = re.sub(r'[^a-zA-Z0-9._\- !\+\(\)\[\]\{\}\.\,\;\:\"\']', replacement, filename)
+
+        # 3. Collapse multiple consecutive replacement characters into one
+        filename = re.sub(re.escape(replacement) + '+', replacement, filename)
+
+        # 4. Strip leading/trailing whitespaces, dots, and replacement characters
+        filename = filename.strip(' .' + replacement)
+
+        # 5. Fallback for empty strings
+        return filename or "unnamed_file"
+
+    @property
+    def destination_dir(self):
+        return '/tmp'
+
+    @web.asynchronous
+    @gen.engine
+    def process_file(self, basename, callback=lambda:None):
+        source_file = os.path.join(self.destination_dir, basename)
+        config = json.loads(urllib.parse.unquote(self.request.headers.get("X-Upload-Config", "{}")))
+
+        logging.info("FilesUpload %s destination filename ''%s''", source_file, config.get('filename', '') if config else 'no config available')
+        if not os.path.exists(source_file):
+            callback()
+            return
+
+        if not os.path.exists(self.destination_dir):
+            os.mkdir(self.destination_dir)
+
+        # directory: subfolder where save the file,
+        # onDirectoryConflict: what to do if directory already exists: 'rename' or merge
+        # filename: filename
+        # metadata:
+        #     are saved in the same folder with the same name of the filename and the extension from the source (eg. t3k)
+        #     the metadata file content is the values inside the data tag JSON format
+        #     {
+        #       source: 'T3K',
+        #       data: {
+        #           toneId: tone.id,
+        #           modelId: model.id
+        #       }
+        #
+        filetypes = {
+            ".nam": "nammodel",
+            ".wav": "cabsim",
+            ".aidax": "aidadspmodel"
+        }
+        model_file_name = FilesUpload.sanitize_filename(config.get('filename', basename))
+        model_base_name, ext = os.path.splitext(model_file_name)
+        filetype = config.get('filetype', None)
+
+        if filetype is None:
+            # try from the extension
+            filetype = filetypes.get(ext, 'ir')
+
+        directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
+        if directory is None:
+            logging.error("no directory found for filetype: %s, extension: %s", filetype, ext)
+        configDirectory = config.get('directory', "")
+        if configDirectory:
+            model_dir_name = FilesUpload.sanitize_filename(configDirectory)
+        else:
+            model_dir_name = ""
+        basepath = os.path.join(USER_FILES_DIR, directory) # eg. /user-files/NAM Models/
+        dirname = os.path.join(basepath, model_dir_name) # eg. /user-files/NAM Models/VOX AC 30/
+        onDirectoryConflict = config.get('onDirectoryConflict', 'merge').lower()
+        # logging.debug("model_file_name %s, model_base_name %s, ext %s, directory %s, model_dir_name %s, basepath %s, dirname %s",
+        #               model_file_name, model_base_name, ext, directory, model_dir_name, basepath, dirname)
+        if model_dir_name != "" and onDirectoryConflict == 'rename':
+            index = 0
+            while os.path.exists(dirname):
+                index += 1
+                model_dir_name = FilesUpload.sanitize_filename(configDirectory) + " {:02d}".format(index)
+                dirname = os.path.join(basepath, model_dir_name)
+
+        model_name = FilesUpload.sanitize_filename(model_base_name)
+        fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
+        index = 0
+        while os.path.exists(fullname):
+            index += 1
+            model_name = FilesUpload.sanitize_filename(model_base_name) + " {:02d}".format(index)
+            model_file_name = model_name + ext
+            fullname = os.path.join(dirname, model_file_name) # eg. /user-files/NAM Models/T3K/VOX AC 30/VOX AC 30 Clean.nam
+
+        os.makedirs(dirname, exist_ok=True)
+
+        shutil.move(source_file, fullname)
+
+        self.result = {
+            'fullname': fullname,
+            'dirname': model_dir_name,
+            'basename': model_file_name,
+            'basepath': basepath,
+            'filetype': filetype,
+        }
+        if callable:
+            callback()
+
 class FilesList(JsonRequestHandler):
     complete_audiofile_exts = (
         # through libsndfile
@@ -2246,13 +2567,16 @@ class FilesList(JsonRequestHandler):
             if datadir is None:
                 continue
 
-            for root, dirs, files in os.walk(os.path.join(USER_FILES_DIR, datadir)):
+            basepath = os.path.join(USER_FILES_DIR, datadir)
+            for root, dirs, files in os.walk(basepath):
                 for name in tuple(name for name in sorted(files) if name.lower().endswith(extensions)):
                     fullname = os.path.join(root, name)
                     fullnames.append(fullname)
                     retfiles[fullname] = {
                         'fullname': fullname,
+                        'dirname': root[len(basepath) + 1:],
                         'basename': name,
+                        'basepath': basepath,
                         'filetype': filetype,
                     }
 
@@ -2307,6 +2631,15 @@ application = web.Application(
             (r"/effect/connect/*(/[A-Za-z0-9_/]+[^/]),([A-Za-z0-9_/]+[^/])/?", EffectConnect),
             (r"/effect/disconnect/*(/[A-Za-z0-9_/]+[^/]),([A-Za-z0-9_/]+[^/])/?", EffectDisconnect),
 
+            (r"/effect/port-audio-monitor/*(/[A-Za-z0-9_/]+[^/]),(enable|disable|toggle)/?", PortAudioLevelMonitor),
+
+            # plugin licensing
+            (r"/effect/licenses/list", EffectLicenseList),
+            (r"/effect/licenses/save/(.*)", EffectLicenseSave),
+            (r"/effect/refresh", EffectRefresh),
+
+            (r"/effect/t3k/select/*(/[A-Za-z0-9_/]+[^/])/?", EffectT3KSelect),
+
             (r"/package/uninstall", PackageUninstall),
 
             # pedalboard stuff
@@ -2326,6 +2659,8 @@ application = web.Application(
             (r"/pedalboard/cv_addressing_plugin_port/add", PedalboardCvAddressingPluginPortAdd),
             (r"/pedalboard/cv_addressing_plugin_port/remove", PedalboardCvAddressingPluginPortRemove),
             (r"/pedalboard/transport/set_sync_mode/*(/[A-Za-z0-9_:/]+[^/])/?", PedalboardTransportSetSyncMode),
+            (r"/pedalboard/effect_preset_config/get", PedalboardEffectPresetConfigGet),
+            (r"/pedalboard/effect_preset_config/set", PedalboardEffectPresetConfigSet),
 
             # Pedalboard Snapshot handling
             (r"/snapshot/save", SnapshotSave),
@@ -2335,6 +2670,11 @@ application = web.Application(
             (r"/snapshot/list", SnapshotList),
             (r"/snapshot/name", SnapshotName),
             (r"/snapshot/load", SnapshotLoad),
+
+            # Compare A/B
+            (r"/compare/status", CompareABStatus),
+            (r"/compare/snapshot/take", CompareABSnapshotTake),
+            (r"/compare/snapshot/switch", CompareABSnapshotSwitch),
 
             # bank stuff
             (r"/banks/?", BankLoad),
@@ -2355,6 +2695,7 @@ application = web.Application(
 
             # file listing etc
             (r"/files/list/?", FilesList),
+            (r"/files/upload/?", FilesUpload),
 
             (r"/reset/?", DashboardClean),
 

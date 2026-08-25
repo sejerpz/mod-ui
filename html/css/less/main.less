@@ -73,9 +73,13 @@
 @import 'banks.less';
 @import 'file_manager.less';
 @import 'pedalboards.less';
+@import 'performance.less';
 @import 'nprogress.less';
 @import 'addressings.less';
-
+@import 'vumeter-overlay.less';
+@import 'mod-toolbar.less';
+@import 'help.less';
+@import 't3k.less';
 
 /**
  * Typography
@@ -150,6 +154,11 @@ body {
   background: #111;
   min-width: 1024px;
 
+  &.mobile {
+    // this solve bottom & right space in mobile UI
+    position: fixed;
+  }
+  
   // iOS/iPadOS device-specific styles
   &.ios {
     // prevent vertical inertia scrolling
@@ -157,6 +166,7 @@ body {
     // set 980px min-width to match default virtual viewport width
     min-width: 980px;
   }
+
 }
 
 * {
@@ -281,7 +291,7 @@ hr.dotted {
     }
   }
   #mod-plugins {
-    background-image: url(../img/menu-icons-sprite.png?v=2);
+    background-image: url(../img/menu-icons-sprite.png?v=3);
     background-position: -45px top;
     background-repeat: no-repeat;
     transition: all 0.33s;
@@ -294,8 +304,22 @@ hr.dotted {
       background-position: -45px bottom;
     }
   }
+  #performance-trigger {
+    background-image: url(../img/menu-icons-sprite.png?v=3);
+    background-position: -360px top;
+    background-repeat: no-repeat;
+    transition: all 0.33s;
+    &:hover {
+      background-color: #000;
+      background-position: -360px bottom;
+    }
+    &.selected {
+      background-color: #000;
+      background-position: -360px bottom;
+    }
+  }
   #mod-cloud-plugins {
-    background-image: url(../img/menu-icons-sprite.png?v=2);
+    background-image: url(../img/menu-icons-sprite.png?v=3);
     background-position: -315px top;
     background-repeat: no-repeat;
     transition: all 0.33s;
@@ -309,7 +333,7 @@ hr.dotted {
     }
   }
   #mod-pedalboard {
-    background-image: url(../img/menu-icons-sprite.png?v=2);
+    background-image: url(../img/menu-icons-sprite.png?v=3);
     background-position: -90px top;
     background-repeat: no-repeat;
     transition: all 0.33s;
@@ -323,7 +347,7 @@ hr.dotted {
     }
   }
   #mod-bank {
-    background-image: url(../img/menu-icons-sprite.png?v=2);
+    background-image: url(../img/menu-icons-sprite.png?v=3);
     background-position: -135px top;
     background-repeat: no-repeat;
     transition: all 0.33s;
@@ -337,7 +361,7 @@ hr.dotted {
     }
   }
   #mod-file-manager {
-    background-image: url(../img/menu-icons-sprite.png?v=2);
+    background-image: url(../img/menu-icons-sprite.png?v=3);
     background-position: -180px top;
     background-repeat: no-repeat;
     transition: all 0.33s;
@@ -516,6 +540,7 @@ hr.dotted {
 header#pedalboard-actions,
 #bank-library header,
 #cloud-plugins-library header,
+#performance header,
 #pedalboards-library header,
 #file-manager-library header {
   display: block;
@@ -637,10 +662,30 @@ header#pedalboard-actions,
             background-color: @brand-primary;
         }
     }
+    &.js-pb-addressing {
+        background-image: url(../img/icons/36/bind.png);
+        &:hover, &.selected {
+            background-color: @brand-primary;
+        }
+    }
     &.js-cloud {
       background-image: url(../img/icn-share.png);
       background-size: 32px;
       background-position: 5px center;
+    }
+    &.js-edit {
+        background-image: url(../img/icons/36/edit.png);
+        background-size: 30px 30px;
+    }
+    &.js-settings {
+        background-image: url(../img/icons/36/settings.png);
+        background-size: 30px 30px;
+    }
+    &.js-help-toggle {
+        background-image: url(../img/icons/36/help.png);
+        &:hover, &.active {
+          background-color: @brand-primary;
+        }
     }
   }
   h1 {
@@ -1067,7 +1112,7 @@ header#pedalboard-actions {
       min-height: 9em;
       display: inline-block;
       z-index: 0;
-      div.beta {
+      div.build_env {
           background-color: #FF2927;
           font-family: "cooper hewitt", sans-serif;
           font-weight: 700;

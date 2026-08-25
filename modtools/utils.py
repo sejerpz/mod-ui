@@ -185,6 +185,13 @@ class PluginAuthor(Structure):
         ("email", c_char_p),
     ]
 
+class PluginPortGroup(Structure):
+    _fields_ = [
+        ("valid", c_bool),
+        ("symbol", c_char_p),
+        ("name", c_char_p),
+    ]
+
 class PluginGUIPort(Structure):
     _fields_ = [
         ("valid", c_bool),
@@ -221,13 +228,6 @@ class PluginGUI_Mini(Structure):
         ("thumbnail", c_char_p),
     ]
 
-class PluginPortGroup(Structure):
-    _fields_ = [
-        ("valid", c_bool),
-        ("symbol", c_char_p),
-        ("name", c_char_p),
-    ]
-
 class PluginPortRanges(Structure):
     _fields_ = [
         ("minimum", c_float),
@@ -260,11 +260,11 @@ class PluginPort(Structure):
         ("units", PluginPortUnits),
         ("comment", c_char_p),
         ("designation", c_char_p),
-        ("group", c_char_p),
         ("properties", POINTER(c_char_p)),
         ("rangeSteps", c_int),
         ("scalePoints", POINTER(PluginPortScalePoint)),
         ("shortName", c_char_p),
+        ("groupSymbol", c_char_p),
     ]
 
 class PluginPortsI(Structure):
@@ -351,9 +351,9 @@ class PluginInfo(Structure):
         ("bundles", POINTER(c_char_p)),
         ("gui", PluginGUI),
         ("ports", PluginPorts),
-        ("portGroups", POINTER(PluginPortGroup)),
         ("parameters", POINTER(PluginParameter)),
         ("presets", POINTER(PluginPreset)),
+        ("portGroups", POINTER(PluginPortGroup)),
     ]
 
 # a subset of PluginInfo
@@ -391,12 +391,19 @@ class PluginInfo_Essentials(Structure):
         ("minorVersion", c_int),
         ("release", c_int),
         ("builder", c_int),
+        ("name", c_char_p),
+    ]
+
+class PerformancePluginInfo(Structure):
+    _fields_ = [
+        ("visible", c_bool),
+        ("index", c_int),
     ]
 
 class PedalboardMidiControl(Structure):
     _fields_ = [
         ("channel", c_int8),
-        ("control", c_uint8),
+        ("control", c_uint16), # change to 16 bits to support nrpns
         # ranges added in v1.2, flag needed for old format compatibility
         ("hasRanges", c_bool),
         ("minimum", c_float),
@@ -409,12 +416,23 @@ class PedalboardPluginPort(Structure):
         ("symbol", c_char_p),
         ("value", c_float),
         ("midiCC", PedalboardMidiControl),
+        ("snapshotable", c_bool),
+    ]
+
+class PedalboardPluginParameter(Structure):
+    _fields_ = [
+        ("valid", c_bool),
+        ("uri", c_char_p),
+        ("readable", c_bool),
+        ("writable", c_bool),
+        ("snapshotable", c_bool),
     ]
 
 class PedalboardPlugin(Structure):
     _fields_ = [
         ("valid", c_bool),
         ("bypassed", c_bool),
+        ("bypass_snapshotable", c_bool),
         ("instanceNumber", c_int),
         ("instance", c_char_p),
         ("uri", c_char_p),
@@ -422,7 +440,11 @@ class PedalboardPlugin(Structure):
         ("x", c_float),
         ("y", c_float),
         ("ports", POINTER(PedalboardPluginPort)),
+        ("parameters", POINTER(PedalboardPluginParameter)),
         ("preset", c_char_p),
+        ("preset_snapshotable", c_bool),
+        ("label", c_char_p),
+        ("performance", PerformancePluginInfo)
     ]
 
 class PedalboardConnection(Structure):
@@ -526,6 +548,7 @@ TrueBypassStateChanged = CFUNCTYPE(None, c_bool, c_bool)
 CvExpInputModeChanged = CFUNCTYPE(None, c_bool)
 
 c_struct_types = (PluginAuthor,
+                  PluginPortGroup,
                   PluginGUI,
                   PluginGUI_Mini,
                   PluginPortRanges,
@@ -534,6 +557,8 @@ c_struct_types = (PluginAuthor,
                   PluginPorts,
                   PluginLongParameterRanges,
                   PedalboardMidiControl,
+                  PedalboardPluginParameter,
+                  PerformancePluginInfo,
                   PedalboardHardware,
                   PedalboardTimeInfo)
 
@@ -541,11 +566,12 @@ c_structp_types = (POINTER(PluginGUIPort),
                    POINTER(PluginPortScalePoint),
                    POINTER(PluginPort),
                    POINTER(PluginParameter),
-                   POINTER(PluginPortGroup),
                    POINTER(PluginPreset),
+                   POINTER(PluginPortGroup),
                    POINTER(PedalboardPlugin),
                    POINTER(PedalboardConnection),
                    POINTER(PedalboardPluginPort),
+                   POINTER(PedalboardPluginParameter),
                    POINTER(PedalboardHardwareMidiPort),
                    POINTER(StatePortValue))
 
@@ -577,6 +603,9 @@ utils.get_all_plugins.restype  = POINTER(POINTER(PluginInfo_Mini))
 
 utils.get_plugin_info.argtypes = (c_char_p,)
 utils.get_plugin_info.restype  = POINTER(PluginInfo)
+
+utils.get_plugin_info_mini.argtypes = (c_char_p,)
+utils.get_plugin_info_mini.restype  = POINTER(PluginInfo_Mini)
 
 utils.get_non_cached_plugin_info.argtypes = (c_char_p,)
 utils.get_non_cached_plugin_info.restype  = POINTER(NonCachedPluginInfo)
@@ -748,6 +777,14 @@ def get_plugin_info(uri):
         raise Exception
     return structToDict(info.contents)
 
+# get a specific plugin info usually just for about interface
+# NOTE: may throw
+def get_plugin_info_mini(uri):
+    info = utils.get_plugin_info_mini(uri.encode("utf-8"))
+    if not info:
+        raise Exception
+    return structToDict(info.contents)
+
 # get a specific plugin (non-cached specific info)
 # NOTE: may throw
 def get_non_cached_plugin_info(uri):
@@ -789,6 +826,7 @@ def get_plugin_info_essentials(uri):
             'minorVersion': 0,
             'release': 0,
             'builder': 0,
+            'name': '',
         }
     return structToDict(info.contents)
 

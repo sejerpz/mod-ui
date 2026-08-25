@@ -90,6 +90,8 @@ JqueryClass('pedalboard', {
             // wherever to skip zoom animations
             skipAnimations: false,
 
+            // WindowManager instance
+            windowManager: new WindowManager(),
             // HardwareManager instance, must be specified
             hardwareManager: null,
 
@@ -206,6 +208,66 @@ JqueryClass('pedalboard', {
             // Show notification that we are using a demo plugin
             notifyDemoPluginLoaded: function () {
             },
+
+            compareSnapshotSwitch: function (slot) {
+                console.log("pedalboard compareSnapshotSwitch", slot)
+            },
+            compareSnapshotTake: function () {
+                console.log("pedalboard compareSnapshotTake")
+            },
+            pluginSettingsWindowOpen: function (pluginGui) {
+                console.log("pluginSettingsWindowOpen", pluginGui)
+            },
+            pluginSettingsWindowClose: function (pluginGui) {
+                console.log("pluginSettingsWindowClose", pluginGui)
+            },
+            getHelpModeActive: function () {
+                console.log("pedalboard: getHelpModeActive called")
+                return false
+            },
+            /*
+             * Enable, disable or toggle monitoring of a port. 
+             * port: The port to change monitoring state. eg. /graph/eq/Ouput
+             * mode: can be 'enable', 'disable' or 'toggle'.
+             * callback: function to be called when operation is done. 
+             *           It will receive a boolean indicating the current 
+             *           monitoring state for the port.
+             */
+            changePortMonitoring: function (port, mode, callback) {
+                const urlParam = port + ',' + mode
+
+                $.ajax({
+                    url: '/effect/port-audio-monitor' + urlParam,
+                    success: function (resp) {
+                        if (callback) {
+                            callback(resp)
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        if (callback) {
+                            callback(false)
+                        }
+                    },
+                    cache: false,
+                    dataType: 'json'
+                })
+
+            },
+
+            /*
+             * Check if a port is being monitored.
+             *
+             * port: The port to check. eg. /graph/eq/Ouput
+             * 
+             * Returns: true if the port is being monitored, false otherwise.
+             */
+            isPortMonitored: function (port) {
+                const vumeters = self.data('vumeters')
+                const isMonitored = Object.keys(vumeters).includes(port)
+
+                return isMonitored
+            }
+
         }, options)
 
         self.pedalboard('wrapApplicationFunctions', options, [
@@ -230,9 +292,15 @@ JqueryClass('pedalboard', {
         // Holds all plugins loaded, indexed by instance
         self.data('plugins', {})
 
+        // Instances currently selected by shift-drag or shift-click, indexed by instance
+        self.data('selected', {})
+
         // Hardware inputs and outputs, which have an instance of -1 and symbol as given by application
         self.data('hwInputs', [])
         self.data('hwOutputs', [])
+
+        // all active vumeters
+        self.data('vumeters', {})
 
         // connectionManager keeps track of all connections
         self.data('connectionManager', new ConnectionManager())
@@ -248,6 +316,9 @@ JqueryClass('pedalboard', {
 
         // replacement plugin, used for recreating connections
         self.data('replacementPlugin', null)
+
+        // t3k integration
+        self.data('T3KIntegration', new T3KIntegration(self))
 
         // Pedalboard itself will get big dimensions and will have it's scale and position changed dinamically
         // often. So, let's wrap it inside an element with same original dimensions and positioning, with overflow
@@ -331,9 +402,38 @@ JqueryClass('pedalboard', {
             }
         }});
 
-        // Dragging the pedalboard move the view area
+        // Dragging the pedalboard moves the view area, shift-dragging selects plugins.
+        // preventDrag is already set here if the mousedown landed on a plugin or a jack,
+        // as their own handlers fire first on the way up
         self.mousedown(function (e) {
-            self.pedalboard('drag', e)
+            if (self.data('preventDrag')) {
+                return
+            }
+            if (e.shiftKey) {
+                self.pedalboard('marquee', e)
+            } else {
+                self.pedalboard('setSelection', {})
+                self.pedalboard('drag', e)
+            }
+        })
+
+        // Delete removes the selection. Bound on the document because the pedalboard is
+        // not focusable, and ignored while typing so the plugin settings windows, the
+        // save dialog and the plugin search all keep working. Backspace counts too, for
+        // keyboards whose only delete key is that one
+        $(document).keydown(function (e) {
+            if (e.which != 46 && e.which != 8) {
+                return
+            }
+            var tag = (e.target.tagName || '').toLowerCase()
+            if (tag == 'input' || tag == 'textarea' || tag == 'select' || e.target.isContentEditable) {
+                return
+            }
+            if (! Object.keys(self.data('selected')).length) {
+                return
+            }
+            e.preventDefault()
+            self.pedalboard('removeSelected')
         })
 
         // The mouse wheel is used to zoom in and out
@@ -544,7 +644,7 @@ JqueryClass('pedalboard', {
                         self.pedalboard('setPortWidgetsValue', instance, symbol, value)
                     }
 
-                    self.pedalboard('addPlugin', pluginData, instance, plugin.bypassed, plugin.x, plugin.y, {}, function () {
+                    self.pedalboard('addPlugin', pluginData, instance, plugin.label, plugin.bypassed, plugin.x, plugin.y, {}, function () {
                             loadPlugin(pluginsData)
                         }
                     )
@@ -790,7 +890,13 @@ JqueryClass('pedalboard', {
                 $('body').append(dummy)
                 return dummy
             },
-            handle: thumb
+            handle: thumb,
+            start: function (event, ui) {
+                // prevent adding plugin when help mode is active: block the drag event
+                if (self.data('getHelpModeActive')()) {
+                    return false
+                }
+            }
         }))
     },
 
@@ -835,6 +941,186 @@ JqueryClass('pedalboard', {
     // Prevents dragging of whole dashboard when dragging of effect or jack starts
     preventDrag: function (prevent) {
         $(this).data('preventDrag', prevent)
+    },
+
+    // Replaces the current selection. Keys of `selected` are plugin instances
+    setSelection: function (selected) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        for (var instance in plugins) {
+            if (plugins[instance] && plugins[instance].length) {
+                plugins[instance].toggleClass('mod-selected', !!selected[instance])
+            }
+        }
+        // lets the stylesheet fade everything that is not selected
+        self.toggleClass('mod-has-selection', Object.keys(selected).length > 0)
+        self.data('selected', selected)
+    },
+
+    // Adds or removes a single plugin from the selection, for shift-click
+    toggleSelected: function (instance) {
+        var self = $(this)
+        var selected = self.data('selected')
+        if (selected[instance]) {
+            delete selected[instance]
+        } else {
+            selected[instance] = true
+        }
+        self.pedalboard('setSelection', selected)
+    },
+
+    // Removes every selected plugin. Asks first when more than one is going, since there
+    // is no undo and a stray Delete could otherwise take out a whole board
+    removeSelected: function () {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        // snapshot the keys: removing a plugin drops it from the selection as it goes
+        var instances = Object.keys(self.data('selected'))
+        if (! instances.length) {
+            return
+        }
+        if (instances.length > 1 &&
+            ! confirm('Remove ' + instances.length + ' plugins from the pedalboard?')) {
+            return
+        }
+
+        self.pedalboard('finishConnection')
+        for (var i = 0; i < instances.length; i++) {
+            var plugin = plugins[instances[i]]
+            if (! plugin || ! plugin.length) {
+                continue
+            }
+            // ports is only needed so removePlugin can drop the plugin's cv outputs from
+            // the hardware manager; addPlugin stashes it on the icon for us
+            self.pedalboard('removePlugin', instances[i], plugin.data('ports'))
+        }
+        self.pedalboard('setSelection', {})
+    },
+
+    // Shift-dragging the background rubber-bands a box and selects what it touches.
+    // The box lives in the unscaled parent, so it needs no scale math, and the hit test
+    // uses getBoundingClientRect, which is already in the same screen space
+    marquee: function (start) {
+        var self = $(this)
+        var box = $('<div class="mod-selection-box">').appendTo(self.parent())
+        var parentRect = self.parent()[0].getBoundingClientRect()
+
+        var rectOf = function (e) {
+            return {
+                left: Math.min(start.clientX, e.clientX),
+                right: Math.max(start.clientX, e.clientX),
+                top: Math.min(start.clientY, e.clientY),
+                bottom: Math.max(start.clientY, e.clientY)
+            }
+        }
+
+        var moveHandler = function (e) {
+            var r = rectOf(e)
+            box.css({
+                left: r.left - parentRect.left,
+                top: r.top - parentRect.top,
+                width: r.right - r.left,
+                height: r.bottom - r.top
+            })
+        }
+
+        var upHandler = function (e) {
+            $(document).unbind('mousemove', moveHandler)
+            $(document).unbind('mouseup', upHandler)
+            box.remove()
+
+            var r = rectOf(e)
+            if (r.right - r.left < 4 && r.bottom - r.top < 4) {
+                // a shift-click with no drag, leave the selection alone
+                return
+            }
+
+            var selected = {}
+            var plugins = self.data('plugins')
+            for (var instance in plugins) {
+                if (! plugins[instance] || ! plugins[instance].length) {
+                    continue
+                }
+                var b = plugins[instance][0].getBoundingClientRect()
+                if (b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom) {
+                    selected[instance] = true
+                }
+            }
+            self.pedalboard('setSelection', selected)
+        }
+
+        $(document).bind('mousemove', moveHandler)
+        $(document).bind('mouseup', upHandler)
+    },
+
+    // Called when a plugin drag starts. If that plugin is selected, remember where every
+    // other selected plugin sits so the drag can move them all by the same delta
+    startGroupDrag: function (instance) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var selected = self.data('selected')
+
+        self.data('dragGroup', null)
+        if (! selected[instance]) {
+            return
+        }
+
+        var group = []
+        for (var other in selected) {
+            if (other == instance || ! plugins[other] || ! plugins[other].length) {
+                continue
+            }
+            group.push({
+                instance: other,
+                icon: plugins[other],
+                left: parseInt(plugins[other].css('left')),
+                top: parseInt(plugins[other].css('top'))
+            })
+        }
+        if (! group.length) {
+            return
+        }
+
+        self.data('dragGroup', group)
+        self.data('dragOrigin', {
+            left: parseInt(plugins[instance].css('left')),
+            top: parseInt(plugins[instance].css('top'))
+        })
+    },
+
+    // Moves the rest of the selection to follow the dragged plugin. left/top are the
+    // dragged plugin's new position, in canvas units
+    dragGroupTo: function (left, top) {
+        var self = $(this)
+        var group = self.data('dragGroup')
+        if (! group) {
+            return
+        }
+        var origin = self.data('dragOrigin')
+        var dx = left - origin.left
+        var dy = top - origin.top
+        for (var i = 0; i < group.length; i++) {
+            group[i].icon.css({
+                left: group[i].left + dx,
+                top: group[i].top + dy
+            })
+            self.pedalboard('drawPluginJacks', group[i].icon)
+        }
+    },
+
+    // Persists the new position of every plugin that moved along with the dragged one
+    finishGroupDrag: function () {
+        var self = $(this)
+        var group = self.data('dragGroup')
+        if (! group) {
+            return
+        }
+        for (var i = 0; i < group.length; i++) {
+            self.data('pluginMove')(group[i].instance,
+                                    parseInt(group[i].icon.css('left')),
+                                    parseInt(group[i].icon.css('top')))
+        }
+        self.data('dragGroup', null)
     },
 
     // Moves the viewable area of the pedalboard
@@ -1382,7 +1668,7 @@ JqueryClass('pedalboard', {
 
     // Adds a plugin to pedalboard. This is called after the application loads the plugin with the
     // instance, now we need to put it in screen.
-    addPlugin: function (pluginData, instance, bypassed, x, y, guiOptions, renderCallback, skipModified) {
+    addPlugin: function (pluginData, instance, label, bypassed, x, y, guiOptions, renderCallback, skipModified) {
         var self = $(this)
         var scale = self.data('scale')
 
@@ -1393,6 +1679,7 @@ JqueryClass('pedalboard', {
                 obj.icon.addClass('dragging')
                 obj.icon.css({'z-index': self.data('z_index')+1})
                 self.data('z_index', self.data('z_index')+1)
+                self.pedalboard('startGroupDrag', instance)
                 return true
             },
             drag: function (e, ui) {
@@ -1400,6 +1687,7 @@ JqueryClass('pedalboard', {
                 var scale = self.data('scale')
                 ui.position.left /= scale
                 ui.position.top /= scale
+                self.pedalboard('dragGroupTo', ui.position.left, ui.position.top)
                 self.trigger('modified')
                 self.pedalboard('drawPluginJacks', obj.icon)
             },
@@ -1409,9 +1697,14 @@ JqueryClass('pedalboard', {
                 self.pedalboard('drawPluginJacks', obj.icon)
                 obj.icon.removeClass('dragging')
                 self.data('pluginMove')(instance, ui.position.left, ui.position.top)
+                self.pedalboard('finishGroupDrag')
                 self.pedalboard('adapt', false)
             },
             click: function (event) {
+                if (event.shiftKey) {
+                    self.pedalboard('toggleSelected', instance)
+                    return
+                }
                 obj.icon.css({'z-index': self.data('z_index')+1})
                 self.pedalboard('drawPluginJacks', obj.icon)
                 self.data('z_index', self.data('z_index')+1)
@@ -1463,6 +1756,10 @@ JqueryClass('pedalboard', {
                         }
                     })
             },
+            compareSnapshotSwitch: self.data('compareSnapshotSwitch'),
+            compareSnapshotTake: self.data('compareSnapshotTake'),
+            changePortMonitoring: self.data('changePortMonitoring'),
+            isPortMonitored: self.data('isPortMonitored'),
             bypassed: bypassed ? 1 : 0,
             defaultIconTemplate: DEFAULT_ICON_TEMPLATE,
             defaultSettingsTemplate: DEFAULT_SETTINGS_TEMPLATE
@@ -1482,9 +1779,16 @@ JqueryClass('pedalboard', {
         */
         var pluginGui = new GUI(pluginData, options)
 
+        pluginGui.label = label
         pluginGui.render(instance, function (icon, settings) {
             obj.icon = icon
             icon.attr('mod-uri', escape(pluginData.uri));
+
+            if (pluginData.licensed < 0) {
+                // This is a TRIAL plugin
+                icon.find('[mod-role="drag-handle"]').addClass('demo-plugin').addClass('demo-plugin-light');
+                self.data('notifyDemoPluginLoaded')()
+            }
 
             self.data('plugins')[instance] = icon
 
@@ -1492,8 +1796,8 @@ JqueryClass('pedalboard', {
                 self.trigger('modified')
             }
 
-            icon.data('label', pluginData.label)
             icon.data('uri', pluginData.uri)
+            icon.data('ports', pluginData.ports)
             icon.data('gui', pluginGui)
             icon.data('settings', settings)
             icon.data('instance', instance)
@@ -1649,7 +1953,8 @@ JqueryClass('pedalboard', {
                 },
             })
 
-            var actions = $('<div>').addClass('ignore-arrive').addClass('mod-actions').appendTo(icon)
+            // appenda standard UI icons like info, delete to plugin gui on the constructor
+            var actions = $('<div>').data('helpId', 'pedalboard-effect-actions').addClass('ignore-arrive').addClass('mod-actions').appendTo(icon)
             if (pluginData.hasExternalUI) {
                 $('<div>').addClass('mod-external-ui').click(function () {
                     self.pedalboard('finishConnection')
@@ -1657,6 +1962,10 @@ JqueryClass('pedalboard', {
                     return false
                 }).appendTo(actions)
             }
+            $('<div>').addClass('mod-snapshotable-status plugin-global-snapshot').click(function () {
+                self.pedalboard('finishConnection')
+                return false
+            }).appendTo(actions)
             $('<div>').addClass('mod-information').click(function () {
                 self.pedalboard('finishConnection')
                 self.data('showPluginInfo')(pluginData)
@@ -1675,6 +1984,13 @@ JqueryClass('pedalboard', {
 
             settings.window({
                 windowName: "Plugin Settings",
+                windowManager: self.data('windowManager'),
+                open: function() {
+                    self.data('pluginSettingsWindowOpen')(pluginGui)
+                },
+                close: function() {
+                    self.data('pluginSettingsWindowClose')(pluginGui)
+                }
             }).appendTo($('body'))
             icon.css({
                 'z-index': self.data('z_index'),
@@ -1772,6 +2088,20 @@ JqueryClass('pedalboard', {
         }
     },
 
+    // Remove "Trial" watermark from all instances of a plugin
+    license: function(uri) {
+        var self = $(this);
+        var plugins = self.data('plugins');
+
+        var icon;
+        for (var instance in plugins) {
+            icon = plugins[instance]
+            if (icon && icon.data && icon.data('uri') == uri) {
+                icon.find('[mod-role="drag-handle"]').removeClass('demo-plugin').removeClass('demo-plugin-light');
+            }
+        }
+    },
+
     getLabel: function (instance) {
         var plugin = $(this).data('plugins')[instance]
         if (plugin && plugin.data) {
@@ -1858,6 +2188,56 @@ JqueryClass('pedalboard', {
 
                 var gui = self.pedalboard('getGui', instance)
                 gui.setPortWidgetsValue(symbol, value, null, true)
+            }
+
+            self.pedalboard('addUniqueCallbackToArrive', cb, targetname, callbackId)
+        }
+    },
+
+    /*
+     * Properties are special values of a port tied with the pedalboard
+     * set port property of a port
+     */
+    setPortPropertyValue: function (instance, symbol, property, value) {
+        var self = $(this)
+        var targetname = '.mod-pedal[mod-instance="'+instance+'"]'
+        var callbackId = instance+'/'+symbol+":property:"+property
+        var gui = self.pedalboard('getGui', instance)
+
+        if (gui && self.find(targetname).length) {
+            gui.setPortPropertyValue(symbol, property, value)
+        } else {
+            var cb = function () {
+                delete self.data('callbacksToArrive')[callbackId]
+                self.unbindArrive(targetname, cb)
+
+                var gui = self.pedalboard('getGui', instance)
+                gui.setPortPropertyValue(symbol, property, value)
+            }
+
+            self.pedalboard('addUniqueCallbackToArrive', cb, targetname, callbackId)
+        }
+    },
+
+    /*
+     * Properties are special values of a parameter tied with the pedalboard
+     * set parameter property of a parameter
+     */
+    setParameterPropertyValue: function (instance, uri, property, value) {
+        var self = $(this)
+        var targetname = '.mod-pedal[mod-instance="'+instance+'"]'
+        var callbackId = instance+'/'+uri+":property:"+property
+        var gui = self.pedalboard('getGui', instance)
+
+        if (gui && self.find(targetname).length) {
+            gui.setParameterPropertyValue(uri, property, value)
+        } else {
+            var cb = function () {
+                delete self.data('callbacksToArrive')[callbackId]
+                self.unbindArrive(targetname, cb)
+
+                var gui = self.pedalboard('getGui', instance)
+                gui.setParameterPropertyValue(uri, property, value)
             }
 
             self.pedalboard('addUniqueCallbackToArrive', cb, targetname, callbackId)
@@ -2026,6 +2406,7 @@ JqueryClass('pedalboard', {
             }
 
             delete plugins[instance]
+            delete self.data('selected')[instance]
 
             // nothing else asks the canvas to reconsider its size after a removal, and
             // scheduleAdapt debounces, so deleting several plugins recalculates once
@@ -2236,6 +2617,201 @@ JqueryClass('pedalboard', {
         })
     },
 
+    updateGlobalVUMeterPluginInfo: function(pluginInstance) {
+        const self = $(this)
+        const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
+        const gui = pluginInstance?.data('gui')
+        let label = ""
+        let thumbnail_href = ""
+
+        if (gui) {
+            const ver = [gui.effect.builder, gui.effect.microVersion, gui.effect.minorVersion, gui.effect.release].join('_')
+            label = gui.label
+
+            if (gui.effect) {
+                if (!label) {
+                    label = gui.effect?.label
+                }
+
+                const uri = escape(gui.effect.uri)
+
+                if (gui.effect?.gui?.thumbnail) {
+                    thumbnail_href = "/effect/image/thumbnail.png?uri=" + uri + "&v=" + ver
+                }
+            }
+        }
+
+        if (!thumbnail_href) {
+            thumbnail_href = "/resources/pedals/default-thumbnail.png"
+        }
+
+        global_overlay.find('.js-vumeter-image img').attr('src', thumbnail_href)
+        global_overlay.find('.js-vumeter-label').text(label)
+    },
+
+    addPortVUMeter: function(port, label, element) {
+        const self = $(this)
+        const vumeters = self.data('vumeters')
+        const vumeter = new VUMeter(32, 256, {
+            onClick: (sender, e) => {
+                const vumeters = self.data('vumeters')
+
+                const global_vumeter = vumeters['global::overlay']
+                let pluginInstance = undefined
+
+                for(var key in vumeters) {
+                    const item = vumeters[key]
+
+                    if (item == sender) {
+                        item.setIsSelected(true)
+                        var instanceKey = key.replace(key.split('/').pop(), '')?.slice(0, -1)
+
+                        if (instanceKey) {
+                            self.pedalboard('selectPortVUMeter', instanceKey, port)
+                        }
+                    } else {
+                        item.setIsSelected(false)
+                    }
+                }
+                global_vumeter.setLabel(sender.getLabel())
+                global_vumeter.resetClip()
+                e.stopPropagation()
+            }
+        })
+
+        const should_add_global = Object.keys(vumeters).length == 0
+        let count = 0
+        let vuMeterKey = port.replace(port.split('/').pop(), '')
+        for(let key in vumeters) {
+            // unselect all other vumeters
+            vumeters[key]?.setIsSelected(false)
+
+            // count how many vumeters belong to the same plugin instance, so we can set odd/even class for styling
+            if (key.startsWith(vuMeterKey))
+                count++
+        }
+
+        label = label?.replace('_', ' ')
+        vumeter.wrapper.className += count % 2 == 1 ? " odd" : " even"
+        vumeter.setLabel(label)
+        vumeter.setLabelIsVisible(false)
+        vumeter.setIsSelected(true)
+        element.append(vumeter.getElement())
+        vumeters[port] = vumeter
+
+        if (should_add_global) {
+            const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
+            const global_vumeter_container = global_overlay?.find(".js-vumeter")
+            global_overlay.removeClass('mod-hidden')
+
+            // create the global overlay vumeter
+            const global_vumeter = new VUMeter("50px", "100%")
+
+            global_vumeter.dbMarkers = [0, -3, -6, -12, -20, -40];
+            global_vumeter.wrapper.className += " global"
+            global_vumeter.setLabel(label)
+            global_vumeter_container.append(global_vumeter.getElement())
+            vumeters['global::overlay'] = global_vumeter
+        }
+
+        // select the plugin instance for the global vumeter and update the label and thumbnail
+        const instance = vuMeterKey.slice(0, -1)
+        self.pedalboard('selectPortVUMeter', instance, port)
+    },
+
+    selectPortVUMeter: function(pluginInstanceKey, port) {
+        const self = $(this)
+        const pluginInstance = self.data('plugins')[pluginInstanceKey]
+
+        self.pedalboard('updateGlobalVUMeterPluginInfo', pluginInstance)
+        self.data('vumeters::selected', port)
+
+        const vumeters = self.data('vumeters')
+        const vumeter = vumeters[port]
+        const global_vumeter = vumeters['global::overlay']
+        if (global_vumeter) {
+            if (vumeter) {
+                global_vumeter.setLabel(vumeter.getLabel())
+                global_vumeter.setLevel(vumeter.getLevel())
+                if (vumeter.getClip()) {
+                    global_vumeter.setClip()
+                } else {
+                    global_vumeter.resetClip()
+                }
+            } else {
+                global_vumeter.setLabel('')
+                global_vumeter.setLevel(-60)
+                global_vumeter.resetClip()
+            }
+        }
+    },
+
+    removePortVUMeter: function(port) {
+        const self = $(this)
+        const output = self.find(`[mod-port='${port}']`)
+        const vumeter = output ? output.find('.mod-vumeter-wrapper') : undefined
+
+        if (vumeter) {
+            vumeter.remove()
+            let vumeters = self.data('vumeters')
+            delete vumeters[port]
+
+            if (Object.keys(vumeters).length == 1) { // we only have the global vumeter, remove it
+                const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
+
+                global_overlay.addClass('mod-hidden')
+                global_vumeter = vumeters['global::overlay']
+                global_vumeter.getElement().remove();
+                delete vumeters['global::overlay']
+            } else {
+                // check if is the selected vumeter
+                if (port == self.data('vumeters::selected')) {
+                    const global_vumeter = vumeters['global::overlay']
+                    const firstKey = Object.keys(vumeters).find(key => key !== 'global::overlay')
+
+                    if (global_vumeter) {
+                        const instanceKey = firstKey?.replace(firstKey.split('/').pop(), '')?.slice(0, -1)
+                        self.pedalboard('selectPortVUMeter', instanceKey, firstKey)
+                    } else {
+                        console.warn("not global vumeter present: vumeters not synched with host?!?")
+                    }
+                }
+            }
+        }
+    },
+
+    setPortVUMeterValue: function(port, db) {
+        var self = $(this)
+        const vumeters = self.data('vumeters')
+        let vumeter = vumeters[port]
+
+        if (vumeter) {
+            vumeter.setLevel(db)
+            if (port == self.data('vumeters::selected')) {
+                vumeter = vumeters['global::overlay']
+                vumeter.setLevel(db)
+            }
+        } else {
+            // check if we have to debounce the vumeter creation,
+            // because we just closed the plugin settings and the vumeter was removed,
+            // but the host is still sending some values for it
+            const debounceBaseDate = self.data('currentSettingsWindowClosedTime') || 0
+            if (debounceBaseDate && (Date.now() - debounceBaseDate) < 3000) {
+                console.log("debouncing vumeter creation for port " + port + " because settings window was just closed")
+                return
+            }
+            // if we don't have a vumeter we have refreshed the page
+            // create a new one
+            const output = self.find(`[mod-port='${port}']`)
+            if (output && output[0]) {
+                const label = output.attr('title')
+
+                self.pedalboard('addPortVUMeter', port, label, output[0])
+            }
+        }
+
+    },
+
     // Make element an audio output, which contain jacks that can be dragged to
     // inputs to make connections
     makeOutput: function (element, instance) {
@@ -2261,7 +2837,25 @@ JqueryClass('pedalboard', {
         element.click(function (e) {
             // Do not start connection if cv addressing checkbox or text input clicked
             if (!$(e.target).is('input') && !$(e.target).hasClass('checkmark') && !$(e.target).hasClass('checkbox-container')) {
-              self.pedalboard('startConnection', element)
+              // POC: shift pressed toggle audio level monitoring
+              if (e.shiftKey || e.ctrlKey) {
+                const jack = element.find('[mod-role=output-jack]')
+                const output = jack.parent()
+                const port = output.attr('mod-port')
+                const label = output.attr('title')
+                const urlParam = port + ',toggle'
+
+                self.data('changePortMonitoring')(port, 'toggle', function (resp) {
+                    if (resp) {
+                        self.pedalboard('addPortVUMeter', port, label, output)
+                    } else {
+                        self.pedalboard('removePortVUMeter', port)
+                    }
+                });
+             
+              } else {
+                  self.pedalboard('startConnection', element)
+              }
             }
         })
     },
@@ -2925,7 +3519,7 @@ JqueryClass('pedalboard', {
         plugin.css({ top: y, left: x })
         self.pedalboard('fitToWindow')
         self.pedalboard('drawPluginJacks', plugin)
-    }
+    },
 })
 
 function ConnectionManager() {
@@ -3041,5 +3635,410 @@ function ConnectionManager() {
 
         delete self.origByInstanceIndex[instance]
         delete self.destByInstanceIndex[instance]
+    }
+}
+
+
+function T3KIntegration(pedalboard) {
+    /*
+     * Handle Tone3000 integration
+     *
+     * Terminology:
+     *
+     * CLIENT: is the javascript mod UI that runs in the browser
+     * SERVER: is the python mod server that runs in the unit (dwarf)
+     * T3K: is the Tone3000 remote REST api
+     *
+     * Flow:
+     *
+     * 1. The CLIENT start the select tone flow using the T3K API
+     * 2. T3K callback the python SERVER when a tone is selected or the popup is closed
+     * 3. The SERVER callback the CLIENT to inform the tone selection is done using the websocket connection using the command 't3k-tone-selected' or 't3k-cancel'
+     * 4. The CLIENT exchange the code with an auth token using T3K API
+     * 5. The CLIENT call the T3K to fetch the tones and upload to the SERVER
+     *
+     */
+    const pubKey = 't3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'
+    const self = this
+    let t3kOpenPopups = []
+
+    this.pedalboard = pedalboard
+    /*
+     * Find ongoing t3k state by effect.
+     *
+     * Returns the popup window or undefined
+     */
+    const findInfoByEffect = function(effect) {
+        for(let item of t3kOpenPopups) {
+            if (item.effect === effect) {
+                return item
+            }
+        }
+
+        return undefined
+    }
+
+    /*
+     * Delete the effect from the list of monitored effects
+     */
+    const deleteEffectPopup = function(effect) {
+        t3kOpenPopups = t3kOpenPopups.filter(item => item.effect != effect)
+    }
+
+    this.startSelectFlow = function(effect, parameter, skipAuthCheck) {
+        if (!skipAuthCheck) {
+            // check if I'm authenticated
+            const auth = window.Tone3000Client.getTokens()
+            let authenticated = false
+            if (auth != null) {
+                // note that this call is sync
+                $.ajax({
+                    url: `https://www.tone3000.com/api/v1/user`,
+                    type: 'GET',
+                    async: false,
+                    headers: {
+                        'Authorization': 'Bearer ' + auth.tokens.access_token
+                    },
+                    success: function (tone) {
+                        authenticated = true
+                    }
+                })
+            }
+
+            if (!authenticated) {
+                // if not authenticated show the T3K welcome
+                const width = 480;
+                const height = 720;
+                const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+                const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+                const url = "/t3k_spash.html?d=" + Date.now().toString()
+                const t3kwelcome = window.open(url, 't3k_select', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
+                t3kwelcome.onSplashContinue = function() {
+                    // continue with the select workflow skipAuthCheck = true
+                    self.startSelectFlow(effect, parameter, true)
+                }
+
+                return // stop now because we have shown the splash window
+            }
+        }
+
+        // start the select workflow
+        const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
+        // todo: gears -> check if we need to load an amp/effet or a cab/ir
+
+        gears = []
+        parameter.fileTypes.forEach(value => {
+            if (value == 'nammodel' || value == 'aidadspmodel') {
+                gears.push('amp')
+                gears.push('amp-cab')
+                gears.push('pedal')
+                gears.push('outboard')
+            } else if (value == 'cabsim') {
+                gears.push('cab')
+            } else if (value == 'ir') {
+                gears.push('space')
+            }
+        });
+
+        if (gears.length == 0) {
+            gears.push('amp')
+            gears.push('amp-cab')
+            gears.push('pedal')
+            gears.push('outboard')
+        } else {
+            gears = [...new Set(gears)];
+        }
+
+        const options = {
+            gears: gears.join('_'),
+            //format: string,
+            menubar: true,
+            //loginHint: string,
+            architecture: 2, // NAM A2
+            preview: true
+        }
+        window.Tone3000Client
+            .startSelectFlowPopup(pubKey, callbackUrl, options)
+            .then((data) => {
+                // add the popup to the traked popups
+                t3kOpenPopups.push({effect: effect, parameter: parameter, popup: data})
+            })
+            .catch((error) => {
+                console.error("T3KSelect error:", error);
+            })
+    }
+
+    this.refreshPluginsFilelist = function(senderEffect, senderParameter, senderSetValue) {
+        const plugins = self.pedalboard.data('plugins')
+        const sender = plugins[senderEffect] // the effect who completed the download
+        const senderGui = sender.data('gui')
+        for(let pluginKey in plugins) {
+            // refresh the file lists
+            const plugin = plugins[pluginKey]
+            const pluginGui = plugin.data('gui')
+
+            pluginGui?.effect?.parameters?.forEach(parameter => {
+                // we need to refresh a plugin parameter if it has the same filetype of the senderParameter
+                if (parameter.fileTypes && senderParameter.fileTypes.some(item => parameter.fileTypes.includes(item))) {
+                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter, (pluginKey == senderEffect ? senderSetValue?.fullname : undefined))
+                }
+            });
+        }
+    }
+
+    this.getToneInfo = async function (access_token, toneId) {
+        try {
+            const tone = await $.ajax({
+                url: 'https://www.tone3000.com/api/v1/tones/' + toneId,
+                type: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + access_token
+                },
+                cache: false,
+                dataType: 'json'
+            })
+
+            return tone
+        } catch (error) {
+            throw new Error(`Error downloading the tone metadata: ${error}`)
+        }
+    }
+
+    /*
+     * Get the tone models from T3K
+     */
+    this.getModels = async function (access_token, tone) {
+        // now fetch the models
+        try {
+            let models = []
+            const pageSize = 50
+            let page = 1
+            let total = 1
+
+            let baseurl = `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}`
+            if (tone.a2_models_count > 0)
+                baseurl += '&architecture=2'
+
+            while (models.length < total) {
+                const pageModels = await $.ajax({
+                    url: `${baseurl}&page=${page}&page_size=${pageSize}`,
+                    headers: {
+                        'Authorization': 'Bearer ' + access_token
+                    },
+                    cache: false,
+                    dataType: 'json'
+                })
+
+                if (!pageModels.data || pageModels.data.length == 0)
+                    throw new Error('no models on data')
+                models = models.concat(pageModels.data)
+                total = pageModels.total
+                page += 1
+            }
+            return models
+        } catch (error) {
+            throw new Error(`Error downloading the tone models metadata: ${error}`)
+        }
+    }
+
+    /*
+     * This function download the models files and upload to the device using the file upload api
+     */
+    this.downloadModelsFiles = async function (access_token, tone, models, progressFunc) {
+        try {
+            const total = models.length
+            const files = []
+            let current = 0
+            let directory = total > 1 ? tone.title : "" // do not place in a subfolder if it's just one file
+
+            progressFunc?.(null, 0, total)
+            for(const model of models) {
+                current += 1
+                progressFunc?.(model, current, total)
+                const url = new URL(model.model_url);
+                const tmpFilename = url.pathname.split('/').pop();
+                const fileExtension = tmpFilename.split('.').pop();
+                let fileName = (total > 1 ? model.name : tone.title)
+
+                if (tone.gear == 'cab') {
+                    filetype = 'cabsim'
+                } else if (tone.gear == 'space') {
+                    filetype = 'ir'
+                } else {
+                    filetype = 'nammodel'
+                }
+                const uploadConfig = {
+                    directory: directory,
+                    onDirectoryConflict: current == 1 ? 'rename' : 'merge', // rename directory if exists, the file is always renamed on conflict
+                    filename: (fileName + (fileExtension ? '.' + fileExtension : '')).trim(),
+                    filetype: filetype,
+                    metadata: {
+                        source: 'T3K',
+                        data: {
+                            toneId: tone.id,
+                            modelId: model.id
+                        }
+                    }
+                }
+
+                const response = await new Promise((resolve, reject) => {
+                    var transfer = new SimpleTransference(
+                                        model.model_url,
+                                        '/files/upload',
+                                        {
+                                            from_args: {
+                                                headers: { 'Authorization': 'Bearer ' + access_token }
+                                            },
+                                            to_args: {
+                                                headers: {
+                                                    'Authorization' : 'MOD ' + desktop.cloudAccessToken,
+                                                    'X-Upload-Config': encodeURIComponent(JSON.stringify(uploadConfig))
+                                                }
+                                            }
+                                        })
+
+                    transfer.reauthorizeUpload = desktop.authenticateDevice
+
+                    transfer.reportFinished = function (resp2) {
+                        resolve(resp2)
+                    }
+
+                    transfer.reportError = function (error) {
+                    reject(new Error(error))
+                    }
+
+                    transfer.start()
+                })
+
+                if (!response.ok)
+                    throw new Error(model.name)
+
+                if (current == 1) // place all the other files in the same directory (the server can rename the directory to not overwrite files)
+                    directory = response.result.dirname
+
+                files.push(response.result)
+            }
+
+            return files
+        } catch (error) {
+            throw new Error(`Error downloading the tone models file: ${error}`)
+        }
+    }
+
+    /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kToneSelected = function(effect, code, state, toneId) {
+        // Select Flow — user browses TONE3000 and picks a tone
+        // Optional: gears, platform, architecture, menubar (same query params as authorize URL)
+        // console.log(`t3k cancel instance ${effect}, code ${code}, state ${state}, toneId ${toneId}`)
+        const cleanup = function(t3kinfo) {
+            t3kinfo.popup.location = 'about:blank'
+            t3kinfo.popup.close()
+            deleteEffectPopup(t3kinfo.effect)
+        }
+        const onError = function(t3kinfo, error) {
+            cleanup(t3kinfo)
+            new Notification('error', 'Error downloading from Tone3000.')
+            console.error(`t3kToneSelected status error: ${error} `);
+        }
+        const t3kinfo = findInfoByEffect(effect)
+
+        // check if we have a popup registered
+        if (!t3kinfo) {
+            console.error(`t3kToneSelected t3kinfo for instance ${effect} can't download models`)
+            return
+        }
+
+        t3kinfo.state = 'downloading'
+        t3kinfo.popup.location = "/t3k.html?d=" + Date.now().toString()
+
+        // must match the callbackUrl of the request we need to exchange the code for
+        const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
+        // start the download
+        const t3kClient = window.Tone3000Client
+
+        t3kClient
+            .exchangeCode(pubKey, callbackUrl, code, state)
+            .then((auth) => {
+                if (auth?.ok) {
+                    // fetching the tone info
+                    t3kClient.setTokens(auth)
+                    self
+                        .getToneInfo(auth.tokens.access_token, toneId)
+                        .then((tone) => {
+                            // update the popup with the info of the tone
+                            const title = tone.title
+                            const des = tone.description
+                            const user = tone.user?.display_name
+                            const image = tone.images?.[0]
+
+                            t3kinfo.popup?.setToneInfo?.(user, title, des, image)
+                            self
+                                .getModels(auth.tokens.access_token, tone)
+                                .then((models) => {
+                                    // download models and store on the dwarf user files
+                                    self
+                                        .downloadModelsFiles(auth.tokens.access_token, tone, models, function(model, current, count) {
+                                            const msg = `Downloading files ${current}/${count}...`
+                                            const perc = Math.round(current / Math.min(1, count) * 100)
+                                            t3kinfo.popup?.progress?.(msg, perc)
+                                        })
+                                        .then((files) => {
+                                            // refresh plugins file list
+                                            let setValue = undefined
+                                            if (files && files.length > 0) {
+                                                files.sort((a, b) =>  a.fullname.localeCompare(b.fullname))
+                                                // first in alphabetic order
+                                                setValue = files[0]
+                                            }
+                                            self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
+                                            cleanup(t3kinfo)
+                                            new Notification('info', 'Download from Tone3000 completed.', 2000)
+                                        })
+                                        .catch((errDownloadModels) => {
+                                            onError(t3kinfo, errDownloadModels)
+                                        })
+                                })
+                                .catch((errFetchModels) => {
+                                    onError(t3kinfo, errFetchModels)
+                                })
+
+                        })
+                        .catch((errTone) => {
+                            onError(t3kinfo, errTone)
+                        })
+                }
+            })
+            .catch((error) => {
+                onError(t3kinfo, error)
+            })
+    }
+
+    /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kCancel = function(instance) {
+        console.log("t3k cancel " + instance)
+        const t3kinfo = findInfoByEffect(instance)
+
+        // check if we have a popup registered
+        if (t3kinfo) {
+            deleteEffectPopup(instance)
+            t3kinfo.popup?.close()
+        } else {
+            console.error(`t3kCancel no popup for instance ${instance} can't download models`)
+            return
+        }
+    }
+
+    /*
+     * Update the popup UI with the progress of the
+     * (download) current operation
+     */
+    this.t3kProgress = function(instance, msg, progress) {
+        const t3kinfo = findInfoByEffect(instance)
+
+        t3kinfo?.popup?.progress?.(msg, progress)
     }
 }
