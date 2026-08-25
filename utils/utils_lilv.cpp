@@ -3159,13 +3159,14 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
 
     if (size_t count = portGroups.size())
     {
-        PluginPortGroup* const groups = new PluginPortGroup[count + 1]();
+        PluginPortGroup* const groups = new PluginPortGroup[count + 1];
 
         size_t index = 0;
         for (const auto& kv : portGroups)
         {
             groups[index++] = kv.second;
         }
+        memset(&groups[count], 0, sizeof(PluginPortGroup));
 
         // Sort the final array directly in-place
         std::sort(groups, groups + count, [](const PluginPortGroup& a, const PluginPortGroup& b) {
@@ -3178,8 +3179,6 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
 
             return strcmp(a.symbol, b.symbol) < 0;
         });
-
-        memset(&groups[count], 0, sizeof(PluginPortGroup));
 
         info.portGroups = groups;
     }
