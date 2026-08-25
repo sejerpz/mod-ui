@@ -1994,12 +1994,20 @@ const PluginPortGroup _get_port_group(LilvWorld* const w, const LilvNode* const 
                     // get description
                     LilvNode* const group_name = lilv_world_get(w, group, ns.lv2core_name, nullptr);
                     const char* const groupname = (group_name != nullptr) ? lilv_node_as_string(group_name) : nullptr;
+                    int index = 0;
 
+                    if (LilvNode* const node = lilv_world_get(w, group, ns.lv2core_index, nullptr))
+                    {
+                        index = lilv_node_as_int(node);
+                        lilv_node_free(node);
+                    } 
                     // create a new port group
                     port_group.valid = true;
                     port_group.symbol = strdup(groupsymbol);
                     port_group.name = groupname == nullptr ? strdup(groupsymbol) : strdup(groupname);
-
+                    port_group.index = index;
+                    
+                    printf("********index %s: %s %d\n", groupsymbol, port_group.name, index);
                     lilv_node_free(group_name);
                 }
                 else
@@ -3166,12 +3174,30 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
 
         if (size_t countGroups = usedGroups.size())
         {
-            PluginPortGroup* const groups = new PluginPortGroup[countGroups+1];
+            std::vector<PluginPortGroup> sortedGroups;
+            sortedGroups.reserve(countGroups);
 
-            countGroups = 0;
-            for (auto& group : usedGroups)
-                groups[countGroups++] = group.second;
+            for (const auto& group : usedGroups)
+                sortedGroups.push_back(group.second);
 
+            //Order by index, then name, then symbol
+            std::sort(sortedGroups.begin(), sortedGroups.end(), [](const PluginPortGroup& a, const PluginPortGroup& b) {
+                if (a.index != b.index)
+                    return a.index < b.index;
+
+                int cmpName = strcmp(a.name, b.name);
+                if (cmpName != 0)
+                    return cmpName < 0;
+
+                return strcmp(a.symbol, b.symbol) < 0;
+            });
+
+            // Copy the ordered vector to the final array
+            PluginPortGroup* const groups = new PluginPortGroup[countGroups + 1];
+
+            for (size_t i = 0; i < countGroups; ++i)
+                groups[i] = sortedGroups[i];
+                
             memset(&groups[countGroups], 0, sizeof(PluginPortGroup));
 
             info.portGroups = groups;

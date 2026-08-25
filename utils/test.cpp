@@ -77,11 +77,29 @@ void scanPlugins()
                     printf("\t\t has no parameters\n");
                     continue;
                 }
+
+                const PluginInfo* pluginInfo = get_plugin_info(plugin.uri);
+                if (pluginInfo->portGroups) {
+
+                    for (int grpidx=0; pluginInfo->portGroups[grpidx].valid; ++grpidx) {
+                        PluginPortGroup group = pluginInfo->portGroups[grpidx];
+                        printf("\t\t group '%s': %s %d\n", group.symbol, group.name, group.index);
+                    }
+                }
+                for (int idx=0; pluginInfo->ports.audio.input[idx].valid; ++idx) {
+                    PluginPort port = pluginInfo->ports.audio.input[idx];
+                    printf("\t\t audio input '%s': %s %d\n", port.symbol, port.name, port.index);
+                }
+                for (int idx=0; pluginInfo->ports.audio.output[idx].valid; ++idx) {
+                    PluginPort port = pluginInfo->ports.audio.output[idx];
+                    printf("\t\t audio input '%s': %s %d\n", port.symbol, port.name, port.index);
+                }
+
+                /*/
                 for (int paridx=0; plugin.parameters[paridx].valid; ++paridx) {
                     PedalboardPluginParameter parameter = plugin.parameters[paridx];
                     printf("\t\t parameter '%s': snapshotable=%s\n", parameter.uri, parameter.snapshotable ? "true" : "false");
                 }
-
                 // dump the ports
                 if (plugin.ports == nullptr) {
                     printf("\t\t has no ports\n");
@@ -91,6 +109,7 @@ void scanPlugins()
                     PedalboardPluginPort port = plugin.ports[portidx];
                     printf("\t\t port '%s': snapshotable=%s\n", port.symbol, port.snapshotable ? "true" : "false");
                 }
+                    */
             }
             printf("\n");
 

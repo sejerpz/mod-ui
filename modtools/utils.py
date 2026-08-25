@@ -190,6 +190,7 @@ class PluginPortGroup(Structure):
         ("valid", c_bool),
         ("symbol", c_char_p),
         ("name", c_char_p),
+        ("index", c_uint),
     ]
 
 class PluginGUIPort(Structure):
