@@ -91,6 +91,7 @@ typedef struct {
     const char* uri;
     const char* symbol;
     const char* name;
+    int index;
 } PluginPortGroup;
 
 typedef struct {
