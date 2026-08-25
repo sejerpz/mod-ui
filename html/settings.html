@@ -192,6 +192,21 @@ function refresh_sysprefs() {
             $("#prefs-service-mod-sdk").prop("checked", resp.service_mod_sdk)
             $("#prefs-service-netmanager").prop("checked", resp.service_netmanager)
             $("#prefs-workarounds-autorestart-hmi").prop("checked", resp.autorestart_hmi)
+
+            $("#prefs-enable-midi-feedback").prop("checked", resp.midi_feedback)
+            if (resp.midi_feedback) {
+                // enable the feedback
+                $("#prefs-enable-midi-feedback-sync")
+                    .prop("checked", resp.midi_feedback_sync)
+                    .removeAttr("disabled")
+            } else {
+                // uncheck the midi feedback sync checkbox & disable if
+                $("#prefs-enable-midi-feedback-sync")
+                    .prop("checked", false)
+                    .attr("disabled", true)
+            }
+            $("#prefs-enable-midi-nrpn").prop("checked", resp.midi_nrpn)
+
         },
         cache: false,
         global: false,
@@ -530,8 +545,8 @@ $('document').ready(function() {
     if (PREFERENCES['dev-mode'] == "on") {
         $("#prefs-ui-developer-mode").prop("checked", true)
     }
-    if (PREFERENCES['show-labs-plugins'] == "true") {
-        $("#prefs-ui-labs-plugins").prop("checked", true)
+    if (PREFERENCES['show-unstable-plugins'] == "true") {
+        $("#prefs-ui-unstable-plugins").prop("checked", true)
     }
     if (! HMI_EEPROM) {
         $("#prefs-delete-hmi-settings_br").hide()
@@ -692,14 +707,52 @@ $('document').ready(function() {
     })
 
     // ----------------------------------------------------------------------------------------------------------------
+    // --- Midi Controllers
+    const enable_midi_feedback_sync = function(enabled) {
+        create_or_delete_file("midi-feedback-sync", enabled)
+        ws.send(sprintf("midi_feedback_sync_enabled %u", enabled))
+    }
+    const enable_midi_feedback = function(enabled) {
+        create_or_delete_file("midi-feedback", enabled);
+        ws.send(sprintf("midi_feedback_enabled %u", enabled));
+        if (enabled) {
+            // enable the feedback
+            $("#prefs-enable-midi-feedback-sync")
+                .prop("checked", false)
+                .removeAttr("disabled")
+        } else {
+            // uncheck the midi feedback sync checkbox & disable if
+            $("#prefs-enable-midi-feedback-sync")
+                .prop("checked", false)
+                .attr("disabled", true)
+            // disable also midi feedback sync
+            enable_midi_feedback_sync(enabled)
+        }
+    }
+
+    $("#prefs-enable-midi-feedback").click(function () {
+        var enabled = $(this).prop("checked") ? 1 : 0;
+        enable_midi_feedback(enabled);
+    })
+    $("#prefs-enable-midi-feedback-sync").click(function () {
+        var enabled = $(this).prop("checked") ? 1 : 0;
+        enable_midi_feedback_sync(enabled)
+    })
+    $("#prefs-enable-midi-nrpn").click(function () {
+        var enabled = $(this).prop("checked") ? 1 : 0;
+        create_or_delete_file("midi-nrpn", enabled)
+        ws.send(sprintf("midi_nrpn_enabled %u", enabled))
+    })
+
+    // ----------------------------------------------------------------------------------------------------------------
     // --- User Interface
 
     $("#prefs-ui-developer-mode").click(function () {
         config_set("dev-mode", $(this).prop("checked") ? "on" : "off")
     })
 
-    $("#prefs-ui-labs-plugins").click(function () {
-        config_set("show-labs-plugins", bool2str($(this).prop("checked")))
+    $("#prefs-ui-unstable-plugins").click(function () {
+        config_set("show-unstable-plugins", bool2str($(this).prop("checked")))
     })
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -1068,6 +1121,40 @@ $('document').ready(function() {
                     </p>
                 </form>
 
+                <h1>Midi Controllers</h1>
+                <form class="form">
+
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-enable-midi-feedback">
+                            Enable Midi feedback
+                        </input>
+                    </label>
+                    <p>
+                        If enabled, when a paramater has a midi binding and that parameter is change on the MOD, midi is sent out of the MOD to update the controller.
+                    </p>
+
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-enable-midi-feedback-sync">
+                            Enable Midi feedback sync
+                        </input>
+                    </label>
+                    <p>
+                        If midi feedback is enabled and this is enabled, bound midi messages are sent out from the MOD.
+                        This is a rare option and is only used to keep multiple midi controllers in sync. 
+                        Only enable this if you know that there is no possibility of a midi loop, if in any doubt do not enable this!
+                    </p>
+
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-enable-midi-nrpn">
+                            Enable Midi NRPN support
+                        </input>
+                    </label>
+                    <p>
+                        Enables Midi NRPN support for controlling parameters.
+                        If this is enabled then the following CC mssages cannot be used: CC6, CC38, CC98 and CC99.
+                    </p>
+                </form>
+                
                 <h1>Services</h1>
                 <form class="form">
                     <p>
@@ -1097,14 +1184,14 @@ $('document').ready(function() {
                         Show a few more options on the Web Interface, useful for developers.
                     </p>
                     <label>
-                        <input type="checkbox" autocomplete="off" id="prefs-ui-labs-plugins">
-                            Show MOD Labs plugins in the store
+                        <input type="checkbox" autocomplete="off" id="prefs-ui-unstable-plugins">
+                            Show beta plugins in the Store
                         </input>
                     </label>
                     <p>
-                        Show option to access "MOD Labs" plugins in the Plugin Store.<br/>
-                        Please note that MOD Labs plugins are community maintained, can be unstable and can cause crashes.
-                        If you share a pedalboard containing MOD Labs plugins, it will only be available to users that explicitly accept pedalboards using MOD Labs plugins.
+                        Show option to list 'beta' plugins in the Plugin Store.<br/>
+                        Note that beta plugins can be unstable and cause crashes.
+                        If you share a pedalboard containing beta plugins, it will only be available to users that explicitly accept pedalboards with beta plugins.<br/>
                         Just remember: things can break!
                     </p>
                 </form>

@@ -22,8 +22,12 @@ from random import randint
 from tornado import gen, iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
 from urllib.parse import quote, unquote
+from pprint import pprint
+
 import os, json, socket, time, logging, sys
 import shutil
+import copy
+import math
 
 # only used for HMI screenshots, optional
 try:
@@ -36,6 +40,7 @@ from mod import (
     get_hardware_descriptor, get_nearest_valid_scalepoint_value, get_unique_name,
     read_file_contents, safe_json_load, normalize_for_hw, os_sync, symbolify
 )
+from mod.presets_metadata import PresetsMetadata
 from mod.addressings import Addressings
 from mod.bank import (
     list_banks, save_banks, get_last_bank_and_pedalboard, save_last_bank_and_pedalboard,
@@ -75,11 +80,17 @@ from mod.mod_protocol import (
     CMD_PROFILE_STORE,
     CMD_NEXT_PAGE,
     CMD_SCREENSHOT,
+    CMD_AUDIO_FRAME_SIZE,
     CMD_DUO_FOOT_NAVIG,
     CMD_DUO_CONTROL_NEXT,
     CMD_DUOX_SNAPSHOT_LOAD,
     CMD_DUOX_SNAPSHOT_SAVE,
     CMD_DWARF_CONTROL_SUBPAGE,
+    CMD_DWARF_BUILDER_PLUGINS,
+    CMD_DWARF_BUILDER_CONTROLS,
+    CMD_DWARF_BUILDER_CONTROL_SET,
+    CMD_DWARF_BUILDER_CONTROL_PAGE,
+    CMD_DWARF_LOG,
     BANK_FUNC_NONE,
     BANK_FUNC_PEDALBOARD_NEXT,
     BANK_FUNC_PEDALBOARD_PREV,
@@ -91,6 +102,12 @@ from mod.mod_protocol import (
     FLAG_CONTROL_TRIGGER,
     FLAG_CONTROL_REVERSE,
     FLAG_CONTROL_MOMENTARY,
+    FLAG_CONTROL_BYPASS,
+    FLAG_CONTROL_TAP_TEMPO,
+    FLAG_CONTROL_SCALE_POINTS,
+    FLAG_CONTROL_TOGGLED,
+    FLAG_CONTROL_LOGARITHMIC,
+    FLAG_CONTROL_INTEGER,
     FLAG_PAGINATION_PAGE_UP,
     FLAG_PAGINATION_WRAP_AROUND,
     FLAG_PAGINATION_INITIAL_REQ,
@@ -136,6 +153,7 @@ from mod.settings import (
     TUNER_URI, TUNER_INSTANCE_ID, TUNER_INPUT_PORT, TUNER_MONITOR_PORT, HMI_TIMEOUT, MODEL_TYPE,
     UNTITLED_PEDALBOARD_NAME, DEFAULT_SNAPSHOT_NAME,
     MIDI_BEAT_CLOCK_SENDER_URI, MIDI_BEAT_CLOCK_SENDER_INSTANCE_ID, MIDI_BEAT_CLOCK_SENDER_OUTPUT_PORT,
+    IMAGE_VERSION, USING_256_FRAMES_FILE
 )
 from mod.tuner import (
     find_freqnotecents,
@@ -145,7 +163,7 @@ from modtools.utils import (
     kPedalboardInfoUserOnly, kPedalboardInfoFactoryOnly,
     is_bundle_loaded, add_bundle_to_lilv_world, remove_bundle_from_lilv_world,
     is_plugin_preset_valid, rescan_plugin_presets,
-    get_plugin_info, get_plugin_info_essentials, get_pedalboard_info, get_state_port_values,
+    get_plugin_info, get_plugin_info_essentials, get_plugin_info_mini, get_pedalboard_info, get_state_port_values,
     list_plugins_in_bundle, get_all_pedalboards, get_all_user_pedalboard_names, get_pedalboard_plugin_values,
     init_jack, close_jack, get_jack_data,
     init_bypass, get_jack_port_alias, get_jack_hardware_ports,
@@ -155,7 +173,9 @@ from modtools.utils import (
     connect_jack_ports, connect_jack_midi_output_ports, disconnect_jack_ports, disconnect_all_jack_ports,
     set_truebypass_value, get_master_volume,
     set_util_callbacks, set_extra_util_callbacks, kPedalboardTimeAvailableBPB,
-    kPedalboardTimeAvailableBPM, kPedalboardTimeAvailableRolling
+    kPedalboardTimeAvailableBPM, kPedalboardTimeAvailableRolling,
+    PerformancePluginInfo,
+    get_jack_buffer_size, set_jack_buffer_size,
 )
 from modtools.tempo import (
     convert_port_value_to_seconds_equivalent,
@@ -326,6 +346,7 @@ class Host(object):
         self.profile_applied = False
         self.hmi_ping_io = None
 
+        self.presets_metadata = PresetsMetadata()
         self.addressings = Addressings()
         self.mapper = InstanceIdMapper()
         self.descriptor = get_hardware_descriptor()
@@ -362,6 +383,7 @@ class Host(object):
         self.connections = []
         self.audioportsIn = []
         self.audioportsOut = []
+        self.audioportsMonitored = []
         self.cvportsIn = []
         self.cvportsOut = []
         self.midiports = [] # [symbol, alias, pending-connections]
@@ -379,6 +401,8 @@ class Host(object):
         self.pedalboard_version  = 0
         self.current_pedalboard_snapshot_id = -1
         self.pedalboard_snapshots = []
+        self.compare_snapshots = dict()
+        self.compare_status = "empty"
         self.next_hmi_pedalboard_to_load = None
         self.next_hmi_pedalboard_loading = False
         self.next_hmi_bpb = [0, False, False]
@@ -472,6 +496,7 @@ class Host(object):
         self.addressings._task_get_plugin_cv_port_op_mode = self.addr_task_get_plugin_cv_port_op_mode
         self.addressings._task_get_plugin_data = self.addr_task_get_plugin_data
         self.addressings._task_get_plugin_presets = self.addr_task_get_plugin_presets
+        self.addressings._task_get_plugin_presets_metadata = self.addr_task_get_plugin_presets_metadata
         self.addressings._task_get_port_value = self.addr_task_get_port_value
         self.addressings._task_get_tempo_divider = self.addr_task_get_tempo_divider
         self.addressings._task_store_address_data = self.addr_task_store_address_data
@@ -484,6 +509,10 @@ class Host(object):
         self.addressings._task_set_available_pages = self.addr_task_set_available_pages
         self.addressings._task_host_hmi_map = self.addr_host_hmi_map
         self.addressings._task_host_hmi_unmap = self.addr_host_hmi_unmap
+
+        # array for builder controls addressing
+        self.builder_current_plugin_id = None
+        self.builder_current_addressing = list()
 
         # Register HMI protocol callbacks (they are without arguments here)
         Protocol.register_cmd_callback('ALL', CMD_BANKS, self.hmi_list_banks)
@@ -530,6 +559,8 @@ class Host(object):
 
         Protocol.register_cmd_callback('ALL', CMD_NEXT_PAGE, self.hmi_page_load)
 
+        Protocol.register_cmd_callback('ALL', CMD_AUDIO_FRAME_SIZE, self.hmi_audio_frame_size)
+
         Protocol.register_cmd_callback('DUO', CMD_DUO_FOOT_NAVIG, self.hmi_footswitch_navigation)
         Protocol.register_cmd_callback('DUO', CMD_DUO_CONTROL_NEXT, self.hmi_parameter_addressing_next)
 
@@ -538,6 +569,11 @@ class Host(object):
 
         Protocol.register_cmd_callback('DWARF', CMD_DWARF_CONTROL_SUBPAGE, self.hmi_parameter_load_subpage)
 
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_PLUGINS, self.hmi_list_pedalboard_plugins)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROLS, self.hmi_builder_controls)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_LOG, self.hmi_log_message)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROL_SET, self.hmi_builder_control_set)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROL_PAGE, self.hmi_builder_control_page)
         IOLoop.instance().add_callback(self.init_host)
 
     def __del__(self):
@@ -698,6 +734,68 @@ class Host(object):
         else:
             return 2 if port == 2 else 1
 
+    def monitor_audio_port_toggle(self, port: str) -> bool:
+        """
+        Toggle audio level notification monitor for the specified port
+
+        returns the current port monitor status
+        """
+
+        logging.debug("monitor_audio_port_toggle port %s", port)
+        # get enable status from self.audioportsMonitored
+        port_status = next((item for item in self.audioportsMonitored if item['port'] == port), None)
+        if port_status is None:
+            enable = True
+        else:
+            enable = False if port_status['enabled'] else True
+
+        if self.monitor_audio_port(port, enable, port_status):
+            return enable
+        else:
+            return not enable # previous status
+
+    def monitor_audio_port(self, port: str, enable: bool, port_status = None) -> bool:
+        """Enable or disable audio level notification monitor for the specied port"""
+
+        jack_port = self._fix_host_connection_port(port)
+        logging.debug("monitor_audio_port: %s - %s: %s", port, jack_port, enable)
+
+        # search if are already monitoring that port
+        if port_status is None:
+            port_status = next((item for item in self.audioportsMonitored if item['port'] == port), None)
+
+        audioMonitorExists = port_status is not None
+        retry = 0
+
+        def monitor_audio_port_callback(success):
+            nonlocal port_status
+            nonlocal retry
+
+            logging.debug("monitor_audio_port callback: %s - %s enabled %s. success %s", port, jack_port, enable, success)
+            if success:
+                if enable:
+                    if audioMonitorExists:
+                        port_status['enabled'] = enable
+                    else:
+                        # if not found, create a new one with the current status
+                        index = len(self.audioportsMonitored)
+                        port_status = {"index": index, "port": port, "jack_port": jack_port, "enabled": enable}
+
+                    self.audioportsMonitored.append(port_status)
+                else:
+                    if audioMonitorExists:
+                        self.audioportsMonitored.remove(port_status)
+            else:
+                logging.error("Failed to %s audio monitor for port %s - %s: %s", "enable" if enable else "disable", port, jack_port, "retry" if retry == 0 else "giveup")
+                if retry == 0:
+                    retry += 1
+                    time.sleep(0.100)
+                    self.send_notmodified("monitor_audio_levels \"%s\" %s" % (jack_port, "1" if enable else "0"), monitor_audio_port_callback, datatype='boolean')
+
+        # send the command to mod host
+        self.send_notmodified("monitor_audio_levels \"%s\" %s" % (jack_port, "1" if enable else "0"), monitor_audio_port_callback, datatype='boolean')
+        return True
+
     # -----------------------------------------------------------------------------------------------------------------
     # Addressing callbacks
 
@@ -709,10 +807,13 @@ class Host(object):
     def addr_host_hmi_unmap(self, instance_id, portsymbol):
         self.send_notmodified("hmi_unmap %i %s" % (instance_id, portsymbol))
 
+
     def addr_task_addressing(self, atype, actuator, data, callback, send_hmi=True):
         if atype == Addressings.ADDRESSING_TYPE_HMI:
             if send_hmi and self.hmi.initialized:
                 actuator_uri = self.addressings.hmi_hw2uri_map[actuator]
+
+
                 self.hmi.control_add(data, actuator, actuator_uri, callback)
                 return
             else:
@@ -899,6 +1000,10 @@ class Host(object):
                         'label': snapshots[i]['name']} for i in range(len(snapshots)) if snapshots[i] is not None]
             return presets
         return get_plugin_info(uri)['presets']
+
+    def addr_task_get_plugin_presets_metadata(self, instance: str, preset_uri: str):
+        metadata = self.presets_metadata.get(instance, preset_uri)
+        return metadata
 
     def addr_task_get_port_value(self, instance_id, portsymbol):
         if instance_id == PEDALBOARD_INSTANCE_ID:
@@ -1863,6 +1968,21 @@ class Host(object):
             elif ltype == PLUGIN_LOG_ERROR:
                 logging.error("[plugin] %s", lmsg)
 
+        elif cmd == "audio_monitor":
+            msg_data = data.split(" ",2)
+            monitor_port_id  = int(msg_data[0])
+            value      = float(msg_data[1])
+            # search port name
+            port_status = self.audioportsMonitored[monitor_port_id] if monitor_port_id < len(self.audioportsMonitored) else None
+            if port_status is not None:
+                if value < 1e-20:
+                    currenDb = -60
+                else:
+                    currenDb = 20 * math.log10(value)
+                self.msg_callback("pmdb %s %f" % (port_status['port'], currenDb))
+
+            else:
+                logging.error("audio monitor port not found for id: %s", monitor_port_id)
         else:
             logging.error("[host] unrecognized command: %s", cmd)
 
@@ -2145,12 +2265,14 @@ class Host(object):
                 continue
 
             rinstances[instance_id] = pluginData['instance']
-
-            websocket.write_message("add %s %s %.1f %.1f %d %s %d" % (pluginData['instance'], pluginData['uri'],
+            websocket.write_message("add %s %s %.1f %.1f %d %s %d %s %d %d" % (pluginData['instance'], pluginData['uri'],
                                                                       pluginData['x'], pluginData['y'],
                                                                       int(pluginData['bypassed']),
                                                                       pluginData['sversion'],
-                                                                      int(bool(pluginData['buildEnv']))))
+                                                                      int(bool(pluginData['buildEnv'])),
+                                                                      pluginData['slabel'],
+                                                                      int(pluginData['performance']['index']),
+                                                                      int(bool(pluginData['performance']['visible']))))
 
             if crashed:
                 self.send_notmodified("add %s %d" % (pluginData['uri'], instance_id))
@@ -2185,6 +2307,20 @@ class Host(object):
 
                 if crashed:
                     self.send_notmodified("param_set %d %s %f" % (instance_id, symbol, value))
+
+            # send port properties like snapshotable
+            for symbol, props in pluginData['portsprops'].items():
+                websocket.write_message("port_prop_set %s %s %s %s" % (pluginData['instance'], symbol, "snapshotable", "1" if props['snapshotable'] else "0"))
+
+                if crashed:
+                    self.send_notmodified("port_prop_set %d %s %s %s" % (instance_id, symbol, "snapshotable", "1" if props['snapshotable'] else "0"))
+
+            # send parameter properties like snapshotable
+            for uri, props in pluginData['paramsprops'].items():
+                websocket.write_message("param_prop_set %s %s %s %s" % (pluginData['instance'], uri, "snapshotable", "1" if props['snapshotable'] else "0"))
+
+                if crashed:
+                    self.send_notmodified("param_prop_set %d %s %s %s" % (instance_id, uri, "snapshotable", "1" if props['snapshotable'] else "0"))
 
             for symbol, value in pluginData['outputs'].items():
                 if value is None:
@@ -2480,17 +2616,26 @@ class Host(object):
             valports = {}
             params = {}
             ranges = {}
-
+            portsprops = dict() # port properties (snapshot, ...)
+            paramsprops = dict() # parameter properties (snapshot, ...)
             enabled_symbol = None
             freewheel_symbol = None
             bpb_symbol = None
             bpm_symbol = None
             speed_symbol = None
 
+            # default for special ports symbols
+            portsprops[':bypass'] = {'snapshotable': False}
+            portsprops[':presets'] = {'snapshotable': False}
+
             for port in extinfo['controlInputs']:
                 symbol = port['symbol']
                 valports[symbol] = port['ranges']['default']
                 ranges[symbol] = (port['ranges']['minimum'], port['ranges']['maximum'])
+                # snapshot property defaults to False when adding a new plugin
+                # this is different from previous behaviour, before all ports
+                # were snapshotable, now we need to activate this functionality
+                portsprops[symbol] = {'snapshotable': port.get('snapshotable', False)}
 
                 # skip notOnGUI controls
                 if "notOnGUI" in port['properties']:
@@ -2545,7 +2690,12 @@ class Host(object):
                     continue
                 if paramtype not in ('s','p','u') and param['ranges']['minimum'] == param['ranges']['maximum']:
                     continue
+
                 paramuri = param['uri']
+                # snapshot property defaults to False when adding a new plugin
+                # this is different from previous behaviour, before all ports
+                # were snapshotable, now we need to activate this functionality
+                paramsprops[paramuri] = {'snapshotable': param.get('snapshotable', False)}
                 params[paramuri] = [param['ranges']['default'], paramtype]
                 ranges[paramuri] = (param['ranges']['minimum'], param['ranges']['maximum'])
 
@@ -2554,6 +2704,13 @@ class Host(object):
                                                  extinfo['microVersion'],
                                                  extinfo['minorVersion'],
                                                  extinfo['release']))
+
+            # initial performance values
+            self.maxPerformanceIndex += 1
+            performanceInfo = PerformancePluginInfo()
+            performanceInfo.visible = True
+            performanceInfo.index = self.maxPerformanceIndex
+
             self.plugins[instance_id] = {
                 "instance"    : instance,
                 "uri"         : uri,
@@ -2574,6 +2731,12 @@ class Host(object):
                 "nextPreset"  : "",
                 "buildEnv"    : extinfo['buildEnvironment'],
                 "sversion"    : sversion,
+                "name"        : extinfo['name'],
+                "label"       : "", #initial label value
+                "slabel"      : "",
+                "performance" : dict(visible=performanceInfo.visible, index=performanceInfo.index), #  extinfo['performance']
+                "portsprops"  : portsprops,
+                "paramsprops" : paramsprops
             }
 
             for output in extinfo['monitoredOutputs']:
@@ -2588,10 +2751,13 @@ class Host(object):
                     snapshot['plugins_added'].append(instance_id)
 
             callback(True)
-            self.msg_callback("add %s %s %.1f %.1f %d %s %d" % (instance, uri, x, y,
+            self.msg_callback("add %s %s %.1f %.1f %d %s %d %s %d %d" % (instance, uri, x, y,
                                                                 int(bypassed),
                                                                 sversion,
-                                                                int(bool(extinfo['buildEnvironment']))))
+                                                                int(bool(extinfo['buildEnvironment'])),
+                                                                "",
+                                                                performanceInfo.index,
+                                                                int(performanceInfo.visible)))
 
         self.send_modified("add %s %d" % (uri, instance_id), host_callback, datatype='int')
 
@@ -2753,6 +2919,127 @@ class Host(object):
         pluginData['x'] = x
         pluginData['y'] = y
 
+    def set_label(self, instance, label):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+
+        pluginData['label'] = label
+        pluginData['slabel'] = label.replace(" ","_")
+
+    def set_port_prop(self, instance, portSymbol, propertyName, value):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+        portprop = pluginData['portsprops'].get(portSymbol, None)
+        if portprop is None:
+            logging.error("[host] Trying to modify a non-existing port '%s' of instance '%s'", portSymbol, instance)
+            return
+
+        logging.info("[host] modify port '%s' of instance '%s': %s", portSymbol, instance, value)
+        
+        if (propertyName == "snapshotable"):
+            parsedValue =  True if value in (1, True, "1", "true", "True") else False
+            portprop[propertyName] = parsedValue
+
+            # if parseValue is true we should add/update the current port value to all snapshots
+            # if parseValue is False we don't have anything to do since not snapshot-able ports are filtered on snapshot load
+            if parsedValue == True:
+                # for every snapshot
+                instance = instance.replace("/graph/","",1)
+                for snapshot in self.pedalboard_snapshots:
+                    if snapshot is None:
+                        continue
+
+                    data = snapshot['data']
+                    # search for this plugin instance
+                    snapshotData = data.get(instance, None)
+                    if snapshotData is None:
+                        logging.warning("[host] snapshot %s plugin %s not found", snapshot['name'], instance)
+                        continue
+
+                    # patching snapshot addind/updating just this port
+                    if portSymbol == ":bypass":
+                        snapshotData['bypassed'] = pluginData['bypassed']
+                    elif portSymbol == ":presets":
+                        snapshotData['preset'] = pluginData['preset']
+                    else:
+                        ports =  pluginData['ports']
+                        portValue = ports.get(portSymbol, None)
+                        # logging.debug("snapshot %s plugin %s port %s value %s", snapshot['name'], instance, portSymbol, portValue)
+                        if portValue is None:
+                            logging.warning("[host] snapshot %s plugin %s port %s value not found", snapshot['name'], instance, portSymbol)
+                            continue # next snapshot
+
+                        # logging.debug("snapshot %s patching plugin %s port %s value %s", snapshot['name'], instance, portSymbol, portValue)
+                        snapshotData['ports'][portSymbol] = portValue
+
+                self.save_snapshots_to_disk()
+        else:
+            logging.error("[host] Trying to modify an unknown port property '%s'", propertyName)
+            parsedValue = None
+
+        return parsedValue
+
+    def set_param_prop(self, instance, paramUri, propertyName, value):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+        paramprops = pluginData['paramsprops'].get(paramUri, None)
+        if paramprops is None:
+            logging.error("[host] Trying to modify a non-existing parameter '%s' of instance '%s'", paramUri, instance)
+            return
+
+        logging.info("[host] modify property '%s' of parameter '%s' of instance '%s': %s", propertyName, paramUri, instance, value)
+
+        if (propertyName == "snapshotable"):
+            parsedValue =  True if value in (1, True, "1", "true", "True") else False
+            paramprops[propertyName] = parsedValue
+
+            # if parseValue is true we should add/update the current port value to all snapshots
+            # if parseValue is False we don't have anything to do since not snapshot-able ports are filtered on snapshot load
+            if parsedValue == True:
+                # for every snapshot
+                instance = instance.replace("/graph/","",1)
+                for snapshot in self.pedalboard_snapshots:
+                    if snapshot is None:
+                        continue
+
+                    data = snapshot['data']
+                    # search for this plugin instance
+                    snapshotData = data.get(instance, None)
+                    if snapshotData is None:
+                        logging.warning("[host] snapshot %s plugin %s not found", snapshot['name'], instance)
+                        continue
+
+                    # patching snapshot addind/updating just this port
+                    parameters =  pluginData['parameters']
+                    parameterValue = parameters.get(paramUri, None)
+                    logging.debug("snapshot %s plugin %s parameter %s value %s", snapshot['name'], instance, paramUri, parameterValue)
+                    if parameterValue is None:
+                        logging.warning("[host] snapshot %s plugin %s parameter %s value not found", snapshot['name'], instance, paramUri)
+                        continue # next snapshot
+
+                    logging.debug("snapshot %s patching plugin %s parameter %s value %s", snapshot['name'], instance, paramUri, parameterValue)
+                    snapshotData['parameters'][paramUri] = parameterValue
+
+                self.save_snapshots_to_disk()
+        else:
+            logging.error("[host] Trying to modify an unknown parameter property '%s'", propertyName)
+            parsedValue = None
+
+        return parsedValue
+
+    def set_performance_plugin_visibility(self, instance, visible):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+
+        pluginData['performance']['visible'] = visible
+
+    def set_performance_plugin_index(self, instance, index):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+
+        pluginData['performance']['index'] = index
+
+
     # check if addressing is momentary or trigger, in which case we do not want to save current/changed value
     def should_save_addressing_value(self, addressing, value):
         if addressing is None:
@@ -2809,10 +3096,10 @@ class Host(object):
 
     # helper function for gen.Task, which has troubles calling into a coroutine directly
     def preset_load_gen_helper(self, instance, uri, from_hmi, abort_catcher, callback):
-        self.preset_load(instance, uri, from_hmi, abort_catcher, callback)
+        self.preset_load(instance, uri, from_hmi, False, abort_catcher, callback)
 
     @gen.coroutine
-    def preset_load(self, instance, uri, from_hmi, abort_catcher, callback):
+    def preset_load(self, instance, uri, from_hmi, from_builder, abort_catcher, callback):
         instance_id = self.mapper.get_id_without_creating(instance)
         current_pedal = self.pedalboard_path
         pluginData = self.plugins[instance_id]
@@ -2892,7 +3179,12 @@ class Host(object):
                     used_actuators.append(addressing['actuator_uri'])
 
         try:
-            yield gen.Task(self.addressings.load_current_with_callback, used_actuators, (instance_id, ":presets"), True, from_hmi, abort_catcher)
+            # TODO: laod current builder page
+            if from_builder:
+                self.hmi_builder_controls_load_current([":presets"], callback)
+            else:
+                # load control mode page on preset load
+                yield gen.Task(self.addressings.load_current_with_callback, used_actuators, (instance_id, ":presets"), True, from_hmi, abort_catcher)
         except Exception as e:
             callback(False)
             logging.exception(e)
@@ -3014,6 +3306,73 @@ class Host(object):
         self.remove_bundle(bundlepath, False, uri, start)
 
     # -----------------------------------------------------------------------------------------------------------------
+    # Host stuff - A/B compare
+    def compare_reset(self):
+        """ Reset A/B compare snapshots to initial empty state """
+
+        self.compare_snapshots = dict()
+        self.compare_set_status("empty")
+
+    # TODO: should status be an enum or a tuple like DISPLAY_BRIGHTNESS?
+    def compare_set_status(self, status: str):
+        """ Set the current A/B compare status and notify the web UI """
+
+        self.compare_status = status
+        self.msg_callback("compare_status %s" % status)
+
+    def compare_snapshot_save(self, snapshot_id: str = None) -> bool:
+        """
+        Take a snapshot for A/B compare, replacing any previous one with the same id
+
+        snapshot_id: id of the snapshot "A" or "B". Use None to clear all the snapshots with the current settings
+
+        returns: True if successful
+        """
+        if snapshot_id is not None and not (snapshot_id in ('A', 'B')):
+            logging.error("[host] compare_snapshot_save: invalid snapshot id '%s'", snapshot_id)
+            return False
+
+        if snapshot_id is None or snapshot_id == 'A':
+            snapshot = self.snapshot_make('A')
+            self.compare_snapshots[snapshot['name']] = snapshot
+        if snapshot_id is None or snapshot_id == 'B':
+            snapshot = self.snapshot_make('B')
+            self.compare_snapshots[snapshot['name']] = snapshot
+
+        if snapshot_id is None:
+            self.compare_set_status("init")
+        return True
+
+    def compare_snapshot_load_gen_helper(self, snapshot_id: str, abort_catcher, callback):
+        """
+        Helper function for gen.Task, which has troubles calling into a coroutine directly
+
+        see compare_snapshot_load for documentation
+        """
+        self.compare_snapshot_load(snapshot_id, abort_catcher, callback)
+
+    @gen.coroutine
+    def compare_snapshot_load(self, snapshot_id: str, abort_catcher, callback):
+        """
+        Load a snapshot for A/B compare
+
+        snapshot_id: id of the snapshot "A" or "B"
+        abort_catcher: abort catcher for long operations
+        callback: function(bool) -> None to call when done with True/False parameter
+
+        returns: True if successful
+        """
+
+        if snapshot_id != None and not (snapshot_id in ('A', 'B')):
+            logging.error("[host] compare_snapshot_load: invalid snapshot id '%s'", snapshot_id)
+            return False
+
+        snapshot = self.compare_snapshots[snapshot_id]
+        self.snapshot_load_parameters(snapshot, False, False, abort_catcher, True, callback)
+        self.compare_set_status(snapshot_id)
+        callback(True)
+
+    # -----------------------------------------------------------------------------------------------------------------
     # Host stuff - pedalboard snapshots
 
     def _snapshot_unique_name(self, name):
@@ -3095,40 +3454,10 @@ class Host(object):
 
         return True
 
-    # helper function for gen.Task, which has troubles calling into a coroutine directly
-    def snapshot_load_gen_helper(self, idx, from_hmi, abort_catcher, callback):
-        self.snapshot_load(idx, from_hmi, abort_catcher, callback)
-
     @gen.coroutine
-    def snapshot_load(self, idx, from_hmi, abort_catcher, callback):
-        if idx in (self.HMI_SNAPSHOTS_1, self.HMI_SNAPSHOTS_2, self.HMI_SNAPSHOTS_3):
-            idx = abs(idx + self.HMI_SNAPSHOTS_OFFSET)
-            snapshot = self.hmi_snapshots[idx]
-            is_hmi_snapshot = True
-
-            if snapshot is None:
-                logging.error("[host] Asked to load an invalid HMI preset, number %d", idx)
-                callback(False)
-                return
-
-        else:
-            if idx < 0 or idx >= len(self.pedalboard_snapshots):
-                callback(False)
-                return
-
-            snapshot = self.pedalboard_snapshots[idx]
-            is_hmi_snapshot = False
-
-            if snapshot is None:
-                logging.error("[host] Asked to load an invalid pedalboard snapshot, number %d", idx)
-                callback(False)
-                return
-
-            self.current_pedalboard_snapshot_id = idx
-            self.plugins[PEDALBOARD_INSTANCE_ID]['preset'] = "file:///%i" % idx
-
-        was_aborted = self.addressings.was_last_load_current_aborted()
+    def snapshot_load_parameters(self, snapshot, from_hmi, is_hmi_snapshot, abort_catcher, force_load_params, callback):
         used_actuators = []
+        was_aborted = self.addressings.was_last_load_current_aborted()
 
         for instance, data in snapshot['data'].items():
             if abort_catcher.get('abort', False):
@@ -3144,6 +3473,12 @@ class Host(object):
             except KeyError:
                 continue
 
+            portsprops = pluginData['portsprops']
+            paramsprops = pluginData['paramsprops']
+            # check if bypass is snapshotable
+            bypassSnapshotable = force_load_params or portsprops[':bypass'].get('snapshotable', False)
+            presetSnapshotable = force_load_params or portsprops[':presets'].get('snapshotable', False)
+            
             addressing = pluginData['addressings'].get(":bypass", None)
             diffBypass = (self.should_save_addressing_value(addressing, pluginData['bypassed']) and
                           pluginData['bypassed'] != data['bypassed'])
@@ -3155,15 +3490,16 @@ class Host(object):
                     if addressing['actuator_uri'] not in used_actuators:
                         used_actuators.append(addressing['actuator_uri'])
 
-            # if bypassed, do it now
-            if diffBypass and data['bypassed']:
+            # if snapshotable and bypassed, do it now
+            if bypassSnapshotable and diffBypass and data['bypassed']:
                 self.msg_callback("param_set %s :bypass 1.0" % (instance,))
                 try:
                     yield gen.Task(self.bypass, instance, True)
                 except Exception as e:
                     logging.exception(e)
 
-            if was_aborted or diffPreset:
+            # load preset if snapshotable
+            if presetSnapshotable and (was_aborted or diffPreset):
                 try:
                     index = pluginData['mapPresets'].index(data['preset'])
                 except ValueError:
@@ -3176,6 +3512,7 @@ class Host(object):
                         except Exception as e:
                             logging.exception(e)
 
+                    # FIXME: should this code executed even if preset is not snapshotable?
                     addressing = pluginData['addressings'].get(":presets", None)
                     if addressing is not None:
                         addressing['value'] = index
@@ -3188,8 +3525,14 @@ class Host(object):
                                     if actuator_uri not in used_actuators:
                                         used_actuators.append(actuator_uri)
 
+            # load port values from snapshot
             for symbol, value in data['ports'].items():
                 if symbol in pluginData['designations']:
+                    continue
+
+                # don't set parameters if port is not snapshotable
+                if force_load_params == False and portsprops[symbol].get('snapshotable', False) == False:
+                    logging.info("load snapshot %s port %s.%s is not snapshotable", snapshot['name'], instance, symbol)
                     continue
 
                 addressing = pluginData['addressings'].get(symbol, None)
@@ -3223,19 +3566,25 @@ class Host(object):
             for uri, param in data.get('parameters', {}).items():
                 if pluginData['parameters'].get(uri, None) in (param, None):
                     continue
+
+                if force_load_params == False and paramsprops[uri].get('snapshotable', False) == False:
+                    logging.info("load snapshot %s parameter %s.%s is not snapshotable", snapshot['name'], instance, uri)
+                    continue
+
                 self.msg_callback("patch_set %s 1 %s %s %s" % (instance, uri, param[1], param[0]))
                 try:
                     yield gen.Task(self.patch_set, instance, uri, param[0])
                 except Exception as e:
                     logging.exception(e)
 
-            # if not bypassed (enabled), do it at the end
-            if diffBypass and not data['bypassed']:
+            # if snapshotable and not bypassed (enabled), do it at the end
+            if bypassSnapshotable and diffBypass and not data['bypassed']:
                 self.msg_callback("param_set %s :bypass 0.0" % (instance,))
                 try:
                     yield gen.Task(self.bypass, instance, False)
                 except Exception as e:
                     logging.exception(e)
+
 
         if abort_catcher.get('abort', False):
             callback(False)
@@ -3247,6 +3596,41 @@ class Host(object):
             skippedPort = (PEDALBOARD_INSTANCE_ID, ":presets")
 
         self.addressings.load_current(used_actuators, skippedPort, True, from_hmi, abort_catcher)
+
+
+    # helper function for gen.Task, which has troubles calling into a coroutine directly
+    def snapshot_load_gen_helper(self, idx, from_hmi, abort_catcher, callback):
+        self.snapshot_load(idx, from_hmi, abort_catcher, callback)
+
+    @gen.coroutine
+    def snapshot_load(self, idx, from_hmi, abort_catcher, callback):
+        if idx in (self.HMI_SNAPSHOTS_1, self.HMI_SNAPSHOTS_2, self.HMI_SNAPSHOTS_3):
+            idx = abs(idx + self.HMI_SNAPSHOTS_OFFSET)
+            snapshot = self.hmi_snapshots[idx]
+            is_hmi_snapshot = True
+
+            if snapshot is None:
+                logging.error("[host] Asked to load an invalid HMI preset, number %d", idx)
+                callback(False)
+                return
+
+        else:
+            if idx < 0 or idx >= len(self.pedalboard_snapshots):
+                callback(False)
+                return
+
+            snapshot = self.pedalboard_snapshots[idx]
+            is_hmi_snapshot = False
+
+            if snapshot is None:
+                logging.error("[host] Asked to load an invalid pedalboard snapshot, number %d", idx)
+                callback(False)
+                return
+
+            self.current_pedalboard_snapshot_id = idx
+            self.plugins[PEDALBOARD_INSTANCE_ID]['preset'] = "file:///%i" % idx
+
+        self.snapshot_load_parameters(snapshot, from_hmi, is_hmi_snapshot, abort_catcher, False, callback)
 
         if not is_hmi_snapshot:
             name = self.snapshot_name() or DEFAULT_SNAPSHOT_NAME
@@ -3321,9 +3705,11 @@ class Host(object):
             next_addressing_data['value'] = self.addr_task_get_port_value(next_addressing_data['instance_id'],
                                                                           next_addressing_data['port'])
 
+            if next_addressing_data['port'] == ':presets':
+                self.addressings.filter_presets_and_update_value(next_addressing_data)
+
             # NOTE: ignoring callback here, as HMI is handling a request right now
             self.hmi.control_add(next_addressing_data, hw_id, uri, None)
-
         self.addressings.current_page = idx % self.addressings.addressing_pages
 
         # callback must be last action
@@ -3665,6 +4051,11 @@ class Host(object):
         else:
             motos = {}
 
+        if pb['plugins']:
+            self.maxPerformanceIndex = max(p['performance']['index'] for p in pb['plugins'])
+        else:
+            self.maxPerformanceIndex = 0
+
         self.load_pb_plugins(pb['plugins'], instances, rinstances, motos)
         self.load_pb_connections(pb['connections'], mappedOldMidiIns, mappedOldMidiOuts,
                                                     mappedNewMidiIns, mappedNewMidiOuts)
@@ -3672,6 +4063,7 @@ class Host(object):
         if bundlepath:
             self.load_pb_snapshots(bundlepath)
             self.send_notmodified("state_load \"{}\"".format(bundlepath))
+            self.presets_metadata.load(bundlepath, instances, abort_catcher)
             self.addressings.load(bundlepath, instances, skippedPortAddressings, abort_catcher)
 
         if abort_catcher is not None and abort_catcher.get('abort', False):
@@ -3707,6 +4099,7 @@ class Host(object):
 
             os_sync()
 
+        self.compare_reset()
         return self.pedalboard_name
 
     def load_pb_snapshots(self, bundlepath):
@@ -3756,17 +4149,24 @@ class Host(object):
             valports = {}
             params = {}
             ranges = {}
-
+            portsprops = dict() # symbol: {property, value}
+            paramsprops = dict() # uri: {property, value}
             enabled_symbol = None
             freewheel_symbol = None
             bpb_symbol = None
             bpm_symbol = None
             speed_symbol = None
 
+            # read from the pedalboard, default to True if not present to be consistent with previous snapshot behaviour
+            portsprops[':bypass'] = {'snapshotable': p.get('bypass_snapshotable', True)}
+            portsprops[':presets'] = {'snapshotable':  p.get('preset_snapshotable', True)}
+
             for port in extinfo['controlInputs']:
                 symbol = port['symbol']
                 valports[symbol] = port['ranges']['default']
                 ranges[symbol] = (port['ranges']['minimum'], port['ranges']['maximum'])
+                # default for port properties (e.g. if port is snapshotable), current value is read from config below
+                portsprops[symbol] = {'snapshotable': False}
 
                 # skip notOnGUI controls
                 if "notOnGUI" in port['properties']:
@@ -3822,6 +4222,8 @@ class Host(object):
                 if paramtype not in ('s','p','u') and param['ranges']['minimum'] == param['ranges']['maximum']:
                     continue
                 paramuri = param['uri']
+                # default for port properties (e.g. if port is snapshotable), current value is read from config below
+                paramsprops[paramuri] = {'snapshotable': False}
                 params[paramuri] = [param['ranges']['default'], paramtype]
                 ranges[paramuri] = (param['ranges']['minimum'], param['ranges']['maximum'])
 
@@ -3829,6 +4231,12 @@ class Host(object):
             if p['preset'] and not is_plugin_preset_valid(p['uri'], p['preset']):
                 logging.warning("[host] preset '%s' was not valid" % p['preset'])
                 p['preset'] = ""
+
+            # fix performance id for pedalboards created before its introduction
+            if p['performance']['index'] < 0:
+                self.maxPerformanceIndex += 1
+                p['performance']['index'] = self.maxPerformanceIndex
+                logging.info("[host] plugin %s added performance view index: %d" % (instance, self.maxPerformanceIndex))
 
             self.plugins[instance_id] = pluginData = {
                 "instance"    : instance,
@@ -3853,6 +4261,12 @@ class Host(object):
                                                           extinfo['microVersion'],
                                                           extinfo['minorVersion'],
                                                           extinfo['release'])),
+                "name"        : extinfo["name"],
+                "label"       : p['label'],
+                "slabel"      : p['label'].replace(' ', '_') if p['label'] is not None else "", # replace spaces with _
+                "performance" : dict((prop, p['performance'].get(prop)) for prop in p['performance'].keys()),
+                "portsprops" : portsprops,
+                "paramsprops": paramsprops,
             }
 
             self.send_notmodified("add %s %d" % (p['uri'], instance_id))
@@ -3860,11 +4274,14 @@ class Host(object):
             if p['bypassed']:
                 self.send_notmodified("bypass %d 1" % (instance_id,))
 
-            self.msg_callback("add %s %s %.1f %.1f %d %s %d" % (instance,
+            self.msg_callback("add %s %s %.1f %.1f %d %s %d %s %d %d" % (instance,
                                                                 p['uri'], p['x'], p['y'],
                                                                 int(p['bypassed']),
                                                                 pluginData['sversion'],
-                                                                int(bool(extinfo['buildEnvironment']))))
+                                                                int(bool(extinfo['buildEnvironment'])),
+                                                                pluginData['slabel'],
+                                                                int(p['performance']['index']),
+                                                                int(bool(p['performance']['visible']))))
 
             if p['bypassCC']['channel'] >= 0 and p['bypassCC']['control'] >= 0:
                 pluginData['addressings'][':bypass'] = self.addressings.add_midi(instance_id, ":bypass",
@@ -3879,8 +4296,17 @@ class Host(object):
             for port in p['ports']:
                 symbol = port['symbol']
                 value  = port['value']
-
+                # snapshot property defaults to True when loading old pedalboards
+                # which don't have this property saved. This is consinstent with
+                # the previous behaviour.
+                snapshot = port.get('snapshotable', True)
                 oldValue = pluginData['ports'].get(symbol, None)
+
+                # store the snapshotable property read from the pedalboard .ttl file
+                if symbol not in pluginData['portsprops']:
+                    logging.warning("[host] port '%s' not found in plugin '%s' portsprops, skipping snapshotable property" % (symbol, instance))
+                else:
+                    pluginData['portsprops'][symbol]['snapshotable'] = snapshot
 
                 if oldValue is None:
                     continue
@@ -3893,6 +4319,8 @@ class Host(object):
 
                 if oldValue != value:
                     pluginData['ports'][symbol] = value
+                    # send value to web ui even if the port is snapshotted, this is the default state
+                    # when loading a pedalboard, the snapshot state will be applied later
                     self.send_notmodified("param_set %d %s %f" % (instance_id, symbol, value))
                     self.msg_callback("param_set %s %s %f" % (instance, symbol, value))
 
@@ -3913,6 +4341,22 @@ class Host(object):
                     pluginData['midiCCs'][symbol] = (mchnnl, mctrl, minimum, maximum)
                     pluginData['addressings'][symbol] = self.addressings.add_midi(instance_id, symbol,
                                                                                   mchnnl, mctrl, minimum, maximum)
+
+            # read the parameter properties from the pedalboard .ttl file and set them in the pluginData dictionary
+            for parameter in p['parameters']:
+                logging.debug("[host] loading parameter '%s' from %s" % (parameter, pluginData['paramsprops']))
+                # the parameter URI contains just the name of the parameter, we need to prepend the plugin URI to get the full URI
+                uri = p['uri'] + '#' + parameter['uri']
+                # snapshot property defaults to True when loading old pedalboards
+                # which don't have this property saved. This is consinstent with
+                # the previous behaviour.
+                snapshot = parameter.get('snapshotable', True)
+                # set the snapshotable property read from the pedalboard .ttl file
+                if uri not in pluginData['paramsprops']:
+                    logging.warning("[host] parameter '%s' not found in plugin '%s' paramsprops, skipping snapshotable property" % (uri, instance))
+                else:
+                    logging.debug("[host] setting parameter '%s' snapshotable property to %s" % (uri, snapshot))
+                    pluginData['paramsprops'][uri]['snapshotable'] = snapshot
 
             for output in extinfo['monitoredOutputs']:
                 self.send_notmodified("monitor_output %d %s" % (instance_id, output))
@@ -4020,6 +4464,7 @@ class Host(object):
     def save_state_to_ttl(self, bundlepath, title, titlesym):
         self.save_state_manifest(bundlepath, titlesym)
         self.save_state_addressings(bundlepath)
+        self.save_state_presets_metadata(bundlepath)
         self.save_state_snapshots(bundlepath)
         self.save_state_mainfile(bundlepath, title, titlesym)
 
@@ -4039,6 +4484,9 @@ class Host(object):
         pedal:Pedalboard ;
     rdfs:seeAlso <%s.ttl> .
 """ % (titlesym, titlesym))
+
+    def save_state_presets_metadata(self, bundlepath):
+        self.presets_metadata.save(bundlepath)
 
     def save_state_addressings(self, bundlepath):
         instances = {
@@ -4113,10 +4561,13 @@ _:b%i
 
         # Blocks (plugins)
         blocks = ""
+
         for instance_id, pluginData in self.plugins.items():
             if instance_id == PEDALBOARD_INSTANCE_ID:
                 continue
 
+            enabledSnapshotable = pluginData['portsprops'][':bypass'].get('snapshotable', False)
+            presetSnapshotable = pluginData['portsprops'][':presets'].get('snapshotable', False)
             info = get_plugin_info(pluginData['uri'])
             instance = pluginData['instance'].replace("/graph/","",1)
             blocks += """
@@ -4124,18 +4575,24 @@ _:b%i
     ingen:canvasX %.1f ;
     ingen:canvasY %.1f ;
     ingen:enabled %s ;
+    mod:enabledSnapshotable %s ;
     ingen:polyphonic false ;
     lv2:microVersion %i ;
     lv2:minorVersion %i ;
     mod:builderVersion %i ;
     mod:releaseNumber %i ;
+    mod:label '%s' ;
     lv2:port <%s> ;
+    patch:writable <%s> ;
     lv2:prototype <%s> ;
+    perf:visible %s ;
+    perf:index %i ;
     pedal:instanceNumber %i ;
     pedal:preset <%s> ;
+    mod:presetSnapshotable %s ;
     a ingen:Block .
-""" % (instance, pluginData['x'], pluginData['y'], "false" if pluginData['bypassed'] else "true",
-       info['microVersion'], info['minorVersion'], info['builder'], info['release'],
+""" % (instance, pluginData['x'], pluginData['y'], "false" if pluginData['bypassed'] else "true", "true" if enabledSnapshotable else "false",
+       info['microVersion'], info['minorVersion'], info['builder'], info['release'], pluginData['label'],
        "> ,\n             <".join(tuple("%s/%s" % (instance, port['symbol']) for port in (info['ports']['audio']['input']+
                                                                                           info['ports']['audio']['output']+
                                                                                           info['ports']['control']['input']+
@@ -4145,7 +4602,13 @@ _:b%i
                                                                                           info['ports']['midi']['input']+
                                                                                           info['ports']['midi']['output']+
                                                                                           [{'symbol': ":bypass"}]))),
-       pluginData['uri'], instance_id, pluginData['preset'])
+       "> ,\n             <".join(tuple("%s#%s" % (instance, parameter['uri'].partition("#")[2]) for parameter in info['parameters'] if parameter['uri'].partition("#")[2])),
+       pluginData['uri'],
+       "true" if pluginData['performance']['visible'] else "false",
+       pluginData['performance']['index'],
+       instance_id,
+       pluginData['preset'],
+       "true" if presetSnapshotable else "false")
 
             # audio input
             for port in info['ports']['audio']['input']:
@@ -4201,12 +4664,14 @@ _:b%i
 
             # control input, save values
             for symbol, value in pluginData['ports'].items():
+                snapshotable = pluginData['portsprops'][symbol].get('snapshotable', False)
                 blocks += """
 <%s/%s>
-    ingen:value %f ;%s
+    ingen:value %f ;
+    mod:snapshotable %s ;%s
     a lv2:ControlPort ,
         lv2:InputPort .
-""" % (instance, symbol, value,
+""" % (instance, symbol, value, 'true' if snapshotable else 'false',
        ("""
     midi:binding [
         midi:channel %i ;
@@ -4226,16 +4691,33 @@ _:b%i
 
             blocks += """
 <%s/:bypass>
-    ingen:value %i ;%s
+    ingen:value %i ;
+    mod:snapshotable %s ;%s
     a lv2:ControlPort ,
         lv2:InputPort .
-""" % (instance, 1 if pluginData['bypassed'] else 0,
+""" % (instance, 1 if pluginData['bypassed'] else 0, 'true' if snapshotable else 'false',
        ("""
     midi:binding [
         midi:channel %i ;
         midi:controllerNumber %i ;
         a midi:Controller ;
     ] ;""" % pluginData['bypassCC']) if -1 not in pluginData['bypassCC'] else "")
+
+            # parameters
+            for parameter in info['parameters']:
+                uri = parameter['uri']
+                paramname = uri.partition("#")[2]
+                if not paramname:
+                    logging.error("[host] parameter %s has no name, skipping" % (uri))
+                    continue
+
+                logging.debug("[host] saving plugin parameter %s" % (paramname))
+                snapshotable = pluginData['paramsprops'][uri].get('snapshotable', False)
+                blocks += """
+<%s#%s>
+    mod:snapshotable %s ;
+    a lv2:Parameter .
+""" % (instance, paramname, 'true' if snapshotable else 'false')
 
         # Globak Ports
         pluginData = self.plugins[PEDALBOARD_INSTANCE_ID]
@@ -4461,7 +4943,9 @@ _:b%i
 @prefix midi:  <http://lv2plug.in/ns/ext/midi#> .
 @prefix mod:   <http://moddevices.com/ns/mod#> .
 @prefix pedal: <http://moddevices.com/ns/modpedal#> .
+@prefix perf:  <http://moddevices.com/ns/modperformance#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix patch: <http://lv2plug.in/ns/ext/patch#> .
 %s%s%s
 <>
     doap:name "%s" ;
@@ -4469,6 +4953,7 @@ _:b%i
     pedal:unitModel "%s" ;
     pedal:width %i ;
     pedal:height %i ;
+    pedal:presetsMetadata <presets-metadata.json> ;
     pedal:addressings <addressings.json> ;
     pedal:screenshot <screenshot.png> ;
     pedal:thumbnail <thumbnail.png> ;
@@ -5287,6 +5772,66 @@ _:b%i
 
     # -----------------------------------------------------------------------------------------------------------------
 
+    def hmi_list_pedalboard_plugins(self, props, plugin_id, callback):
+        logging.debug("hmi list pedalboards plugin %d %d", props, plugin_id)
+
+        dir_up  = props & FLAG_PAGINATION_PAGE_UP
+        wrap    = props & FLAG_PAGINATION_WRAP_AROUND
+        initial = props & FLAG_PAGINATION_INITIAL_REQ
+
+        if not initial:
+            plugin_id += 1 if dir_up else -1
+            logging.warning("hmi pagination is not supported yes, please use FLAG_PAGINATION_INITIAL_REQ, returning all plugins")
+
+        # this code is currently bugged and not supported
+        # if plugin_id < 0 or plugin_id >= numPlugins:
+        #     if not wrap and plugin_id > 0:
+        #         logging.error("hmi wants out of bounds pedalboard plugins data (%d %d)", props, plugin_id)
+        #         callback(True)
+        #         return
+
+        #     # wrap around mode, neat
+        #     if plugin_id < 0 and wrap:
+        #         plugin_id = numPlugins - 1
+        #     else:
+        #         plugin_id = 0
+
+        # if numPlugins <= 9 or plugin_id < 4:
+        #     startIndex = 0
+        # elif plugin_id + 4 >= numPlugins:
+        #     startIndex = numPlugins - 9
+        # else:
+        #     startIndex = plugin_id - 4
+
+        # endIndex = min(startIndex + 9, numPlugins)
+
+        # filter and order plugins
+        def _keySelect(item):
+            k, v = item
+            return v['label'] if v['label'] != "" and v['label'] is not None else v['name'] if v['name'] is not None else ''
+
+        keys = [item[0] for item in sorted({k: v for k,v in self.plugins.items() if v['uri'] != 'urn:mod:pedalboard'}.items(), key=_keySelect)]
+
+        numPlugins = len(keys)
+        startIndex = 0
+        endIndex = numPlugins # return always all plugins
+        if numPlugins > 0:
+            responseData = '%d %d %d' % (numPlugins, startIndex, endIndex)
+            for i in range(startIndex, endIndex):
+                key = keys[i]
+                plugin = self.plugins[key]
+                info = get_plugin_info_mini(plugin["uri"])
+                name = plugin["label"]
+                if name == "" or name is None:
+                    name = info["label"] # for now i prefer a shorter label + " (" + info["brand"] + ")"
+
+                name = name.replace("_", " ")
+                responseData += ' %s %s' % (normalize_for_hw(name), key)
+
+        logging.debug("hmi list pedalboards plugins %d %d -> data is '%s'", props, plugin_id, responseData)
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
     def hmi_bank_new(self, title, callback):
         utitle = title.upper()
         if utitle in ("ALL PEDALBOARDS", "ALL USER PEDALBOARDS"):
@@ -5788,7 +6333,13 @@ _:b%i
         instance_id, portsymbol = self.get_addressed_port_info(hw_id)
         self.hmi_or_cc_parameter_set(instance_id, portsymbol, value, hw_id, callback)
 
+    def builder_hmi_or_cc_parameter_set(self, instance_id, portsymbol, value, hw_id, callback):
+        self._hmi_or_cc_parameter_set_real(instance_id, portsymbol, value, hw_id, False, True, callback)
+
     def hmi_or_cc_parameter_set(self, instance_id, portsymbol, value, hw_id, callback):
+        self._hmi_or_cc_parameter_set_real(instance_id, portsymbol, value, hw_id, True, False, callback)
+
+    def _hmi_or_cc_parameter_set_real(self, instance_id, portsymbol, value, hw_id, filter_presets, from_builder, callback):
         logging.debug("hmi_or_cc_parameter_set")
 
         if self.next_hmi_pedalboard_loading:
@@ -5829,14 +6380,20 @@ _:b%i
 
         elif portsymbol == ":presets":
             value = int(value)
+
+            group_actuators = None
+            if port_addressing is not None:
+                group_actuators = self.addressings.get_group_actuators(port_addressing['actuator_uri'])
+                # scale value to real preset value since not all presets are visible
+                # first filer the preset visible
+                # get the preset name
+                if filter_presets:
+                    # find the index in the pluginData preset
+                    value = self.addressings.map_preset_index(value, port_addressing)
+
             if value < 0 or value >= len(pluginData['mapPresets']):
                 callback(False)
                 return
-
-            if port_addressing is None:
-                callback(False)
-                return
-            group_actuators = self.addressings.get_group_actuators(port_addressing['actuator_uri'])
 
             # Update value on the HMI for the other actuator in the group
             def group_callback(ok):
@@ -5858,7 +6415,7 @@ _:b%i
                     logging.exception(e)
             else:
                 try:
-                    self.preset_load(instance, pluginData['mapPresets'][value], True, abort_catcher, cb)
+                    self.preset_load(instance, pluginData['mapPresets'][value], True, from_builder, abort_catcher, cb)
                 except Exception as e:
                     callback(False)
                     logging.exception(e)
@@ -5893,13 +6450,16 @@ _:b%i
             if port_addressing is not None:
                 cctype = port_addressing.get('cctype', 0x0)
                 hmitype = port_addressing.get('hmitype', 0x0)
+                tempo_addressing = port_addressing.get('tempo', None)
 
                 if hmitype & FLAG_CONTROL_ENUMERATION or cctype & CC_MODE_OPTIONS:
-                    value = get_nearest_valid_scalepoint_value(value, port_addressing['options'])[1]
+                    # don't get the scale point for tempo binded parameters when setting from builder
+                    if not from_builder or not tempo_addressing:
+                        value = get_nearest_valid_scalepoint_value(value, port_addressing['options'])[1]
 
                 group_actuators = self.addressings.get_group_actuators(port_addressing['actuator_uri'])
 
-                if port_addressing.get('tempo', None):
+                if tempo_addressing:
                     # compute new port value based on received divider value
                     extinfo = get_plugin_info_essentials(pluginData['uri'])
 
@@ -5914,9 +6474,13 @@ _:b%i
                         return
 
                     port = ports[0]
-                    port_value = get_port_value(self.transport_bpm, value, port['units']['symbol'])
-                    if port['units']['symbol'] != 'BPM': # convert back into port unit if needed
-                        port_value = convert_seconds_to_port_value_equivalent(port_value, port['units']['symbol'])
+                    if from_builder:
+                        # when setting from builder value is already in right the port unit
+                        port_value = value
+                    else:
+                        port_value = get_port_value(self.transport_bpm, value, port['units']['symbol'])
+                        if port['units']['symbol'] != 'BPM': # convert back into port unit if needed
+                            port_value = convert_seconds_to_port_value_equivalent(port_value, port['units']['symbol'])
 
                     port_addressing['dividers'] = value
                     port_addressing['value'] = port_value
@@ -5975,72 +6539,83 @@ _:b%i
         if page != 7:
             return
 
-        # size in pixels, increase as needed
-        pixel_size = 8
-        margin_size = 1
-        border_spacing = 16
+        try:
+            # size in pixels, increase as needed
+            pixel_size = 8
+            margin_size = 1
+            border_spacing = 16
 
-        # screen contrast, adjust as needed
-        luminance_background = 220
-        luminance_black = 0
-        luminance_white = 200
+            # screen contrast, adjust as needed
+            luminance_background = 220
+            luminance_black = 0
+            luminance_white = 200
 
-        # screen size
-        screen_width_in_pixels = 128
-        screen_height_in_pixels = 64
+            # screen size
+            screen_width_in_pixels = 128
+            screen_height_in_pixels = 64
 
-        # actual image size
-        target_width = border_spacing * 2 + margin_size + (margin_size + pixel_size) * screen_width_in_pixels
-        target_height = border_spacing * 2 + margin_size  + (margin_size + pixel_size) * screen_height_in_pixels
+            # actual image size
+            target_width = border_spacing * 2 + margin_size + (margin_size + pixel_size) * screen_width_in_pixels
+            target_height = border_spacing * 2 + margin_size  + (margin_size + pixel_size) * screen_height_in_pixels
 
-        rawdata = ["0"]*screen_width_in_pixels*screen_height_in_pixels
+            rawdata = ["0"]*screen_width_in_pixels*screen_height_in_pixels
 
-        for i in range(len(self.hmi_screenshot_data)):
-            o = self.hmi_screenshot_data[i]
-            for j in range(screen_width_in_pixels):
-                v = o[j*2:j*2+2]
-                v = ("%08s" % bin(int(v,16)).replace("0b","")).replace(" ","0")
-                v = "".join(reversed(v))
+            for i in range(len(self.hmi_screenshot_data)):
+                o = self.hmi_screenshot_data[i]
+                if o is None:
+                    logging.error('[host] partial screenshot line missing %d', i)
+                    continue
 
-                x = j % screen_width_in_pixels
-                y = i + int(j / screen_width_in_pixels)
-                for z in range(8):
-                    rawdata[x*screen_height_in_pixels + y*8 + z] = v[z]
+                for j in range(screen_width_in_pixels):
+                    if j*2+2 > len(o):
+                        logging.error('[host] partial screenshot received %d %d', i, j)
+                        continue
 
-        png = Image.new("L", (target_width, target_height), luminance_background)
-        pixels = png.load()
+                    v = o[j*2:j*2+2]
+                    v = ("%08s" % bin(int(v,16)).replace("0b","")).replace(" ","0")
+                    v = "".join(reversed(v))
 
-        # draw pixels
-        for w in range(screen_width_in_pixels):
-            for h in range(screen_height_in_pixels):
-                x = border_spacing + margin_size + w * (margin_size + pixel_size)
-                y = border_spacing + margin_size + h * (margin_size + pixel_size)
+                    x = j % screen_width_in_pixels
+                    y = i + int(j / screen_width_in_pixels)
+                    for z in range(8):
+                        rawdata[x*screen_height_in_pixels + y*8 + z] = v[z]
 
-                v = luminance_black if rawdata[w * screen_height_in_pixels + h] == '1' else luminance_white
+            png = Image.new("L", (target_width, target_height), luminance_background)
+            pixels = png.load()
 
-                for ix in range(pixel_size):
-                    for iy in range(pixel_size):
-                        pixels[x+ix,y+iy] = v
-
-        # draw grid, optional
-        if luminance_background != luminance_white:
+            # draw pixels
             for w in range(screen_width_in_pixels):
                 for h in range(screen_height_in_pixels):
                     x = border_spacing + margin_size + w * (margin_size + pixel_size)
                     y = border_spacing + margin_size + h * (margin_size + pixel_size)
 
-                    for ix in range(pixel_size + margin_size):
-                        pixels[x+ix, y-margin_size] = luminance_background
-                        pixels[x-margin_size, y+ix] = luminance_background
+                    v = luminance_black if rawdata[w * screen_height_in_pixels + h] == '1' else luminance_white
 
-        counter = 0
-        while True:
-            counter += 1
-            filename = os.path.join(DATA_DIR, "hmi-screenshot-%03d.png" % counter)
-            if not os.path.exists(filename):
-                break
+                    for ix in range(pixel_size):
+                        for iy in range(pixel_size):
+                            pixels[x+ix,y+iy] = v
 
-        png.save(filename)
+            # draw grid, optional
+            if luminance_background != luminance_white:
+                for w in range(screen_width_in_pixels):
+                    for h in range(screen_height_in_pixels):
+                        x = border_spacing + margin_size + w * (margin_size + pixel_size)
+                        y = border_spacing + margin_size + h * (margin_size + pixel_size)
+
+                        for ix in range(pixel_size + margin_size):
+                            pixels[x+ix, y-margin_size] = luminance_background
+                            pixels[x-margin_size, y+ix] = luminance_background
+
+            counter = 0
+            while True:
+                counter += 1
+                filename = os.path.join(DATA_DIR, "hmi-screenshot-%03d.png" % counter)
+                if not os.path.exists(filename):
+                    break
+
+            png.save(filename)
+        except:
+            logging.error("error decoding screenshot")
 
     def hmi_parameter_addressing_next(self, hw_id, callback):
         logging.debug("hmi parameter addressing next")
@@ -6072,6 +6647,8 @@ _:b%i
     def hmi_next_control_page_real(self, hw_id, props, control_index, callback):
         data = self.addressings.hmi_get_addr_data(hw_id)
 
+        logging.info("hmi wants control data for addressing (%d %d %d)", hw_id, props, control_index)
+
         if data is None:
             callback(False)
             logging.error("hmi wants control data for invalid addressing (%d %d)", hw_id, props)
@@ -6088,9 +6665,32 @@ _:b%i
             callback(False)
             return
 
+        value   = self.addr_task_get_port_value(instance_id, portsymbol)
+        if data['port'] == ':presets':
+            if data.get('backup_options', None) is None:
+                # we need to filter, if backup_options is present the options are already filtered
+                self.addressings.filter_presets_and_update_value(data)
+            value = data['value']
+        self.hmi_send_next_control_page(hw_id, props, control_index, value, data, callback)
+
+        if control_index is not None:
+            return
+
+        try:
+            yield gen.Task(self.hmi_or_cc_parameter_set, instance_id, portsymbol, value, hw_id)
+        except Exception as e:
+            logging.exception(e)
+
+
+    def hmi_builder_send_next_control_page(self, hw_id, props, control_index, value, data, callback):
+        self._hmi_send_next_control_page_real(hw_id, props, control_index, value, data, False, callback)
+
+    def hmi_send_next_control_page(self, hw_id, props, control_index, value, data, callback):
+        self._hmi_send_next_control_page_real(hw_id, props, control_index, value, data, True, callback)
+
+    def _hmi_send_next_control_page_real(self, hw_id, props, control_index, value, data, filter_presets, callback):
         options = data['options']
         numOpts = len(options)
-        value   = self.addr_task_get_port_value(instance_id, portsymbol)
 
         # old compat mode
         if control_index is None:
@@ -6167,13 +6767,379 @@ _:b%i
                     options,
                   ))
 
-        if control_index is not None:
+
+    def hmi_log_message(self, message, callback):
+        logging.info("-"*40)
+        logging.info("HMI LOG: '%s'", message)
+        logging.info("-"*40)
+        callback(True, "log")
+
+    def hmi_builder_controls(self, instance_id, start_index, control_count, callback):
+
+        plugin = self.plugins.get(int(instance_id), None)
+        logging.debug("hmi builder controls - instance id: %s, start index: %d, count: %d, uri: %s", instance_id, start_index, control_count, "invalid id" if plugin == None else plugin['uri'])
+        if not plugin:
+            logging.error("[host] hmi request control for not existent plugin %s", instance_id)
+            callback(False)
+            return
+
+        index = 0
+        uri = plugin['uri']
+        # unmap controls
+        self.builder_current_plugin_id = int(instance_id)
+        self.builder_current_addressing.clear()
+        # TODO: can this be optimized?
+        # add list of attributes from plugin["ports"]
+        #port_attributes = []
+        ports = plugin["ports"]
+        # for port in ports:
+        #     port_attributes.append(port)
+
+        # port_attributes.sort()
+
+        # if count is > 0 read also the plugin metadata
+        if start_index == 0 and control_count > 0:
+            # first control is bypass
+            hw_id = 0
+            symbol = ':bypass'
+            actuator_uri = "/hmi/knob" + str(hw_id + 1)
+            data = dict()
+            data['label'] = 'Enabled'
+            data['hmitype'] = self.addressings.get_hmitype(symbol, actuator_uri, None)
+            data['unit'] =  ""
+            data['dividers'] = ""
+            data['minimum'] = 0
+            data['maximum'] = 1
+            data['default'] = 1
+            data['steps'] = 1
+            data['options'] = None
+            data['value'] = plugin["bypassed"]
+            try:
+                self.hmi.control_add(data, index - start_index, actuator_uri , None)
+                self.builder_current_addressing.append(symbol)
+            except Exception as e:
+                logging.exception(e)
+
+        has_presets = len(self.addr_task_get_plugin_presets(uri)) > 0
+        if has_presets:
+            index += 1
+            #if requested presets
+            if start_index <= 1 and (start_index + control_count) >= 1:
+                # second control are presets
+                hw_id = 1
+                symbol = ':presets'
+                actuator_uri = "/hmi/knob" + str(hw_id + 1)
+                # returns a tuple (value, maximum, options, pluginData['preset'])
+                presets = self.addressings.get_presets_as_options(instance_id)
+
+                data = dict()
+                data['label'] = 'Presets'
+                data['hmitype'] = self.addressings.get_hmitype(symbol, actuator_uri, None)
+                data['unit'] =  ""
+                data['dividers'] = ""
+                data['minimum'] = 0
+                data['maximum'] = presets[1] if presets is not None and len(presets) > 0 else 0
+                data['default'] = 1
+                data['steps'] = 1
+                data['options'] = presets[2] if presets is not None and len(presets) > 0 else None
+                data['value'] = presets[0] if presets is not None and len(presets) > 0  else 0
+                try:
+                    self.hmi.control_add(data, index - start_index, actuator_uri , None)
+                    self.builder_current_addressing.append(symbol)
+                except Exception as e:
+                    logging.exception(e)
+
+        index += 1
+        extinfo = get_plugin_info_essentials(plugin['uri'])
+        for port_info in extinfo.get('controlInputs', []):
+            # skip notOnGUI controls & special designated controls
+            if "notOnGUI" in port_info['properties'] or port_info['designation'] in [\
+                "http://lv2plug.in/ns/lv2core#enabled", \
+                "http://lv2plug.in/ns/lv2core#freeWheeling", \
+                "http://lv2plug.in/ns/ext/time#beatsPerBar", \
+                "http://lv2plug.in/ns/ext/time#beatsPerMinute", \
+                "http://lv2plug.in/ns/ext/time#speed"]:
+                continue; 
+
+            if index >= start_index and index < (start_index + control_count):
+                hw_id = index - start_index # hw_id is 0 based (e.g. on dwarf 0 to 2 for encoders)
+                actuator_uri = "/hmi/knob" + str(hw_id + 1)
+                symbol = port_info['symbol']
+                range = port_info.get('ranges', [])
+                units = port_info.get('units', {})
+                value = ports.get(symbol,range['default'])
+                hmitype = self.addressings.get_hmitype(symbol, actuator_uri, port_info)
+                steps = 0
+                options = None
+                pprops = port_info["properties"]
+                if "enumeration" in pprops and len(port_info["scalePoints"]) > 0:
+                    options = [(sp["value"], sp["label"]) for sp in port_info["scalePoints"]]
+
+                if options is not None:
+                    steps = len(options)
+                elif hmitype == 0 or hmitype & FLAG_CONTROL_INTEGER or hmitype & FLAG_CONTROL_LOGARITHMIC:
+                    for actuator in self.descriptor.get('actuators', []):
+                        if actuator.get('uri', '') == actuator_uri:
+                            steps = next(iter(actuator.get('steps', [])), 0) * 2 # (201 steps) double precision
+                            break
+
+                # safe fallback
+                if steps <= 0:
+                    steps = (range['maximum'] - range['minimum'] + 1) * 2 # double precision
+
+                if steps <= 0:
+                    steps = 1 # fallback
+
+                data = dict()
+                data['label'] = port_info.get('shortName', port_info.get('name', ''))
+                data['hmitype'] = hmitype 
+                data['unit'] =  units['symbol'] if units and units['symbol'] else ""
+                data['dividers'] = ""
+                data['minimum'] = range['minimum']
+                data['maximum'] = range['maximum']
+                data['default'] = range['default']
+                data['steps'] = steps
+                data['options'] = options
+                data['value'] = value
+
+                try:
+                    self.hmi.control_add(data, index - start_index, actuator_uri , None)
+                    self.builder_current_addressing.append(symbol)
+                except Exception as e:
+                    logging.exception(e)
+
+            index += 1
+
+        # callback must be last action
+        # index is now the number of controls we have
+        callback(True, index)
+
+    def hmi_builder_controls_load_current_with_callback(self, skippedPorts, callback):
+        self.hmi_builder_controls_load_current(skippedPorts, callback)
+        return
+
+    def hmi_builder_controls_load_current(self, skippedPorts, callback = None):
+        if self.builder_current_plugin_id is None:
+            logging.error("[host] request controls load current for non existant plugin id: %s ", self.builder_current_plugin_id)
+            if callback is not None:
+                callback(False)
+            return
+
+        if self.next_hmi_pedalboard_loading:
+            logging.error("hmi_builder_controls_load_current, pedalboard loading is in progress")
+            if callback is not None:
+                callback(False)
             return
 
         try:
-            yield gen.Task(self.hmi_or_cc_parameter_set, instance_id, portsymbol, value, hw_id)
+            instance_id = self.builder_current_plugin_id
+        except KeyError:
+            logging.warning("[host] hmi_builder_controls_load_current requested for non-existing plugin")
+            if callback is not None:
+                callback(False)
+            return
+
+        plugin = self.plugins.get(int(instance_id), None)
+        if self.next_hmi_pedalboard_loading:
+            logging.error("[host] hmi_builder_controls_load_current requested for non-existing plugin")
+            if callback is not None:
+                callback(False)
+            return
+
+        if self.builder_current_addressing is not None and len(self.builder_current_addressing) > 0:
+
+            ports = plugin["ports"]
+            extinfo = get_plugin_info_essentials(plugin['uri'])
+
+            for hw_id, symbol in enumerate(self.builder_current_addressing):
+                if symbol in skippedPorts:
+                    continue
+
+                port_info = next((info  for info in extinfo.get('controlInputs', []) if info['symbol'] == symbol), None)
+                if symbol == ':bypass':
+                    value = plugin["bypassed"]
+                elif symbol == ':presets':
+                     presets = self.addressings.get_presets_as_options(instance_id)
+                     value = presets[0] if presets is not None and len(presets) > 0  else 0
+                else:
+                    range = port_info.get('ranges', [])
+                    value = ports.get(symbol,range['default'])
+
+                # refresh current page controls
+                # this is not the right place to pass the callback but without everything freezes
+                self.hmi.builder_control_set(hw_id, value, callback)
+
+    def hmi_builder_control_set(self, hw_id, value, callback):
+        if self.builder_current_plugin_id is None:
+            callback(False)
+            logging.error("[host] request setting value unexistant id: %s ", self.builder_current_plugin_id)
+            return
+
+        if hw_id < 0 or hw_id >= len(self.builder_current_addressing):
+            callback(False)
+            logging.error("[host] request setting value for out of range hw_id %d ", hw_id)
+            return
+
+        if self.next_hmi_pedalboard_loading:
+            callback(False)
+            logging.error("hmi_parameter_set, pedalboard loading is in progress")
+            return
+
+        instance_id = self.builder_current_plugin_id
+        symbol = self.builder_current_addressing[hw_id]
+        logging.debug("hmi builder %d control set %d %s = %s", instance_id, hw_id, symbol, value)
+        self.builder_hmi_or_cc_parameter_set(instance_id, symbol, value, hw_id, callback)
+
+    def hmi_builder_control_page(self, hw_id: int, props: int, control_index: int, callback):
+        """hmi requested a new page of control values
+
+           This command is usually sent for enumerated properties (e.g. presets)
+           when a list of options is presented to the user
+
+           hw_id: numeric actuator id
+           props: bitmask flag which specified the user direction up/down or init
+           value: the current selected enumeration item used to calculate the new values (page) to send
+        """
+        if self.builder_current_plugin_id is None:
+            callback(False)
+            logging.error("[host] request setting value unexistant id: %s ", self.builder_current_plugin_id)
+            return
+
+        if hw_id < 0 or hw_id >= len(self.builder_current_addressing):
+            callback(False)
+            logging.error("[host] request setting value for out of range hw_id %d ", hw_id)
+            return
+
+        if self.next_hmi_pedalboard_loading:
+            callback(False)
+            logging.error("hmi_parameter_set, pedalboard loading is in progress")
+            return
+
+        instance_id = self.builder_current_plugin_id
+        symbol = self.builder_current_addressing[hw_id]
+        logging.debug("hmi builder %d control page %d %s = %d", instance_id, hw_id, symbol, control_index)
+        plugin = self.plugins.get(instance_id, None)
+        if not plugin:
+            logging.error("[host] hmi request control for not existent plugin %s", instance_id)
+            callback(False)
+            return
+
+        extinfo = get_plugin_info_essentials(plugin['uri'])
+        data = None
+
+        if symbol == ':presets':
+            actuator_uri = "/hmi/knob" + str(hw_id + 1)
+            hmitype = self.addressings.get_hmitype(symbol, actuator_uri, None)
+            # transform list of file://uri/preset_name.ttl in list of Preset Name
+            mp = plugin.get('mapPresets') or []
+            options = list(enumerate([uri.split('/')[-1].replace('.ttl', '').replace('_', ' ') for uri in mp]))
+            data = dict()
+            data['label'] = "presets"
+            data['hmitype'] = hmitype
+            data['unit'] =  ""
+            data['dividers'] = ""
+            data['options'] = options
+            data['minimum'] = 0
+            data['maximum'] = len(options)
+            data['default'] = 0
+            data['steps'] = len(options)
+            data['value'] = control_index
+        else:
+            for port_info in extinfo.get('controlInputs', []):
+                if port_info['symbol'] == symbol:
+                    actuator_uri = "/hmi/knob" + str(hw_id + 1)
+                    symbol = port_info['symbol']
+                    range = port_info.get('ranges', [])
+                    units = port_info.get('units', {})
+                    hmitype = self.addressings.get_hmitype(symbol, actuator_uri, port_info)
+                    steps = 0
+
+                    options = None
+                    pprops = port_info["properties"]
+                    if "enumeration" in pprops and len(port_info["scalePoints"]) > 0:
+                        options = [(sp["value"], sp["label"]) for sp in port_info["scalePoints"]]
+
+                    if options is not None:
+                        #if len(options) > 20:
+                        #    options = options[0:20]
+                        steps = len(options)
+                    elif hmitype == 0 or hmitype & FLAG_CONTROL_INTEGER or hmitype & FLAG_CONTROL_LOGARITHMIC:
+                        for actuator in self.descriptor.get('actuators', []):
+                            if actuator.get('uri', '') == actuator_uri:
+                                steps = next(iter(actuator.get('steps', [])), 0) * 2 # (201 steps) double precision
+                                break
+
+                    # safe fallback
+                    if steps <= 0:
+                        steps = (range['maximum'] - range['minimum'] + 1) * 2 # double precision
+
+                    if steps <= 0:
+                        steps = 1 # fallback
+
+                    data = dict()
+                    data['label'] = port_info.get('shortName', port_info.get('name', ''))
+                    data['hmitype'] = hmitype
+                    data['unit'] =  units['symbol'] if units and units['symbol'] else ""
+                    data['dividers'] = ""
+                    data['minimum'] = range['minimum']
+                    data['maximum'] = range['maximum']
+                    data['default'] = range['default']
+                    data['steps'] = steps
+                    data['options'] = options
+                    data['value'] = control_index
+                    #data['HACK.AllOptions'] = False
+                    break
+
+        try:
+            if data is not None:
+                self.hmi_send_next_control_page(hw_id, props, control_index, control_index, data, callback)
+            else:
+                callback(False)
+                logging.error("hmi builder control page could not find port info for %s", symbol)
         except Exception as e:
             logging.exception(e)
+            callback(False)
+
+
+    def set_buffer_size(self, size: int) -> int:
+        """
+        Set the JACK audio buffer size to 128 or 256 frames.
+
+        size: desired buffer size in frames (128 or 256)
+        Returns the jack buffer size set
+        """
+
+        # If running a real MOD, save this setting for next boot
+        if IMAGE_VERSION is not None:
+            if size == 256:
+                with open(USING_256_FRAMES_FILE, 'w') as fh:
+                    fh.write("# if this file exists, jack will use 256 frames instead of the default 128")
+            elif os.path.exists(USING_256_FRAMES_FILE):
+                os.remove(USING_256_FRAMES_FILE)
+
+            os_sync()
+
+        return set_jack_buffer_size(size)
+
+    def hmi_audio_frame_size(self, value, callback):
+        """Get or set the audio frame size (buffer size) used by JACK.
+
+        value: 0 to get current size, 128 or 256 to set new size
+        callback: function to call with result (success, [current size])"""
+
+        if value == 0:
+            # return the current buffer size value
+            audio_frame_size = get_jack_buffer_size()
+            callback(True, audio_frame_size)
+            logging.debug("[host] audio frame size get current value %d ", audio_frame_size)
+        else:
+            if value == 128 or value == 256:
+                logging.debug("[host] audio frame size setting value %d ", value)
+                audio_frame_size = self.set_buffer_size(int(value))
+                callback(True, audio_frame_size)
+            else:
+                callback(False)
+                logging.error("[host] audio frame size setting value for out of range %d ", value)
 
     def hmi_save_current_pedalboard(self, callback):
         if not self.pedalboard_path:
@@ -6191,6 +7157,7 @@ _:b%i
         if not os.path.exists(self.pedalboard_path):
             self.save_state_manifest(self.pedalboard_path, titlesym)
             self.save_state_addressings(self.pedalboard_path)
+            self.save_state_presets_metadata(self.pedalboard_path)
 
         self.save_state_snapshots(self.pedalboard_path)
         self.save_state_mainfile(self.pedalboard_path, self.pedalboard_name, titlesym)
@@ -7010,3 +7977,5 @@ _:b%i
         self.profile_applied = True
 
     # -----------------------------------------------------------------------------------------------------------------
+    def notify_progress(self, source, msg, perc, args: str = ""):
+        self.msg_callback("progress %s '%s' %s %s" % (source, msg, perc, args))

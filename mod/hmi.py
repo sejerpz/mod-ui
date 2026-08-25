@@ -17,6 +17,7 @@ from mod.mod_protocol import (
     CMD_CONTROL_ADD,
     CMD_CONTROL_REMOVE,
     CMD_CONTROL_SET,
+    CMD_DWARF_BUILDER_CONTROL_SET,
     CMD_PEDALBOARD_CHANGE,
     CMD_PEDALBOARD_CLEAR,
     CMD_PEDALBOARD_NAME_SET,
@@ -196,6 +197,7 @@ class HMI(object):
                     except IndexError:
                         # something is wrong / not synced!!
                         logging.error("[hmi] NOT SYNCED after receiving %s", data)
+                        raise
                     else:
                         if callback is not None:
                             if withlog:
@@ -209,7 +211,8 @@ class HMI(object):
                         if resp_args is None:
                             self.send_reply("%s %d" % (CMD_RESPONSE, resp))
                             logging.debug('[hmi]     sent "%s %d"', CMD_RESPONSE, resp)
-
+                        elif resp_args == "log":
+                            pass
                         else:
                             self.send_reply("%s %d %s" % (CMD_RESPONSE, resp, resp_args))
                             logging.debug('[hmi]     sent "%s %d %s"', CMD_RESPONSE, resp, resp_args)
@@ -307,7 +310,7 @@ class HMI(object):
                     self.flush_io = None
                 self.flush(True)
 
-        if not any([ msg.startswith(resp) for resp in Protocol.RESPONSES ]):
+        if msg.startswith(CMD_RESTORE) or msg.startswith(CMD_RESET_EEPROM) or not any([ msg.startswith(resp) for resp in Protocol.RESPONSES ]):
             # make an exception for control_set, calling callback right away without waiting
             #if msg.startswith("s "):
                 #self.queue.append((msg, None, datatype))
@@ -351,6 +354,8 @@ class HMI(object):
         xmax = data['maximum']
         steps = data['steps']
         options = data['options']
+        # hack until builder will support options pagination
+        sendAllOptions = True if 'HACK.AllOptions' in data else False
         hmi_set_index = self.hw_desc.get('hmi_set_index', False)
 
         if data.get('group', None) is not None and self.hw_desc.get('hmi_actuator_group_prefix', True):
@@ -381,13 +386,17 @@ class HMI(object):
                 startIndex = 0
                 endIndex = numOpts
             else:
-                if numOpts <= 5 or ivalue <= 2:
+                if sendAllOptions:
                     startIndex = 0
-                elif ivalue+2 >= numOpts:
-                    startIndex = numOpts-5
+                    endIndex = numOpts
                 else:
-                    startIndex = ivalue - 2
-                endIndex = min(startIndex+5, numOpts)
+                    if numOpts <= 5 or ivalue <= 2:
+                        startIndex = 0
+                    elif ivalue+2 >= numOpts:
+                        startIndex = numOpts-5
+                    else:
+                        startIndex = ivalue - 2
+                    endIndex = min(startIndex+5, numOpts)
 
             flags = 0x0
             if startIndex != 0 or endIndex != numOpts:
@@ -417,6 +426,7 @@ class HMI(object):
             if not ok:
                 callback(False)
                 return
+
             n_controllers = data['addrs_max']
             index = data['addrs_idx']
             self.control_set_index(hw_id, index, n_controllers, callback)
@@ -448,6 +458,11 @@ class HMI(object):
         """Set a plug-in's control port value on the HMI."""
         # control_set <hw_id> <value>"""
         self.send('%s %d %f' % (CMD_CONTROL_SET, hw_id, value), callback, 'boolean')
+
+    def builder_control_set(self, hw_id, value, callback):
+        """Set a plug-in's control port value on the HMI when in builder mode."""
+        # control_set <hw_id> <value>"""
+        self.send('%s %d %f' % (CMD_DWARF_BUILDER_CONTROL_SET, hw_id, value), callback, 'boolean')
 
     def control_rm(self, hw_ids, callback):
         """

@@ -346,6 +346,34 @@ class Session(object):
         self.host.set_position(instance, x, y)
         self.msg_callback_broadcast("plugin_pos %s %d %d" % (instance, x, y), ws)
 
+    # Set a plugin user label
+    def ws_plugin_label(self, instance, label, ws):
+        self.screenshot_needed = True
+        self.host.set_label(instance, label)
+        self.msg_callback_broadcast("plugin_label %s %s" % (instance, label), ws)
+
+    # Set a plugin port pedalboard property e.g. snapshotable
+    def ws_port_prop_set(self, instance, portSymbol, propertyName, value, ws):
+        value = self.host.set_port_prop(instance, portSymbol, propertyName, value)
+        self.msg_callback_broadcast("port_prop_set %s %s %s %s" % (instance, portSymbol, propertyName, value), ws)
+        ws.write_message("port_prop_set %s %s %s %s" % (instance, portSymbol, "snapshotable", "1" if value else "0"))
+
+    def ws_param_prop_set(self, instance, uri, propertyName, value, ws):
+        value = self.host.set_param_prop(instance, uri, propertyName, value)
+        self.msg_callback_broadcast("param_prop_set %s %s %s %s" % (instance, uri, propertyName, value), ws)
+        ws.write_message("param_prop_set %s %s %s %s" % (instance, uri, "snapshotable", "1" if value else "0"))
+
+    # Set a plugin visibility on the performance view
+    def ws_performance_plugin_visibility(self, instance, visible, ws):
+        #self.screenshot_needed = True
+        self.host.set_performance_plugin_visibility(instance, visible)
+        self.msg_callback_broadcast("performance_plugin_visibility %s %s" % (instance, visible), ws)
+
+    def ws_performance_plugin_index(self, instance, index, ws):
+        #self.screenshot_needed = True
+        self.host.set_performance_plugin_index(instance, index)
+        self.msg_callback_broadcast("performance_plugin_index %s %d" % (instance, index), ws)
+
     # set the size of the pedalboard (in 1:1 view, aka "full zoom")
     def ws_pedalboard_size(self, width, height):
         self.screenshot_needed = True

@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import copy
 
 from tornado import gen
 from mod import (
@@ -92,6 +93,7 @@ class Addressings(object):
         self._task_get_plugin_cv_port_op_mode = None
         self._task_get_plugin_data = None
         self._task_get_plugin_presets = None
+        self._task_get_plugin_presets_metadata = None
         self._task_get_port_value = None
         self._task_get_tempo_divider = None
         self._task_store_address_data = None
@@ -785,8 +787,57 @@ class Addressings(object):
                                                                 addr['label'].replace(" ","_"),
                                                                 addr.get('operational_mode')))
 
-    # -----------------------------------------------------------------------------------------------------------------
+    def get_hmitype(self, portsymbol, actuator_uri, port_info, pprops=None, group=None, momentary=None,tempo=False):
 
+        if portsymbol == ":bypass":
+            hmitype = FLAG_CONTROL_BYPASS
+            if momentary:
+                hmitype |= FLAG_CONTROL_MOMENTARY
+                if momentary == 2:
+                    hmitype |= FLAG_CONTROL_REVERSE
+
+        elif portsymbol == ":presets":
+            hmitype = FLAG_CONTROL_ENUMERATION|FLAG_CONTROL_SCALE_POINTS|FLAG_CONTROL_INTEGER
+
+        else:
+            pprops = port_info["properties"] if pprops is None else pprops
+
+            if "toggled" in pprops:
+                hmitype = FLAG_CONTROL_TOGGLED
+                if momentary:
+                    hmitype |= FLAG_CONTROL_MOMENTARY
+                    if momentary == 2:
+                        hmitype |= FLAG_CONTROL_REVERSE
+            elif "integer" in pprops:
+                hmitype = FLAG_CONTROL_INTEGER
+            else:
+                hmitype = 0x0 # linear, fallback mode
+
+            if "logarithmic" in pprops:
+                hmitype |= FLAG_CONTROL_LOGARITHMIC
+            if "trigger" in pprops:
+                hmitype |= FLAG_CONTROL_TRIGGER
+
+            if portsymbol == ":bpm" and "tapTempo" in pprops and actuator_uri.startswith("/hmi/footswitch"):
+                hmitype |= FLAG_CONTROL_TAP_TEMPO
+
+            if tempo or "enumeration" in pprops and (port_info is not None and len(port_info["scalePoints"])) > 0:
+                hmitype |= FLAG_CONTROL_ENUMERATION|FLAG_CONTROL_SCALE_POINTS
+
+        # first actuator in group should have reverse enum hmi type
+        if group is not None:
+            group_actuator = next((act for act in self.hw_actuators if act['uri'] == group), None)
+            if group_actuator is not None:
+                if group_actuator['actuator_group'].index(actuator_uri) == 0:
+                    hmitype |= FLAG_CONTROL_REVERSE
+                else:
+                    hmitype &= ~FLAG_CONTROL_REVERSE
+
+        return hmitype
+
+
+
+    # -----------------------------------------------------------------------------------------------------------------
     def add(self, instance_id, plugin_uri, portsymbol, actuator_uri, label, minimum, maximum, steps, value,
             tempo=False, dividers=None, page=None, subpage=None, group=None, coloured=None, momentary=None,
             operational_mode=None):
@@ -798,6 +849,7 @@ class Addressings(object):
         unit = "none"
         options = []
         pprops = []
+        port_info = None
 
         if portsymbol == ":presets":
             data = self.get_presets_as_options(instance_id)
@@ -887,47 +939,8 @@ class Addressings(object):
         # -------------------------------------------------------------------------------------------------------------
 
         if actuator_type == self.ADDRESSING_TYPE_HMI:
-            if portsymbol == ":bypass":
-                hmitype = FLAG_CONTROL_BYPASS
-                if momentary:
-                    hmitype |= FLAG_CONTROL_MOMENTARY
-                    if momentary == 2:
-                        hmitype |= FLAG_CONTROL_REVERSE
 
-            elif portsymbol == ":presets":
-                hmitype = FLAG_CONTROL_ENUMERATION|FLAG_CONTROL_SCALE_POINTS|FLAG_CONTROL_INTEGER
-
-            else:
-                if "toggled" in pprops:
-                    hmitype = FLAG_CONTROL_TOGGLED
-                    if momentary:
-                        hmitype |= FLAG_CONTROL_MOMENTARY
-                        if momentary == 2:
-                            hmitype |= FLAG_CONTROL_REVERSE
-                elif "integer" in pprops:
-                    hmitype = FLAG_CONTROL_INTEGER
-                else:
-                    hmitype = 0x0 # linear, fallback mode
-
-                if "logarithmic" in pprops:
-                    hmitype |= FLAG_CONTROL_LOGARITHMIC
-                if "trigger" in pprops:
-                    hmitype |= FLAG_CONTROL_TRIGGER
-
-                if portsymbol == ":bpm" and "tapTempo" in pprops and actuator_uri.startswith("/hmi/footswitch"):
-                    hmitype |= FLAG_CONTROL_TAP_TEMPO
-
-                if tempo or "enumeration" in pprops and len(port_info["scalePoints"]) > 0:
-                    hmitype |= FLAG_CONTROL_ENUMERATION|FLAG_CONTROL_SCALE_POINTS
-
-            # first actuator in group should have reverse enum hmi type
-            if group is not None:
-                group_actuator = next((act for act in self.hw_actuators if act['uri'] == group), None)
-                if group_actuator is not None:
-                    if group_actuator['actuator_group'].index(actuator_uri) == 0:
-                        hmitype |= FLAG_CONTROL_REVERSE
-                    else:
-                        hmitype &= ~FLAG_CONTROL_REVERSE
+            hmitype = self.get_hmitype(portsymbol, actuator_uri, port_info, pprops, group, momentary, tempo)
 
             # hmi specific
             addressing_data['hmitype'] = hmitype
@@ -1078,6 +1091,9 @@ class Addressings(object):
 
         elif actuator_type == self.ADDRESSING_TYPE_CC:
             actuator_hw = self.cc_metadata[actuator_uri]['hw_id']
+
+        if addressing_data['port'] == ':presets':
+            self.filter_presets_and_update_value(addressing_data)
 
         self._task_addressing(actuator_type, actuator_hw, addressing_data, rcallback, send_hmi=send_hmi)
 
@@ -1373,11 +1389,111 @@ class Addressings(object):
                 dividers = self._task_get_tempo_divider(addressing['instance_id'], addressing['port'])
                 addressing['dividers'] = addressing_data['dividers'] = dividers
 
+        if addressing_data['port'] == ':presets':
+            # filter enabled presets for this instance, and fix the value if it's out of the new bounds
+            self.filter_presets_and_update_value(addressing_data)
+
         # NOTE we never call `control_set` for HMI lists, as it breaks pagination
         if updateValue and not (addressing_data['hmitype'] & FLAG_CONTROL_ENUMERATION):
             self._task_set_value(self.ADDRESSING_TYPE_HMI, actuator_hmi, addressing_data, callback, send_hmi=send_hmi)
         else:
             self._task_addressing(self.ADDRESSING_TYPE_HMI, actuator_hmi, addressing_data, callback, send_hmi=send_hmi)
+
+    def filter_presets_and_update_value(self, addressing_data):
+        """ Filter enabled presets for the instance of the given presets, and update the value if it's out of the new bounds """
+
+        logging.debug("filter_presets_and_update_value %s", addressing_data)
+
+        if 'backup_options' not in addressing_data:
+            instance_id = addressing_data['instance_id']
+            pluginData = self._task_get_plugin_data(instance_id)
+            instance = pluginData['instance']
+            presetsUris = [plugin_preset['uri'] for plugin_preset in self._task_get_plugin_presets(pluginData["uri"])]
+            if presetsUris is None:
+                return
+
+            # copy the options before filtering in order to preserve3 the original list
+            presets = addressing_data['options'].copy()
+            # selected preset
+            selected_preset_index = int(addressing_data['value'])
+            # read the preset name
+            selected_preset = presets[selected_preset_index][1]
+            logging.debug("selected_preset_index %d: %s", selected_preset_index, selected_preset)
+            removed = self.filter_preset_list(instance, presets, presetsUris)
+
+            if removed > 0:
+                # update filter preset indexes
+                presets = [(i, label) for i, (_, label) in enumerate(presets)]
+                if 'backup_options' not in addressing_data:
+                    # backup options contains the first unfiltered set of presets
+                    addressing_data['backup_options'] = addressing_data['options']
+                addressing_data['options'] = presets
+
+        else:
+            presets = addressing_data['backup_options']
+            selected_preset_index = int(addressing_data['value'])
+            # read the preset name
+            selected_preset = presets[selected_preset_index][1]
+            # get the filtered presets for index recalutation
+            presets = addressing_data['options']
+            logging.debug("filter_presets_and_update_value: already filtered preset %s", selected_preset)
+
+        # need to recalculate the indexes
+        # recheck if selected value is still present by label and update the index
+        newValue = next((idx for idx, label in presets if label == selected_preset), addressing_data['minimum'])
+        addressing_data['value'] =  newValue
+        # adapt min & max
+        # step are calculated from options in control_add command addressing_data['steps']
+        addressing_data['maximum'] = len(presets) - 1
+
+    def filter_preset_list(self, instance, presets, presetsUris):
+        removed = 0
+
+        for i in range(len(presets) - 1, -1, -1):
+            (index, label) = presets[i]
+
+            # logging.debug("reading metadata for preset %d: %s", index, label)
+            # get the uri of the preset: is the uri with the same index in the list of presets uris
+            presetUri = presetsUris[index] if index < len(presetsUris) else None
+            if presetUri is None:
+                logging.warning("Preset index %d is out of bounds for instance %s, skipping" % (index, instance))
+                continue
+
+            # metadata can't be None
+            metadata = self._task_get_plugin_presets_metadata(instance, presetUri)
+            if not metadata['enabled']:
+                # if the preset is not enabled, remove it from the list of presets
+                removed += 1
+                presets.remove((index, label))
+                logging.info("Preset '%s' (index %d) is not enabled for instance %s, removing it from the list of presets" % (label, index, instance))
+
+        logging.debug("filter_preset_list %s DONE. removed %d output %s", instance, removed, presets)
+        return removed
+
+    def map_preset_index (self, preset_index, addressing_data):
+        """Map the input preset_index to the real index in the unfiltered list"""
+
+        instance_id = addressing_data['instance_id']
+        pluginData = self._task_get_plugin_data(instance_id)
+        instance = pluginData['instance']
+        presetsUris = [plugin_preset['uri'] for plugin_preset in self._task_get_plugin_presets(pluginData["uri"])]
+        if presetsUris is not None:
+            if addressing_data.get('backup_options', None) is None:
+                presets = addressing_data['options'].copy()
+            else:
+                presets = addressing_data['backup_options'].copy()
+
+            if self.filter_preset_list(instance, presets, presetsUris) > 0:
+                # get the name from filtered presets
+                preset_name = presets[preset_index][1]
+                # get the index by name from the unfiltered presets
+                if addressing_data.get('backup_options', None) is None:
+                    presets = addressing_data['options']
+                else:
+                    presets = addressing_data['backup_options']
+                preset_index = next((idx for idx, label in presets if label == preset_name), preset_index)
+
+        return preset_index
 
     def hmi_load_footswitches(self, callback):
         def footswitch1_callback(_):

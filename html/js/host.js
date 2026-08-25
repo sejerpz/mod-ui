@@ -75,6 +75,28 @@ $('document').ready(function() {
             return
         }
 
+        if (cmd == "port_prop_set") {
+            data         = data.split(" ",4)
+            var instance = data[0]
+            var symbol   = data[1]
+            var property   = data[2]
+            var value    = data[3]
+
+            desktop.pedalboard.pedalboard("setPortPropertyValue", instance, symbol, property, value);
+            return
+        }
+
+        if (cmd == "param_prop_set") {
+            data         = data.split(" ",4)
+            var instance = data[0]
+            var symbol   = data[1]
+            var property   = data[2]
+            var value    = data[3]
+
+            desktop.pedalboard.pedalboard("setParameterPropertyValue", instance, symbol, property, value);
+            return
+        }
+
         triggerDelayedReadyResponse(false)
 
         if (cmd == "stats") {
@@ -161,6 +183,24 @@ $('document').ready(function() {
             return
         }
 
+        if (cmd == "plugin_label") {
+            data = data.split(" ", 2)
+            var instance = data[0]
+            var label = data[1].replace(/_/g," ")
+            
+            desktop.pedalboard.pedalboard("setPluginLabel", instance, label)
+            return
+        }
+
+        if (cmd == "plugin_performance_visiblity") {
+            data = data.split(" ", 2)
+            var instance = data[0]
+            var visible = (data[1] === "1" ? true : false)
+
+            desktop.pedalboard.pedalboard("setPluginPerformanceIsFavorite", instance, visible)
+            return
+        }
+
         if (cmd == "transport") {
             data         = data.split(" ",4)
             var rolling  = parseInt(data[0]) != 0
@@ -189,7 +229,15 @@ $('document').ready(function() {
 
             desktop.pedalboardPresetId = index
             desktop.pedalboardPresetName = name
-            desktop.titleBox.text((desktop.title || 'Untitled') + " - " + name)
+            const newTitle = (desktop.title || 'Untitled') + " - " + name
+            desktop.titleBox.text(newTitle)
+            desktop.performanceTitleBox.text(newTitle)
+            return
+        }
+
+        if (cmd == "compare_status") {
+            // AB compare status changed
+            desktop.compareStatusChanged(data)
             return
         }
 
@@ -347,7 +395,7 @@ $('document').ready(function() {
         }
 
         if (cmd == "add") {
-            data         = data.split(" ",7)
+            data         = data.split(" ",10)
             var instance = data[0]
             var uri      = data[1]
             var x        = parseFloat(data[2])
@@ -357,6 +405,9 @@ $('document').ready(function() {
             var offBuild = parseInt(data[6]) != 0 // official MOD build coming from store, can be cached
             var plugins  = desktop.pedalboard.data('plugins')
             var skipModified = pb_loading
+            var label = data[7].replace(/_/g," ") // replace underscores with spaces
+            var perfview_index = parseInt(data[8])
+            var perfview_visible = parseInt(data[9]) != 0
 
             if (plugins[instance] == null) {
                 plugins[instance] = {} // register plugin
@@ -367,9 +418,67 @@ $('document').ready(function() {
                         uri: uri,
                         version: VERSION,
                         plugin_version: pVersion,
+                        instance: instance,
+                        pedalboard_metadata: "all", // ask server to include pedalboard-specific metadata (like preset enabled status) in the response
                     },
                     success: function (pluginData) {
                         var instancekey = '[mod-instance="' + instance + '"]'
+
+                        // resolve groups
+                        pluginData.ports.control.input.forEach(function (port, index) {
+                            port.group = undefined;
+                            port.groupIndex = undefined;
+                            port.groupCssIndex = undefined; // index used for css coloring
+
+                            if (pluginData.portGroups && port.groupSymbol) {
+                                port.group = pluginData.portGroups.find(function (group) {
+                                    return group.symbol === port.groupSymbol;
+                                });
+
+                                if (port.group) {
+                                    port.groupStart = false;
+                                    port.groupEnd = false;
+                                    port.groupIndex = pluginData.portGroups.indexOf(port.group);
+                                    port.groupCssIndex =  port.groupIndex % 32;  // 32 = max supported groups by css
+                                }
+                            }
+                        });
+
+                        // sort port with groups
+                        pluginData.ports.control.input.sort(function (a, b) {
+                            if (a.groupIndex < b.groupIndex) {
+                                return -1;
+                            } else if (a.groupIndex > b.groupIndex) {
+                                return 1;
+                            } else {
+                                return a.index - b.index;
+                            }
+                        });
+
+                        // add start or end group flags
+                        let prevPort = undefined;
+                        pluginData.ports.control.input.forEach(function (port, index) {
+                            if (port.group)
+                            {
+                                if (prevPort === undefined || prevPort.group === undefined) {
+                                    port.groupStart = true;
+                                } else {
+                                    if (prevPort.groupIndex != port.groupIndex) {
+                                        port.groupStart = true;
+
+                                        if (prevPort.group) {
+                                            prevPort.groupEnd = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            prevPort = port;
+                        });
+
+                        if (prevPort && prevPort.group) {
+                            prevPort.groupEnd = true;
+                        }
 
                         if (!$(instancekey).length) {
                             var cb = function () {
@@ -380,7 +489,11 @@ $('document').ready(function() {
                             $('#pedalboard-dashboard').arrive(instancekey, cb)
                         }
 
-                        desktop.pedalboard.pedalboard("addPlugin", pluginData, instance, bypassed, x, y, {}, null, skipModified)
+                        var guiOptions = {
+                            "label" : label,
+                            "performance": {"index": perfview_index, "visible": perfview_visible}
+                        }
+                        desktop.pedalboard.pedalboard("addPlugin", pluginData, instance, label, bypassed, x, y, guiOptions, null, skipModified)
                     },
                     cache: offBuild,
                     dataType: 'json'
@@ -520,10 +633,22 @@ $('document').ready(function() {
 
                     pb_loading = false
                     desktop.init();
+
+                     // LOAD compare status
+                    $.ajax({
+                        url: '/compare/status',
+                        type: 'GET',
+                        success: function (resp) {
+                            desktop.compareStatusChanged(resp.status)
+                        },
+                        cache: false,
+                        dataType: 'json'
+                    })
                 },
                 cache: false,
                 dataType: 'json'
             })
+
             return
         }
 
@@ -577,6 +702,82 @@ $('document').ready(function() {
         if (cmd == "bufsize") {
             var bufsize = data
             $("#mod-buffersize").text(bufsize+" frames")
+            return
+        }
+
+        if (cmd == "pmdb") {
+            // port monitor in db
+            data      = data.split(" ",2)
+            const port  = data[0]
+            const db = parseFloat(data[1])
+
+            desktop.setPortVUMeterValue(port, db)
+            return
+        }
+
+        if (cmd == "t3k-tone-selected") {
+            // tone selected from the t3k integration
+            // the first parameter is the effect instance
+            data      = data.split(" ",4)
+            const instance  = data[0]
+            const code = data[1]
+            const state = data[2]
+            const toneId = parseInt(data[3])
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kToneSelected(instance, code, state, toneId)
+            return
+        }
+
+        if (cmd == "t3k-cancel") {
+            // tone selected from the t3k integration
+            // the first paramater is the effect instance
+            const instance  = data
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kCancel(instance)
+            return
+        }
+
+        if (cmd == "progress") {
+            // long server operation progress
+            const stringParse = function(str) {
+                // parse the string like string.split, but also support 'strings with spaces'
+                // returns an array of strings
+                const result = []
+                let current = ""
+                let state = false
+
+                for(const c of str) {
+                    if (state == true) {
+                        if (c == "'") {
+                            state = false
+                        } else {
+                            current += c
+                        }
+                    } else {
+                        if (c == "'") {
+                            state = true
+                        } else if (c == " ") {
+                            result.push(current)
+                            current = ""
+                        } else {
+                            current += c
+                        }
+                    }
+                }
+
+                if (current.length > 0) {
+                    result.push(current)
+                }
+
+                return result
+            }
+            data      = stringParse(data)
+            const source = data[0]
+            const msg = data[1].replace('\_', ' ')
+            const progress = parseInt(data[2])
+
             return
         }
     }
