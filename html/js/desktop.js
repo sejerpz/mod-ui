@@ -67,6 +67,10 @@ function Desktop(elements) {
         xrunsButton: $('<div>'),
         cpuStatsButton: $('<div>'),
         helpButton: $('<div>'),
+        cpuButton: $('<div>'),
+        cpuLoadWindow: $('<div>'),
+        cpuLoadList: $('<div>'),
+        cpuLoadSummary: $('<div>'),
     }, elements)
 
     this.installationQueue = new InstallationQueue()
@@ -593,6 +597,13 @@ function Desktop(elements) {
         self.ccDeviceManager.hideUpdateWindow()
         new Notification("info", "Control Chain device firmware update complete!")
     }
+
+    this.cpuLoadPanel = new CpuLoadPanel({
+        window: elements.cpuLoadWindow,
+        list: elements.cpuLoadList,
+        summary: elements.cpuLoadSummary,
+        pedalboard: elements.pedalboard,
+    })
 
     this.transportControls = new TransportControls({
         transportButton: elements.transportButton,
@@ -1177,6 +1188,20 @@ function Desktop(elements) {
                 }
             }
         })
+    })
+    elements.cpuButton.click(function () {
+        self.cpuLoadPanel.toggle()
+    })
+    elements.cpuLoadWindow.find('.js-close').click(function () {
+        self.cpuLoadPanel.close()
+    })
+    elements.cpuLoadWindow.find('.js-reset-peaks').click(function () {
+        self.cpuLoadPanel.reset()
+    })
+    elements.cpuLoadWindow.click(function (e) {
+        if (e.target === this) {
+            self.cpuLoadPanel.close()
+        }
     })
     elements.cpuStatsButton.click(function () {
         $.ajax({
