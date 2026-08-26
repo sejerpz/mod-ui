@@ -428,13 +428,13 @@ $('document').ready(function() {
 
                         // resolve groups
                         pluginData.ports.control.input.forEach(function (port, index) {
-                            port.group = undefined;
+                            const groupUri = port.group;
                             port.groupIndex = undefined;
                             port.groupCssIndex = undefined; // index used for css coloring
 
-                            if (pluginData.portGroups && port.groupSymbol) {
+                            if (pluginData.portGroups && groupUri) {
                                 port.group = pluginData.portGroups.find(function (group) {
-                                    return group.symbol === port.groupSymbol;
+                                    return group.uri === port.group;
                                 });
 
                                 if (port.group) {
