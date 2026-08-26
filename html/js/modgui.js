@@ -1254,6 +1254,7 @@ function GUI(effect, options) {
      * when the settings are closed, to avoid interfering with other plugins that may be using the same ports.
      */
     this.setupMonitorVUMeter = function () {
+        console.log("setupMonitorVUMeter")
         const vumeter = new VUMeter("100%", "22px", { orientation: "horizontal" })
         const vumeter_container = self.settings?.find(".js-plugin-vumeter")
 
@@ -1282,11 +1283,32 @@ function GUI(effect, options) {
 
             self.monitoredPorts.push(monitoredPort)
         }
-        const selectedPort = self.settings.find('.mod-monitors-ports-dropdown').val()
+        // select default for port monitor dropdown
+        // if cpu is over > 75 we set port monitor to off
+        let selectedPort
+        const monitorPortDropdown = self.settings.find('.mod-monitors-ports-dropdown')
+        if (desktop.systemStats.cpuLoad >= 75) {
+            selectedPort = 'off'
+            monitorPortDropdown
+                .attr('title', 'CPU load is above 75%. To avoid affecting audio performance, the Audio Level Monitor is disabled by default. Click to enable it manually.')
+                .val('off')
+        } else {
+            if (self.effect.ports.audio.output.length > 1) {
+                selectedPort = 'all'
+            } else {
+                selectedPort = self.effect.ports.audio.output[0].symbol
+            }
+            monitorPortDropdown
+                .attr('title', '')
+                .val(selectedPort)
+        }
         self.changePortsMonitoring(selectedPort != 'off')
     }
 
     this.changePortsMonitoring = function(enable) {
+        if (!enable) {
+            self.vumeter.setLevel(-60)
+        }
         self.monitoredPortsIteration = 1
         for(var monitoredPort of self.monitoredPorts) {
             if (!monitoredPort.alreadyMonitored && monitoredPort.enabled != enable) {
@@ -1865,19 +1887,7 @@ function GUI(effect, options) {
                 })
             }
 
-            // select default for port monitor dropdown
-            // if cpu is over > 70 we set port monitor to off
-            // TODO port monitor
             const monitorPortDropdown = self.settings.find('.mod-monitors-ports-dropdown')
-            if (desktop.systemStats.cpuLoad >= 75) {
-                monitorPortDropdown
-                    .attr('title', 'CPU load is above 75%. To avoid affecting audio performance, the Audio Level Monitor is disabled by default. Click to enable it manually.')
-                    .val('off')
-            } else {
-                monitorPortDropdown
-                    .attr('title', '')
-                    .val('all')
-            }
             monitorPortDropdown.on('change', function(e) {
                 const val = $(this).val()
                 self.changePortsMonitoring(val != 'off')

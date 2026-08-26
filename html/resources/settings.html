@@ -5,7 +5,7 @@
             <span class="mod-edit"></span>
             <span class="plugin-global-snapshot icon-camera"></span>
         </h1>
-        <div class="mod-toolbar alignright  {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">
+        <div class="mod-toolbar alignright {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">
             <div class="js-ab-compare" style="display: inline-flex; margin-top: 6px;">
                 <div class="js-ab-compare-snapshot js-ab-compare-snapshot-a js-ab-compare-snapshot-selected">
                     A
@@ -20,19 +20,21 @@
             <button class="js-close btn btn-danger">Close</button>
         </div>
     </header>
-    <div class="mod-monitors clearfix">
-        <div class="mod-monitors-ports form-group clearfix">
-            <label>Monitor</label>
-            <div class="mod-controls">
-                <select class="mod-monitors-ports-dropdown form-control" name="audio-ports">
-                    {{#effect.monitor_ports}}
-                    <option value="{{symbol}}">{{label}}</option>
-                    {{/effect.monitor_ports}}
-                </select>
+    <div class="{{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">
+        <div class="mod-monitors ">
+            <div class="mod-monitors-ports form-group clearfix">
+                <label>Monitor</label>
+                <div class="mod-controls">
+                    <select class="mod-monitors-ports-dropdown form-control" name="audio-ports">
+                        {{#effect.monitor_ports}}
+                        <option value="{{symbol}}">{{label}}</option>
+                        {{/effect.monitor_ports}}
+                    </select>
+                </div>
             </div>
-        </div>
 
-        <div class="mod-monitor-container js-plugin-vumeter clearfix">
+            <div class="mod-monitor-container js-plugin-vumeter clearfix">
+            </div>
         </div>
     </div>
     <div class="mod-controls clearfix">
