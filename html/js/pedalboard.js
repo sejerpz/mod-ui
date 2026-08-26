@@ -318,7 +318,7 @@ JqueryClass('pedalboard', {
         self.data('replacementPlugin', null)
 
         // t3k integration
-        self.data('T3KIntegration', new T3KIntegration(self))
+        self.data('T3KIntegration', new T3KIntegration(self, T3K_API_KEY)) //'t3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'))
 
         // Pedalboard itself will get big dimensions and will have it's scale and position changed dinamically
         // often. So, let's wrap it inside an element with same original dimensions and positioning, with overflow
@@ -3639,7 +3639,7 @@ function ConnectionManager() {
 }
 
 
-function T3KIntegration(pedalboard) {
+function T3KIntegration(pedalboard, pubKey) {
     /*
      * Handle Tone3000 integration
      *
@@ -3658,7 +3658,6 @@ function T3KIntegration(pedalboard) {
      * 5. The CLIENT call the T3K to fetch the tones and upload to the SERVER
      *
      */
-    const pubKey = 't3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'
     const self = this
     let t3kOpenPopups = []
 
@@ -3686,36 +3685,48 @@ function T3KIntegration(pedalboard) {
     }
 
     this.startSelectFlow = function(effect, parameter, skipAuthCheck) {
-        if (!skipAuthCheck) {
-            // check if I'm authenticated
-            const auth = window.Tone3000Client.getTokens()
+        const hasApiKey = pubKey && pubKey.length > 0
+
+        if (!skipAuthCheck || !hasApiKey) {
             let authenticated = false
-            if (auth != null) {
-                // note that this call is sync
-                $.ajax({
-                    url: `https://www.tone3000.com/api/v1/user`,
-                    type: 'GET',
-                    async: false,
-                    headers: {
-                        'Authorization': 'Bearer ' + auth.tokens.access_token
-                    },
-                    success: function (tone) {
-                        authenticated = true
-                    }
-                })
+            if (hasApiKey) {
+                    // check if I'm authenticated
+                    const auth = window.Tone3000Client.getTokens()
+                    if (auth != null) {
+                        // note that this call is sync
+                        $.ajax({
+                        url: `https://www.tone3000.com/api/v1/user`,
+                        type: 'GET',
+                        async: false,
+                        headers: {
+                            'Authorization': 'Bearer ' + auth.tokens.access_token
+                        },
+                        success: function (tone) {
+                            authenticated = true
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("AJAX Error:", status, error);
+                        }
+                    })
+                }
             }
 
-            if (!authenticated) {
+            if (!authenticated || !hasApiKey) {
                 // if not authenticated show the T3K welcome
                 const width = 480;
                 const height = 720;
                 const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
                 const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
-                const url = "/t3k_spash.html?d=" + Date.now().toString()
+                let url = "/t3ksplash.html?v=" + VERSION
+                if (!hasApiKey) {
+                    url += "&missing-api-key"
+                }
                 const t3kwelcome = window.open(url, 't3k_select', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
                 t3kwelcome.onSplashContinue = function() {
                     // continue with the select workflow skipAuthCheck = true
-                    self.startSelectFlow(effect, parameter, true)
+                    if (hasApiKey) {
+                        self.startSelectFlow(effect, parameter, true)
+                    }
                 }
 
                 return // stop now because we have shown the splash window
@@ -3765,6 +3776,7 @@ function T3KIntegration(pedalboard) {
             })
             .catch((error) => {
                 console.error("T3KSelect error:", error);
+                t3kOpenPopups.close()
             })
     }
 
@@ -3951,7 +3963,7 @@ function T3KIntegration(pedalboard) {
         }
 
         t3kinfo.state = 'downloading'
-        t3kinfo.popup.location = "/t3k.html?d=" + Date.now().toString()
+        t3kinfo.popup.location = "/t3k.html?v=" + VERSION
 
         // must match the callbackUrl of the request we need to exchange the code for
         const callbackUrl = window.location.origin + '/effect/t3k/select' + effect

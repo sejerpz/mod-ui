@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2012-2025 MOD Audio UG
+// SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #ifndef MOD_UTILS_H_INCLUDED
@@ -87,13 +87,6 @@ typedef struct {
 } PluginGUI_Mini;
 
 typedef struct {
-    bool valid;
-    const char* uri;
-    const char* symbol;
-    const char* name;
-} PluginPortGroup;
-
-typedef struct {
     float min;
     float max;
     float def;
@@ -121,7 +114,6 @@ typedef struct {
     PluginPortUnits units;
     const char* comment;
     const char* designation;
-    const char* group;
     const char* const* properties;
     int rangeSteps;
     const PluginPortScalePoint* scalePoints;
@@ -204,7 +196,6 @@ typedef struct {
     const char* const* bundles;
     PluginGUI gui;
     PluginPorts ports;
-    const PluginPortGroup* portGroups;
     const PluginParameter* parameters;
     const PluginPreset* presets;
     const PluginPortGroup* portGroups;

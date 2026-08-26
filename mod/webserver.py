@@ -41,7 +41,8 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           DEFAULT_ICON_TEMPLATE, DEFAULT_SETTINGS_TEMPLATE, DEFAULT_ICON_IMAGE,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
-                          DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE)
+                          DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE,
+                          API_KEY)
 
 from mod import (
     TextFileFlusher, WINDOWS,
@@ -469,6 +470,7 @@ class SystemPreferences(JsonRequestHandler):
 
             ret[pref['label']] = val
 
+        print("********* READ OPTIONS ", ret)
         self.write(ret)
 
 class SystemExeChange(JsonRequestHandler):
@@ -1984,6 +1986,19 @@ class TemplateHandler(TimelessRequestHandler):
             return url_escape(version)
         return str(int(time.time()))
 
+    def get_t3k_api_key(self):
+        api_key = SESSION.prefs.get('t3k-api-key', None)
+
+        if not api_key:
+            # T3K public system (vendor) api 
+            file_path =  os.path.join(os.path.dirname(API_KEY), 't3k-api-key.pub')
+            if os.path.exists(file_path):
+                logging.info("T3K reading system wide apikey from: %s", file_path)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    api_key = f.read()
+
+        return api_key
+
     def index(self):
         user_id = safe_json_load(USER_ID_JSON_FILE, dict)
 
@@ -2032,6 +2047,7 @@ class TemplateHandler(TimelessRequestHandler):
             'preferences': json.dumps(SESSION.prefs.prefs),
             'bufferSize': get_jack_buffer_size(),
             'sampleRate': get_jack_sample_rate(),
+            't3k_api_key': self.get_t3k_api_key()
         }
         return context
 
@@ -2083,6 +2099,19 @@ class TemplateHandler(TimelessRequestHandler):
             'preferences': json.dumps(prefs),
             'bufferSize': get_jack_buffer_size(),
             'sampleRate': get_jack_sample_rate(),
+        }
+        return context
+
+    def t3k(self):
+        context = {
+            'version': self.get_argument('v'),
+        }
+        return context
+
+    def t3ksplash(self):
+        context = {
+            'version': self.get_argument('v'),
+            't3k_api_key': self.get_t3k_api_key()
         }
         return context
 
@@ -2721,7 +2750,7 @@ application = web.Application(
             (r"/save_user_id/", SaveUserId),
 
             (r"/(index.html)?$", TemplateHandler),
-            (r"/([a-z]+\.html)$", TemplateHandler),
+            (r"/([a-z0-9]+\.html)$", TemplateHandler),
             (r"/(allguis|sdk|settings)$", TemplateHandler),
             (r"/load_template/([a-z_]+\.html)$", TemplateLoader),
             (r"/js/templates.js$", BulkTemplateLoader),
