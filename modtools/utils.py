@@ -185,13 +185,6 @@ class PluginAuthor(Structure):
         ("email", c_char_p),
     ]
 
-class PluginPortGroup(Structure):
-    _fields_ = [
-        ("valid", c_bool),
-        ("symbol", c_char_p),
-        ("name", c_char_p),
-    ]
-
 class PluginGUIPort(Structure):
     _fields_ = [
         ("valid", c_bool),
@@ -274,7 +267,6 @@ class PluginPort(Structure):
         ("rangeSteps", c_int),
         ("scalePoints", POINTER(PluginPortScalePoint)),
         ("shortName", c_char_p),
-        ("groupSymbol", c_char_p),
     ]
 
 class PluginPortsI(Structure):
@@ -364,7 +356,6 @@ class PluginInfo(Structure):
         ("portGroups", POINTER(PluginPortGroup)),
         ("parameters", POINTER(PluginParameter)),
         ("presets", POINTER(PluginPreset)),
-        ("portGroups", POINTER(PluginPortGroup)),
     ]
 
 # a subset of PluginInfo
@@ -577,7 +568,6 @@ c_structp_types = (POINTER(PluginGUIPort),
                    POINTER(PluginPortScalePoint),
                    POINTER(PluginPort),
                    POINTER(PluginParameter),
-                   POINTER(PluginPortGroup),
                    POINTER(PluginPreset),
                    POINTER(PluginPortGroup),
                    POINTER(PedalboardPlugin),
