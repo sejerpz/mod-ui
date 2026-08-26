@@ -1269,7 +1269,6 @@ function GUI(effect, options) {
         // values to this plugin instance
 
         self.monitoredPorts = self.monitoredPorts || []
-        self.monitoredPortsIteration = 1
 
         for(var port of self.effect.ports.audio.output) {
             const portSymbol = self.instance + '/' + port.symbol
@@ -1277,13 +1276,22 @@ function GUI(effect, options) {
                 portSymbol: portSymbol,
                 alreadyMonitored: options.isPortMonitored(portSymbol),
                 lastValue: -999.0,
-                iteration: 0
+                iteration: 0,
+                enabled: false
             }
 
             self.monitoredPorts.push(monitoredPort)
+        }
+        const selectedPort = self.settings.find('.mod-monitors-ports-dropdown').val()
+        self.changePortsMonitoring(selectedPort != 'off')
+    }
 
-            if (!monitoredPort.alreadyMonitored) {
-                options.changePortMonitoring(portSymbol, 'enable')
+    this.changePortsMonitoring = function(enable) {
+        self.monitoredPortsIteration = 1
+        for(var monitoredPort of self.monitoredPorts) {
+            if (!monitoredPort.alreadyMonitored && monitoredPort.enabled != enable) {
+                options.changePortMonitoring(monitoredPort.portSymbol, enable ? 'enable' : 'disable')
+                monitoredPort.enabled = enable
             }
         }
     }
@@ -1350,7 +1358,7 @@ function GUI(effect, options) {
                     }
                 } else {
                     // cleanup
-                    if (monitoredPort.alreadyMonitored) {
+                    if (monitoredPort.alreadyMonitored || monitoredPort.enable === false) {
                         // no need to cleanup go to the next
                         cleanupMonitoredPort();
                     } else {
@@ -1857,8 +1865,24 @@ function GUI(effect, options) {
                 })
             }
 
-            // T3K Integration
-
+            // select default for port monitor dropdown
+            // if cpu is over > 70 we set port monitor to off
+            // TODO port monitor
+            const monitorPortDropdown = self.settings.find('.mod-monitors-ports-dropdown')
+            if (desktop.systemStats.cpuLoad >= 75) {
+                monitorPortDropdown
+                    .attr('title', 'CPU load is above 75%. To avoid affecting audio performance, the Audio Level Monitor is disabled by default. Click to enable it manually.')
+                    .val('off')
+            } else {
+                monitorPortDropdown
+                    .attr('title', '')
+                    .val('all')
+            }
+            monitorPortDropdown.on('change', function(e) {
+                const val = $(this).val()
+                self.changePortsMonitoring(val != 'off')
+            })
+            //TODO do the same for performance settings
             // ready!
             self.jsStarted = true
             self.triggerJS({ type: 'start', parameters: jsParameters, ports: jsPorts })
@@ -2417,6 +2441,11 @@ function GUI(effect, options) {
         // with a more human friendly label
         data.effect.monitor_ports = []
         if (data.effect.ports.audio.output) {
+            // if more than one output add a special "off" output port
+            data.effect.monitor_ports.push({
+                symbol: "off",
+                label: "Off"
+            })
             if (data.effect.ports.audio.output.length > 1) {
                 // if more than one output add a special "all" output port
                 data.effect.monitor_ports.push({

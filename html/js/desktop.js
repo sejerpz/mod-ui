@@ -1617,6 +1617,11 @@ function Desktop(elements) {
         })
     }
 
+    this.systemStats = {
+        cpuLoad: 0,
+        xrun: 0
+    }
+
     var prevent = function (ev) {
         ev.preventDefault()
     }

@@ -106,12 +106,14 @@ $('document').ready(function() {
 
             if (cpuLoad != cached_cpuLoad) {
                 cached_cpuLoad = cpuLoad
+                desktop.systemStats.cpuLoad = cpuLoad
                 $("#cpu-bar").css("width", (100.0-cpuLoad).toFixed().toString()+"%")
                 $("#cpu-bar-text").text("CPU "+cpuLoad.toString()+"%")
             }
 
             if (xruns != cached_xruns) {
                 cached_xruns = xruns
+                desktop.systemStats.xruns = xruns
                 $("#mod-xruns").text(xruns == 1 ? (xruns.toString()+" Xrun") : (xruns.toString()+" Xruns"))
 
                 if (timeout_xruns) {
