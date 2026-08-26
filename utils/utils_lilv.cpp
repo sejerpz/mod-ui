@@ -1981,58 +1981,6 @@ static void _fill_units(LilvWorld* const w,
 
 }
 
-const PluginPortGroup _get_port_group(LilvWorld* const w, const LilvNode* const group, const NamespaceDefinitions& ns)
-{
-    PluginPortGroup port_group;
-
-    memset(&port_group, 0, sizeof(PluginPortGroup));
-    if (LilvNode* const group_type = lilv_world_get(w, group, ns.rdf_type, NULL))
-    {
-        if (lilv_node_equals(group_type, ns.port_groups_inputgroup) || lilv_node_equals(group_type, ns.port_groups_outputgroup))
-        {
-            if (LilvNode* const group_symbol = lilv_world_get(w, group, ns.lv2core_symbol, nullptr))
-            {
-                const char* const groupsymbol = lilv_node_as_string(group_symbol);
-                if (groupsymbol != nullptr && strlen(groupsymbol) > 0)
-                {
-                    // get description
-                    LilvNode* const group_name = lilv_world_get(w, group, ns.lv2core_name, nullptr);
-                    const char* const groupname = (group_name != nullptr) ? lilv_node_as_string(group_name) : nullptr;
-
-                    // create a new port group
-                    port_group.valid = true;
-                    port_group.symbol = strdup(groupsymbol);
-                    port_group.name = groupname == nullptr ? strdup(groupsymbol) : strdup(groupname);
-
-                    lilv_node_free(group_name);
-                }
-                else
-                {
-                    // symbol must be defined for groups
-                    printf("WARNING: invalid group lv2:symbol is empty\n");
-                }
-                lilv_node_free(group_symbol);
-            }
-            else
-            {
-                printf("WARNING: invalid group no lv2:symbol defined\n");
-            }
-
-            lilv_node_free(group_type);
-        }
-        else
-        {
-            printf("WARNING: invalid group no required port type\n");
-        }
-    }
-    else
-    {
-        printf("WARNING: invalid group no rdf:type defined\n");
-    }
-
-    return port_group;
-}
-
 const PluginInfo& _get_plugin_info(LilvWorld* const w,
                                    const LilvPlugin* const p,
                                    const NamespaceDefinitions& ns)
@@ -3582,8 +3530,6 @@ static void _clear_port_info(PluginPort& portinfo)
         free((void*)portinfo.group);
     if (portinfo.shortName != nc)
         free((void*)portinfo.shortName);
-    if (portinfo.groupSymbol != nc)
-        free((void*)portinfo.groupSymbol);
 
     if (portinfo.properties != nullptr)
     {
