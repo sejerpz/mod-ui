@@ -1986,18 +1986,18 @@ class TemplateHandler(TimelessRequestHandler):
             return url_escape(version)
         return str(int(time.time()))
 
-    def get_t3k_api_key(self):
+    def get_t3k_api_key(self) -> str:
         api_key = SESSION.prefs.get('t3k-api-key', None)
 
         if not api_key:
             # T3K public system (vendor) api 
-            file_path =  os.path.join(os.path.dirname(API_KEY), 't3k-api-key.pub')
+            file_path =  os.path.join(os.path.dirname(API_KEY), 't3k_api_key.pub')
             if os.path.exists(file_path):
                 logging.info("T3K reading system wide apikey from: %s", file_path)
                 with open(file_path, "r", encoding="utf-8") as f:
-                    api_key = f.read()
+                    api_key = f.read().strip()
 
-        return api_key
+        return api_key or ''
 
     def index(self):
         user_id = safe_json_load(USER_ID_JSON_FILE, dict)
@@ -2047,7 +2047,7 @@ class TemplateHandler(TimelessRequestHandler):
             'preferences': json.dumps(SESSION.prefs.prefs),
             'bufferSize': get_jack_buffer_size(),
             'sampleRate': get_jack_sample_rate(),
-            't3k_api_key': self.get_t3k_api_key()
+            't3k_api_key': self.get_t3k_api_key() 
         }
         return context
 
@@ -2113,6 +2113,7 @@ class TemplateHandler(TimelessRequestHandler):
             'version': self.get_argument('v'),
             't3k_api_key': self.get_t3k_api_key()
         }
+
         return context
 
 class TemplateLoader(TimelessRequestHandler):

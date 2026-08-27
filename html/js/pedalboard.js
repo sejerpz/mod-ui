@@ -3998,10 +3998,8 @@ function T3KIntegration(pedalboard, pubKey) {
                 const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
                 const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
                 let url = "/t3ksplash.html?v=" + VERSION
-                if (!hasApiKey) {
-                    url += "&missing-api-key"
-                }
                 const t3kwelcome = window.open(url, 't3k_select', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
+
                 t3kwelcome.onSplashContinue = function() {
                     // continue with the select workflow skipAuthCheck = true
                     if (hasApiKey) {
