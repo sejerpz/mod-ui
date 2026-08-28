@@ -114,7 +114,7 @@ CMD_ARGS = {
         'cs': [int,int],
         'pa': [int,int,int,int,int,int,int,int],
         'bp': [int,int],
-        'bc': [int,int,int],
+        'bcl': [int,int,int],
         'bcs': [int, float],
         'bncp': [int,int,int],
         'log': [str]
