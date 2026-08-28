@@ -106,6 +106,18 @@ PEDALBOARD_URI = "urn:mod:pedalboard"
 UNTITLED_PEDALBOARD_NAME="Untitled Pedalboard"
 DEFAULT_SNAPSHOT_NAME="Default"
 
+# Pedalboard minimap, rendered by the HMI from a server-side display list.
+# The view is the HMI's own 128x64 panel; the scene is larger and pans under it.
+MINIMAP_MAX_WIDTH = int(os.environ.get('MOD_MINIMAP_MAX_WIDTH', 1024))
+MINIMAP_MAX_HEIGHT = int(os.environ.get('MOD_MINIMAP_MAX_HEIGHT', 512))
+MINIMAP_VIEW_WIDTH = int(os.environ.get('MOD_MINIMAP_VIEW_WIDTH', 128))
+MINIMAP_VIEW_HEIGHT = int(os.environ.get('MOD_MINIMAP_VIEW_HEIGHT', 64))
+MINIMAP_LAYERS = os.environ.get('MOD_MINIMAP_LAYERS', 'audio,midi,cv')
+# must stay under the firmware's WEBGUI_COMM_RX_BUFF_SIZE (4096)
+MINIMAP_MAX_MSG = int(os.environ.get('MOD_MINIMAP_MAX_MSG', 3584))
+# plugins per window; connections are never windowed, they follow the plugins
+MINIMAP_WIN_PLUGINS = int(os.environ.get('MOD_MINIMAP_WIN_PLUGINS', 12))
+
 CAPTURE_PATH='/tmp/capture.ogg'
 PLAYBACK_PATH='/tmp/playback.ogg'
 

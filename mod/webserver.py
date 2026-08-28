@@ -17,6 +17,7 @@ import unicodedata
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
+from io import BytesIO
 from random import randint
 from tornado import gen, iostream, web, websocket
 from tornado.escape import squeeze, url_escape, xhtml_escape
@@ -42,6 +43,7 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
                           DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE,
+                          MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT,
                           API_KEY)
 
 from mod import (
@@ -50,6 +52,7 @@ from mod import (
     get_hardware_descriptor, get_unique_name, os_sync, symbolify,
 )
 from mod.bank import list_banks, save_banks, remove_pedalboard_from_banks
+from mod.minimap import INSTANCE as MINIMAP
 from mod.session import SESSION
 from mod.licensing import check_missing_licenses, save_license, get_new_licenses_and_flush
 from modtools.utils import (
@@ -1702,6 +1705,74 @@ class PedalboardImageWait(JsonRequestHandler):
             'ctime': "%.1f" % ctime,
         })
 
+class PedalboardMinimap(TimelessRequestHandler):
+    """Display list of the live plugin graph, for the HMI to draw itself.
+
+    Plain text, one record per line, parseable with strtok/sscanf so the
+    firmware needs no JSON. With `focus` the reply is limited to the plugins
+    around that instance -- connections are never windowed, they follow the
+    plugins -- which is what keeps a large pedalboard inside the controller's
+    4K receive buffer.
+    """
+    def get(self):
+        focus = self.get_argument('focus', None)
+        layers = self.get_argument('layers', None)
+
+        text, version = MINIMAP.render(SESSION.host, focus=focus, layers=layers)
+
+        self.set_header("Content-Type", "text/plain; charset=UTF-8")
+        # TimelessRequestHandler deliberately disables etag/304, so the version
+        # travels in a header instead; polling it is cheap by design
+        self.set_header("Cache-Control", "no-cache")
+        self.set_header("X-Minimap-Version", str(version))
+        self.write(text)
+        self.finish()
+
+class PedalboardMinimapInfo(JsonRequestHandler):
+    def get(self):
+        self.write(MINIMAP.info(SESSION.host))
+
+class PedalboardMinimapPreview(TimelessRequestHandler):
+    """Reference rasterisation of the same scene -- a debug view, not the product.
+
+    The HMI draws from the display list above; this only exists so a human can
+    see what that scene looks like without a device in hand.
+    """
+    def get(self):
+        from mod import minimap_render
+
+        if not minimap_render.available():
+            self.set_status(503)
+            self.set_header("Content-Type", "text/plain; charset=UTF-8")
+            self.write("Pillow is not installed; the display list at "
+                       "/pedalboard/minimap still works.\n")
+            self.finish()
+            return
+
+        layers = self.get_argument('layers', None)
+        invert = self.get_argument('invert', None) in ('1', 'true', 'yes')
+        selected = self.get_argument('selected', None)
+
+        scene = MINIMAP.scene(SESSION.host)
+
+        crop = None
+        if self.get_argument('view', None) in ('1', 'true', 'yes'):
+            crop = (int(float(self.get_argument('x', 0))),
+                    int(float(self.get_argument('y', 0))),
+                    int(float(self.get_argument('w', MINIMAP_VIEW_WIDTH))),
+                    int(float(self.get_argument('h', MINIMAP_VIEW_HEIGHT))))
+
+        img = minimap_render.render(scene, crop=crop, invert=invert,
+                                    layers=layers, selected=selected)
+        buf = BytesIO()
+        img.save(buf, format='PNG', compress_level=1)
+
+        self.set_header("Content-Type", "image/png")
+        self.set_header("Cache-Control", "no-cache")
+        self.set_header("X-Minimap-Version", str(MINIMAP.version))
+        self.write(buf.getvalue())
+        self.finish()
+
 class PedalboardCvAddressingPluginPortAdd(JsonRequestHandler):
     @web.asynchronous
     @gen.engine
@@ -2707,6 +2778,9 @@ application = web.Application(
             (r"/pedalboard/image/generate", PedalboardImageGenerate),
             (r"/pedalboard/image/check", PedalboardImageCheck),
             (r"/pedalboard/image/wait", PedalboardImageWait),
+            (r"/pedalboard/minimap", PedalboardMinimap),
+            (r"/pedalboard/minimap/info", PedalboardMinimapInfo),
+            (r"/pedalboard/minimap/preview.png", PedalboardMinimapPreview),
             (r"/pedalboard/cv_addressing_plugin_port/add", PedalboardCvAddressingPluginPortAdd),
             (r"/pedalboard/cv_addressing_plugin_port/remove", PedalboardCvAddressingPluginPortRemove),
             (r"/pedalboard/transport/set_sync_mode/*(/[A-Za-z0-9_:/]+[^/])/?", PedalboardTransportSetSyncMode),
