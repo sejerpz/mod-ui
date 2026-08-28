@@ -7141,6 +7141,17 @@ _:b%i
             with open("/data/jack-buffer-size", 'w') as fh:
                 fh.write('%d\n' % size)
 
+            # backward compatibility with MOD jackd start script
+            # remove this code when mod-jackd
+            if os.path.exists('/data/using-256-frames'):
+                os.remove('/data/using-256-frames')
+            if os.path.exists('/data/using-64-frames'):
+                os.remove('/data/using-64-frames')
+            if size == 256:
+                open('/data/using-256-frames','w')
+            elif size == 64:
+                open('/data/using-64-frames','w')
+
             os_sync()
 
         return set_jack_buffer_size(size)
