@@ -7142,7 +7142,7 @@ _:b%i
                 fh.write('%d\n' % size)
 
             # backward compatibility with MOD jackd start script
-            # remove this code when mod-jackd
+            # remove this code when mod-jackd will be ported to /data/jack-buffer-size
             if os.path.exists('/data/using-256-frames'):
                 os.remove('/data/using-256-frames')
             if os.path.exists('/data/using-64-frames'):
