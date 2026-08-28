@@ -470,7 +470,6 @@ class SystemPreferences(JsonRequestHandler):
 
             ret[pref['label']] = val
 
-        print("********* READ OPTIONS ", ret)
         self.write(ret)
 
 class SystemExeChange(JsonRequestHandler):
