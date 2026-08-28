@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
+// SPDX-FileCopyrightText: 2012-2025 MOD Audio UG
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "utils.h"
@@ -15,6 +15,7 @@
 #include <lv2/midi/midi.h>
 #include <lv2/morph/morph.h>
 #include <lv2/patch/patch.h>
+#include <lv2/port-groups/port-groups.h>
 #include <lv2/port-props/port-props.h>
 #include <lv2/presets/presets.h>
 #include <lv2/state/state.h>
@@ -363,6 +364,7 @@ struct NamespaceDefinitions {
     LilvNode* atom_bufferType;
     LilvNode* atom_Sequence;
     LilvNode* midi_MidiEvent;
+    LilvNode* pgroups_group;
     LilvNode* pprops_rangeSteps;
     LilvNode* patch_readable;
     LilvNode* patch_writable;
@@ -459,6 +461,7 @@ struct NamespaceDefinitions {
         atom_bufferType          = lilv_new_uri(w, LV2_ATOM__bufferType);
         atom_Sequence            = lilv_new_uri(w, LV2_ATOM__Sequence);
         midi_MidiEvent           = lilv_new_uri(w, LV2_MIDI__MidiEvent);
+        pgroups_group            = lilv_new_uri(w, LV2_PORT_GROUPS__group);
         pprops_rangeSteps        = lilv_new_uri(w, LV2_PORT_PROPS__rangeSteps);
         patch_readable           = lilv_new_uri(w, LV2_PATCH__readable);
         patch_writable           = lilv_new_uri(w, LV2_PATCH__writable);
@@ -533,6 +536,7 @@ struct NamespaceDefinitions {
         lilv_node_free(atom_bufferType);
         lilv_node_free(atom_Sequence);
         lilv_node_free(midi_MidiEvent);
+        lilv_node_free(pgroups_group);
         lilv_node_free(pprops_rangeSteps);
         lilv_node_free(patch_readable);
         lilv_node_free(patch_writable);
@@ -1977,58 +1981,6 @@ static void _fill_units(LilvWorld* const w,
 
 }
 
-const PluginPortGroup _get_port_group(LilvWorld* const w, const LilvNode* const group, const NamespaceDefinitions& ns)
-{
-    PluginPortGroup port_group;
-
-    memset(&port_group, 0, sizeof(PluginPortGroup));
-    if (LilvNode* const group_type = lilv_world_get(w, group, ns.rdf_type, NULL))
-    {
-        if (lilv_node_equals(group_type, ns.port_groups_inputgroup) || lilv_node_equals(group_type, ns.port_groups_outputgroup))
-        {
-            if (LilvNode* const group_symbol = lilv_world_get(w, group, ns.lv2core_symbol, nullptr))
-            {
-                const char* const groupsymbol = lilv_node_as_string(group_symbol);
-                if (groupsymbol != nullptr && strlen(groupsymbol) > 0)
-                {
-                    // get description
-                    LilvNode* const group_name = lilv_world_get(w, group, ns.lv2core_name, nullptr);
-                    const char* const groupname = (group_name != nullptr) ? lilv_node_as_string(group_name) : nullptr;
-
-                    // create a new port group
-                    port_group.valid = true;
-                    port_group.symbol = strdup(groupsymbol);
-                    port_group.name = groupname == nullptr ? strdup(groupsymbol) : strdup(groupname);
-
-                    lilv_node_free(group_name);
-                }
-                else
-                {
-                    // symbol must be defined for groups
-                    printf("WARNING: invalid group lv2:symbol is empty\n");
-                }
-                lilv_node_free(group_symbol);
-            }
-            else
-            {
-                printf("WARNING: invalid group no lv2:symbol defined\n");
-            }
-
-            lilv_node_free(group_type);
-        }
-        else
-        {
-            printf("WARNING: invalid group no required port type\n");
-        }
-    }
-    else
-    {
-        printf("WARNING: invalid group no rdf:type defined\n");
-    }
-
-    return port_group;
-}
-
 const PluginInfo& _get_plugin_info(LilvWorld* const w,
                                    const LilvPlugin* const p,
                                    const NamespaceDefinitions& ns)
@@ -2671,6 +2623,8 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
     // --------------------------------------------------------------------------------------------------------
     // ports
 
+    std::unordered_map<std::string, PluginPortGroup> portGroups;
+
     if (const uint32_t count = lilv_plugin_get_num_ports(p))
     {
         uint32_t countAudioInput=0,   countAudioOutput=0;
@@ -2919,33 +2873,51 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
             }
 
             // ----------------------------------------------------------------------------------------------------
-            // groups
-            portinfo.groupSymbol = nc;
-            if (LilvNode* symbolnode = lilv_port_get(p, port, ns.port_groups_groupName))
+            // group
+
+            if (LilvNodes* const nodes = lilv_port_get_value(p, port, ns.pgroups_group))
             {
-                const char* groupName = lilv_node_as_string(symbolnode);
-                if (!contains(usedGroups, groupName))
-                {
-                    const PluginPortGroup& group = _get_port_group(w, symbolnode, ns);
+                LilvNode* const group = lilv_nodes_get_first(nodes);
+                portinfo.group = strdup(lilv_node_as_string(group));
 
-                    if (group.valid)
+                if (! contains(portGroups, portinfo.group))
+                {
+                    PluginPortGroup& portGroup = portGroups[portinfo.group] = {
+                        true,
+                        portinfo.group,
+                        nc,
+                        nc,
+                        0
+                    };
+
+                    if (LilvNode* const group_symbol = lilv_world_get(w, group, ns.lv2core_symbol, nullptr))
                     {
-                        // read the group definition
-                        usedGroups[groupName] = group;
-                        portinfo.groupSymbol = strdup(group.symbol);
+                        if (const char* const symbolstr = lilv_node_as_string(group_symbol))
+                            portGroup.symbol = strdup(symbolstr);
+
+                        lilv_node_free(group_symbol);
                     }
-                    else
+
+                    if (LilvNode* const group_name = lilv_world_get(w, group, ns.lv2core_name, nullptr))
                     {
-                        printf("WARNING: Group definition not found for %s\n", groupName);
+                        if (const char* const namestr = lilv_node_as_string(group_name))
+                            portGroup.name = strdup(namestr);
+
+                        lilv_node_free(group_name);
+                    }
+
+                    if (LilvNode* const node = lilv_world_get(w, group, ns.lv2core_index, nullptr))
+                    {
+                        portGroup.index = lilv_node_as_int(node);
+                        lilv_node_free(node);
                     }
                 }
-                else
-                {
-                    // already cached
-                    portinfo.groupSymbol = strdup(usedGroups[groupName].symbol);
-                }
 
-                lilv_free(symbolnode);
+                lilv_nodes_free(nodes);
+            }
+            else
+            {
+                portinfo.group = nc;
             }
 
             // ----------------------------------------------------------------------------------------------------
@@ -3180,6 +3152,35 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
     else
     {
         info.iotype = kPluginIONull;
+    }
+
+    // --------------------------------------------------------------------------------------------------------
+    // port groups
+
+    if (size_t count = portGroups.size())
+    {
+        PluginPortGroup* const groups = new PluginPortGroup[count + 1];
+
+        size_t index = 0;
+        for (const auto& kv : portGroups)
+        {
+            groups[index++] = kv.second;
+        }
+        memset(&groups[count], 0, sizeof(PluginPortGroup));
+
+        // Sort the final array directly in-place
+        std::sort(groups, groups + count, [](const PluginPortGroup& a, const PluginPortGroup& b) {
+            if (a.index != b.index)
+                return a.index < b.index;
+
+            int cmpName = strcmp(a.name, b.name);
+            if (cmpName != 0)
+                return cmpName < 0;
+
+            return strcmp(a.symbol, b.symbol) < 0;
+        });
+
+        info.portGroups = groups;
     }
 
     // --------------------------------------------------------------------------------------------------------
@@ -3524,10 +3525,10 @@ static void _clear_port_info(PluginPort& portinfo)
         free((void*)portinfo.comment);
     if (portinfo.designation != nc)
         free((void*)portinfo.designation);
+    if (portinfo.group != nc)
+        free((void*)portinfo.group);
     if (portinfo.shortName != nc)
         free((void*)portinfo.shortName);
-    if (portinfo.groupSymbol != nc)
-        free((void*)portinfo.groupSymbol);
 
     if (portinfo.properties != nullptr)
     {
@@ -3558,8 +3559,11 @@ static void _clear_port_info(PluginPort& portinfo)
 
 static void _clear_port_group_info(const PluginPortGroup& portGroup)
 {
-    free((void*)portGroup.symbol);
-    free((void*)portGroup.name);
+    // NOTE portGroup.uri points to port.group
+    if (portGroup.symbol != nc)
+        free((void*)portGroup.symbol);
+    if (portGroup.name != nc)
+        free((void*)portGroup.name);
 }
 
 static void _clear_parameter_info(const PluginParameter& parameter)
@@ -5163,7 +5167,11 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
                                   continue;
 
                               int8_t mchan = -1;
+#if SUPPORT_NRPN
+                              uint16_t mctrl = 0;
+#else                              
                               uint8_t mctrl = 0;
+#endif                              
                               float minimum = 0.0f, maximum = 1.0f;
                               bool hasRanges = false;
                               bool snapshotable = true;
@@ -5179,11 +5187,20 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
                                       const int mchantest = lilv_node_as_int(bindChan);
                                       const int mctrltest = lilv_node_as_int(bindCtrl);
 
+#if SUPPORT_NRPN
+                                      // we are a valid nrpn if bit 15 is set and all higher bits are not st
+                                      bool isNrpn = (mctrltest & (1 <<(15))) && (mctrltest <= 49151);
+                                      if (mchantest >= 0 && mchantest < 16 && mctrltest >= 0 && ((mctrltest < 255) || isNrpn) )
+#else
                                       if (mchantest >= 0 && mchantest < 16 && mctrltest >= 0 && mctrltest < 255)
+#endif                                      
                                       {
                                           mchan = (int8_t)mchantest;
+#if SUPPORT_NRPN
+                                          mctrl = (uint16_t)mctrltest;
+#else
                                           mctrl = (uint8_t)mctrltest;
-
+#endif
                                           LilvNode* const bindMin = lilv_world_get(w, bind, lv2_minimum, nullptr);
                                           LilvNode* const bindMax = lilv_world_get(w, bind, lv2_maximum, nullptr);
 

@@ -153,7 +153,7 @@ from mod.settings import (
     TUNER_URI, TUNER_INSTANCE_ID, TUNER_INPUT_PORT, TUNER_MONITOR_PORT, HMI_TIMEOUT, MODEL_TYPE,
     UNTITLED_PEDALBOARD_NAME, DEFAULT_SNAPSHOT_NAME,
     MIDI_BEAT_CLOCK_SENDER_URI, MIDI_BEAT_CLOCK_SENDER_INSTANCE_ID, MIDI_BEAT_CLOCK_SENDER_OUTPUT_PORT,
-    IMAGE_VERSION, USING_256_FRAMES_FILE
+    IMAGE_VERSION
 )
 from mod.tuner import (
     find_freqnotecents,
@@ -1983,6 +1983,16 @@ class Host(object):
 
             else:
                 logging.error("audio monitor port not found for id: %s", monitor_port_id)
+
+        elif cmd == "cpu_monitor":
+            msg_data    = data.split(" ",2)
+            instance_id = int(msg_data[0])
+            # fraction of one audio cycle; the UI wants a percentage
+            load        = float(msg_data[1]) * 100.0
+
+            if instance_id in self.plugins:
+                self.msg_callback("cpu_load %s %f" % (self.mapper.get_instance(instance_id), load))
+
         else:
             logging.error("[host] unrecognized command: %s", cmd)
 
@@ -5236,6 +5246,23 @@ _:b%i
         data = get_jack_data(False)
         self.msg_callback("stats %0.1f %i" % (data['cpuLoad'], data['xruns']))
 
+    def monitor_cpu_load(self, enable, callback):
+        """Subscribe to (or stop) per-plugin CPU reporting for every loaded plugin.
+
+        mod-host pushes "cpu_monitor <id> <load>" on the feedback socket whenever a
+        plugin beats its own previous worst cycle, so nothing is polled. Enabling also
+        resets those peaks, which is how the UI offers a "reset" button."""
+        instances = list(self.plugins.keys())
+
+        if not instances:
+            callback(True)
+            return
+
+        self.send_notmodified("monitor_cpu_load %d %d %s" % (1 if enable else 0,
+                                                             len(instances),
+                                                             " ".join(str(i) for i in instances)),
+                              callback, datatype='boolean')
+
     def get_free_memory_value(self):
         if not self.memfile:
             return "??"
@@ -7977,3 +8004,5 @@ _:b%i
         self.profile_applied = True
 
     # -----------------------------------------------------------------------------------------------------------------
+    def notify_progress(self, source, msg, perc, args: str = ""):
+        self.msg_callback("progress %s '%s' %s %s" % (source, msg, perc, args))

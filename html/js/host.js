@@ -106,12 +106,14 @@ $('document').ready(function() {
 
             if (cpuLoad != cached_cpuLoad) {
                 cached_cpuLoad = cpuLoad
+                desktop.systemStats.cpuLoad = cpuLoad
                 $("#cpu-bar").css("width", (100.0-cpuLoad).toFixed().toString()+"%")
                 $("#cpu-bar-text").text("CPU "+cpuLoad.toString()+"%")
             }
 
             if (xruns != cached_xruns) {
                 cached_xruns = xruns
+                desktop.systemStats.xruns = xruns
                 $("#mod-xruns").text(xruns == 1 ? (xruns.toString()+" Xrun") : (xruns.toString()+" Xruns"))
 
                 if (timeout_xruns) {
@@ -426,13 +428,13 @@ $('document').ready(function() {
 
                         // resolve groups
                         pluginData.ports.control.input.forEach(function (port, index) {
-                            port.group = undefined;
+                            const groupUri = port.group;
                             port.groupIndex = undefined;
                             port.groupCssIndex = undefined; // index used for css coloring
 
-                            if (pluginData.portGroups && port.groupSymbol) {
+                            if (pluginData.portGroups && groupUri) {
                                 port.group = pluginData.portGroups.find(function (group) {
-                                    return group.symbol === port.groupSymbol;
+                                    return group.uri === port.group;
                                 });
 
                                 if (port.group) {
@@ -705,6 +707,13 @@ $('document').ready(function() {
             return
         }
 
+        if (cmd == "cpu_load") {
+            // per-plugin worst cycle, pushed by mod-host while the CPU panel is open
+            data = data.split(" ",2)
+            desktop.cpuLoadPanel.setLoad(data[0], parseFloat(data[1]))
+            return
+        }
+
         if (cmd == "pmdb") {
             // port monitor in db
             data      = data.split(" ",2)
@@ -712,6 +721,73 @@ $('document').ready(function() {
             const db = parseFloat(data[1])
 
             desktop.setPortVUMeterValue(port, db)
+            return
+        }
+
+        if (cmd == "t3k-tone-selected") {
+            // tone selected from the t3k integration
+            // the first parameter is the effect instance
+            data      = data.split(" ",4)
+            const instance  = data[0]
+            const code = data[1]
+            const state = data[2]
+            const toneId = parseInt(data[3])
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kToneSelected(instance, code, state, toneId)
+            return
+        }
+
+        if (cmd == "t3k-cancel") {
+            // tone selected from the t3k integration
+            // the first paramater is the effect instance
+            const instance  = data
+            const t3k = desktop.pedalboard.data('T3KIntegration')
+
+            t3k.t3kCancel(instance)
+            return
+        }
+
+        if (cmd == "progress") {
+            // long server operation progress
+            const stringParse = function(str) {
+                // parse the string like string.split, but also support 'strings with spaces'
+                // returns an array of strings
+                const result = []
+                let current = ""
+                let state = false
+
+                for(const c of str) {
+                    if (state == true) {
+                        if (c == "'") {
+                            state = false
+                        } else {
+                            current += c
+                        }
+                    } else {
+                        if (c == "'") {
+                            state = true
+                        } else if (c == " ") {
+                            result.push(current)
+                            current = ""
+                        } else {
+                            current += c
+                        }
+                    }
+                }
+
+                if (current.length > 0) {
+                    result.push(current)
+                }
+
+                return result
+            }
+            data      = stringParse(data)
+            const source = data[0]
+            const msg = data[1].replace('\_', ' ')
+            const progress = parseInt(data[2])
+
+            return
         }
     }
 })

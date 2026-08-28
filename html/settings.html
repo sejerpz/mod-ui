@@ -185,7 +185,7 @@ function refresh_sysprefs() {
                 $("#prefs-bluetooth-name").prop("disabled", true)
             }
 
-            $("#prefs-audio-256-frames").prop("checked", resp.jack_256_frames)
+            $("#prefs-audio-256-frames").prop("checked", resp.jack_buffer_size == 256)
             $("#prefs-audio-mono-copy").prop("checked", resp.jack_mono_copy)
             $("#prefs-audio-sync-mode").prop("checked", resp.jack_sync_mode)
             $("#prefs-audio-separate-spdif-outs").prop("checked", resp.separate_spdif_outs)
@@ -194,7 +194,7 @@ function refresh_sysprefs() {
             $("#prefs-workarounds-autorestart-hmi").prop("checked", resp.autorestart_hmi)
 
             $("#prefs-enable-midi-feedback").prop("checked", resp.midi_feedback)
-            if (resp.midi_feedback_sync) {
+            if (resp.midi_feedback) {
                 // enable the feedback
                 $("#prefs-enable-midi-feedback-sync")
                     .prop("checked", resp.midi_feedback_sync)
@@ -548,6 +548,9 @@ $('document').ready(function() {
     if (PREFERENCES['show-unstable-plugins'] == "true") {
         $("#prefs-ui-unstable-plugins").prop("checked", true)
     }
+    if (PREFERENCES['merge-stereo-cables'] != "false") {
+        $("#prefs-ui-stereo-cables").prop("checked", true)
+    }
     if (! HMI_EEPROM) {
         $("#prefs-delete-hmi-settings_br").hide()
         $("#prefs-delete-hmi-settings_label").hide()
@@ -685,11 +688,11 @@ $('document').ready(function() {
     // --- Audio Server
 
     $("#prefs-audio-256-frames").click(function () {
-        var using256 = $(this).prop("checked")
-        create_or_delete_file("using-256-frames", using256)
+        var bufferSize = $(this).prop("checked") ? '256' : '128'
+        write_file_contents("jack-buffer-size", bufferSize)
 
         $.ajax({
-            url: '/set_buffersize/' + (using256 ? '256' : '128'),
+            url: '/set_buffersize/' + bufferSize,
             method: 'POST',
             cache: false,
             success: function () {},
@@ -753,6 +756,10 @@ $('document').ready(function() {
 
     $("#prefs-ui-unstable-plugins").click(function () {
         config_set("show-unstable-plugins", bool2str($(this).prop("checked")))
+    })
+
+    $("#prefs-ui-stereo-cables").click(function () {
+        config_set("merge-stereo-cables", bool2str($(this).prop("checked")))
     })
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -1130,7 +1137,7 @@ $('document').ready(function() {
                         </input>
                     </label>
                     <p>
-                        If enabled, when a parameter has a midi binding and that parameter is changed on the MOD, midi is sent out of the MOD to update the controller.
+                        If enabled, when a paramater has a midi binding and that parameter is change on the MOD, midi is sent out of the MOD to update the controller.
                     </p>
 
                     <label>
@@ -1140,7 +1147,8 @@ $('document').ready(function() {
                     </label>
                     <p>
                         If midi feedback is enabled and this is enabled, bound midi messages are sent out from the MOD.
-                        This is only used to keep multiple midi controllers in sync.
+                        This is a rare option and is only used to keep multiple midi controllers in sync. 
+                        Only enable this if you know that there is no possibility of a midi loop, if in any doubt do not enable this!
                     </p>
 
                     <label>
@@ -1181,6 +1189,16 @@ $('document').ready(function() {
                     </label>
                     <p>
                         Show a few more options on the Web Interface, useful for developers.
+                    </p>
+                    <label>
+                        <input type="checkbox" autocomplete="off" id="prefs-ui-stereo-cables">
+                            Merge stereo cables
+                        </input>
+                    </label>
+                    <p>
+                        Draw the two halves of a stereo connection as a single cable, instead of
+                        one per channel. Only pairs wired straight across are merged; a left/right
+                        swap stays as two cables so it remains visible.
                     </p>
                     <label>
                         <input type="checkbox" autocomplete="off" id="prefs-ui-unstable-plugins">

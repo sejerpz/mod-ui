@@ -82,6 +82,11 @@ void scanPlugins()
                     printf("\t\t parameter '%s': snapshotable=%s\n", parameter.uri, parameter.snapshotable ? "true" : "false");
                 }
 
+                const PluginInfo* info = get_plugin_info(plugin.uri);
+                for (int idx=0; info->ports.control.input[idx].valid; ++idx) {
+                    PluginPort port = info->ports.control.input[idx];
+                    printf("\t\t port2 %d '%s': %s %s\n",  info->ports.control.input[idx].valid, port.symbol, port.name, port.group);
+                }
                 // dump the ports
                 if (plugin.ports == nullptr) {
                     printf("\t\t has no ports\n");

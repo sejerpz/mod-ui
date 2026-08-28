@@ -292,6 +292,9 @@ JqueryClass('pedalboard', {
         // Holds all plugins loaded, indexed by instance
         self.data('plugins', {})
 
+        // Instances currently selected by shift-drag or shift-click, indexed by instance
+        self.data('selected', {})
+
         // Hardware inputs and outputs, which have an instance of -1 and symbol as given by application
         self.data('hwInputs', [])
         self.data('hwOutputs', [])
@@ -313,6 +316,9 @@ JqueryClass('pedalboard', {
 
         // replacement plugin, used for recreating connections
         self.data('replacementPlugin', null)
+
+        // t3k integration
+        self.data('T3KIntegration', new T3KIntegration(self, T3K_API_KEY)) //'t3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'))
 
         // Pedalboard itself will get big dimensions and will have it's scale and position changed dinamically
         // often. So, let's wrap it inside an element with same original dimensions and positioning, with overflow
@@ -396,27 +402,79 @@ JqueryClass('pedalboard', {
             }
         }});
 
-        // Dragging the pedalboard move the view area
-        self.mousedown(function (e) {
-            self.pedalboard('drag', e)
+        // Hovering a port traces every cable touching it. Delegated from the pedalboard
+        // rather than bound per jack: jacks are created and destroyed with every
+        // connection, and a port is the thing that knows all of its cables anyway -- an
+        // output fans out to as many inputs as you like, and an input takes as many
+        // cables as you like. Hardware ports carry mod-port too, so they trace as well.
+        self.on('mouseenter', '[mod-port]', function () {
+            self.pedalboard('traceFrom', $(this))
+        })
+        self.on('mouseleave', '[mod-port]', function () {
+            self.pedalboard('clearTracing')
         })
 
-        // The mouse wheel is used to zoom in and out
-        self.bind('mousewheel', function (e) {
-            // Zoom by mousewheel has been desactivated.
-            // Let's keep the code here so that maybe later this can be a user option
-            if (true) return;
-
-            var ev = e.originalEvent
-
-            // check if mouse is not over a control button
-            if (self.pedalboard('mouseIsOver', ev, self.find('[mod-role=input-control-port]')))
+        // Dragging the pedalboard moves the view area, shift-dragging selects plugins.
+        // preventDrag is already set here if the mousedown landed on a plugin or a jack,
+        // as their own handlers fire first on the way up
+        self.mousedown(function (e) {
+            if (self.data('preventDrag')) {
                 return
+            }
+            if (e.shiftKey) {
+                self.pedalboard('marquee', e)
+            } else {
+                self.pedalboard('setSelection', {})
+                self.pedalboard('drag', e)
+            }
+        })
+
+        // Delete removes the selection. Bound on the document because the pedalboard is
+        // not focusable, and ignored while typing so the plugin settings windows, the
+        // save dialog and the plugin search all keep working. Backspace counts too, for
+        // keyboards whose only delete key is that one
+        $(document).keydown(function (e) {
+            if (e.which != 46 && e.which != 8) {
+                return
+            }
+            var tag = (e.target.tagName || '').toLowerCase()
+            if (tag == 'input' || tag == 'textarea' || tag == 'select' || e.target.isContentEditable) {
+                return
+            }
+            if (! Object.keys(self.data('selected')).length) {
+                return
+            }
+            e.preventDefault()
+            self.pedalboard('removeSelected')
+        })
+
+        // The mouse wheel is used to zoom in and out.
+        // A wheel gesture is locked to zooming-or-widget on its FIRST event: while zooming,
+        // the pan clamp can slide a knob under a cursor that started over the background,
+        // and the rest of the gesture must not start editing that knob's value.
+        // Capture phase, so we can decide before the widget's own mousewheel handler runs.
+        var gestureEnd = 0, gestureIsZoom = false
+        var wheelZoom = function (ev) {
+            if (ev.timeStamp > gestureEnd) {
+                // ask the event target, not the geometry: an open enumeration list
+                // overflows the box of the control port it lives in, so hit-testing
+                // bounding boxes calls it background and swallows the list's scrolling
+                gestureIsZoom = !self.pedalboard('wheelClaimedByWidget', ev.target)
+            }
+            // 300ms of quiet ends a gesture, raise it if slow scrolling breaks a zoom in two
+            gestureEnd = ev.timeStamp + 300
+
+            if (!gestureIsZoom) {
+                return
+            }
+            // this gesture is ours, keep it away from whatever is under the cursor now
+            ev.preventDefault()
+            ev.stopPropagation()
 
             var maxS = self.data('maxScale')
             var minS = self.data('minScale')
             var step = (maxS - minS) / 5
-            var steps = ev.wheelDelta / 120
+            var steps = ev.wheelDelta != null ? ev.wheelDelta / 120 : -ev.detail / 3
             var scale = self.data('scale')
             var newScale = scale + steps * step
             newScale = Math.min(maxS, newScale)
@@ -431,7 +489,10 @@ JqueryClass('pedalboard', {
             var screenY = ev.pageY - self.parent().offset().top
 
             self.pedalboard('zoom', newScale, canvasX, canvasY, screenX, screenY, 0)
-        })
+        }
+        // same event names jquery.mousewheel binds, so stopPropagation actually shields the knobs
+        self[0].addEventListener('mousewheel', wheelZoom, true)
+        self[0].addEventListener('DOMMouseScroll', wheelZoom, true)
 
         self.pedalboard('initGestures')
 
@@ -498,18 +559,23 @@ JqueryClass('pedalboard', {
         })
     },
 
-    // Check if mouse event has happened over any element of a jquery set in pedalboard
-    mouseIsOver: function (ev, elements) {
-        var scale = $(this).data('scale')
-        var top, left, right, bottom, element
-        for (var i = 0; i < elements.length; i++) {
-            element = $(elements[i])
-            top = element.offset().top
-            left = element.offset().left
-            right = left + element.width() * scale
-            bottom = top + element.height() * scale
-            if (ev.pageX >= left && ev.pageX <= right && ev.pageY >= top && ev.pageY <= bottom)
+    // Does anything between a wheel event's target and the pedalboard want the wheel
+    // for itself? Asking the target beats hit-testing bounding boxes: an open
+    // enumeration list overflows the box of the control port it belongs to, so a
+    // geometric test calls it background and the list never gets to scroll.
+    wheelClaimedByWidget: function (target) {
+        var root = this[0]
+        for (var el = target; el && el !== root; el = el.parentElement) {
+            // knobs and other value controls -- the wheel edits them
+            if (el.getAttribute && el.getAttribute('mod-role') === 'input-control-port')
                 return true
+            // anything that can actually scroll, e.g. an open .mod-enumerated-list.
+            // scrollHeight first: it is free, getComputedStyle is not.
+            if (el.scrollHeight > el.clientHeight) {
+                var overflow = window.getComputedStyle(el).overflowY
+                if (overflow === 'auto' || overflow === 'scroll')
+                    return true
+            }
         }
         return false
     },
@@ -908,6 +974,186 @@ JqueryClass('pedalboard', {
         $(this).data('preventDrag', prevent)
     },
 
+    // Replaces the current selection. Keys of `selected` are plugin instances
+    setSelection: function (selected) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        for (var instance in plugins) {
+            if (plugins[instance] && plugins[instance].length) {
+                plugins[instance].toggleClass('mod-selected', !!selected[instance])
+            }
+        }
+        // lets the stylesheet fade everything that is not selected
+        self.toggleClass('mod-has-selection', Object.keys(selected).length > 0)
+        self.data('selected', selected)
+    },
+
+    // Adds or removes a single plugin from the selection, for shift-click
+    toggleSelected: function (instance) {
+        var self = $(this)
+        var selected = self.data('selected')
+        if (selected[instance]) {
+            delete selected[instance]
+        } else {
+            selected[instance] = true
+        }
+        self.pedalboard('setSelection', selected)
+    },
+
+    // Removes every selected plugin. Asks first when more than one is going, since there
+    // is no undo and a stray Delete could otherwise take out a whole board
+    removeSelected: function () {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        // snapshot the keys: removing a plugin drops it from the selection as it goes
+        var instances = Object.keys(self.data('selected'))
+        if (! instances.length) {
+            return
+        }
+        if (instances.length > 1 &&
+            ! confirm('Remove ' + instances.length + ' plugins from the pedalboard?')) {
+            return
+        }
+
+        self.pedalboard('finishConnection')
+        for (var i = 0; i < instances.length; i++) {
+            var plugin = plugins[instances[i]]
+            if (! plugin || ! plugin.length) {
+                continue
+            }
+            // ports is only needed so removePlugin can drop the plugin's cv outputs from
+            // the hardware manager; addPlugin stashes it on the icon for us
+            self.pedalboard('removePlugin', instances[i], plugin.data('ports'))
+        }
+        self.pedalboard('setSelection', {})
+    },
+
+    // Shift-dragging the background rubber-bands a box and selects what it touches.
+    // The box lives in the unscaled parent, so it needs no scale math, and the hit test
+    // uses getBoundingClientRect, which is already in the same screen space
+    marquee: function (start) {
+        var self = $(this)
+        var box = $('<div class="mod-selection-box">').appendTo(self.parent())
+        var parentRect = self.parent()[0].getBoundingClientRect()
+
+        var rectOf = function (e) {
+            return {
+                left: Math.min(start.clientX, e.clientX),
+                right: Math.max(start.clientX, e.clientX),
+                top: Math.min(start.clientY, e.clientY),
+                bottom: Math.max(start.clientY, e.clientY)
+            }
+        }
+
+        var moveHandler = function (e) {
+            var r = rectOf(e)
+            box.css({
+                left: r.left - parentRect.left,
+                top: r.top - parentRect.top,
+                width: r.right - r.left,
+                height: r.bottom - r.top
+            })
+        }
+
+        var upHandler = function (e) {
+            $(document).unbind('mousemove', moveHandler)
+            $(document).unbind('mouseup', upHandler)
+            box.remove()
+
+            var r = rectOf(e)
+            if (r.right - r.left < 4 && r.bottom - r.top < 4) {
+                // a shift-click with no drag, leave the selection alone
+                return
+            }
+
+            var selected = {}
+            var plugins = self.data('plugins')
+            for (var instance in plugins) {
+                if (! plugins[instance] || ! plugins[instance].length) {
+                    continue
+                }
+                var b = plugins[instance][0].getBoundingClientRect()
+                if (b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom) {
+                    selected[instance] = true
+                }
+            }
+            self.pedalboard('setSelection', selected)
+        }
+
+        $(document).bind('mousemove', moveHandler)
+        $(document).bind('mouseup', upHandler)
+    },
+
+    // Called when a plugin drag starts. If that plugin is selected, remember where every
+    // other selected plugin sits so the drag can move them all by the same delta
+    startGroupDrag: function (instance) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var selected = self.data('selected')
+
+        self.data('dragGroup', null)
+        if (! selected[instance]) {
+            return
+        }
+
+        var group = []
+        for (var other in selected) {
+            if (other == instance || ! plugins[other] || ! plugins[other].length) {
+                continue
+            }
+            group.push({
+                instance: other,
+                icon: plugins[other],
+                left: parseInt(plugins[other].css('left')),
+                top: parseInt(plugins[other].css('top'))
+            })
+        }
+        if (! group.length) {
+            return
+        }
+
+        self.data('dragGroup', group)
+        self.data('dragOrigin', {
+            left: parseInt(plugins[instance].css('left')),
+            top: parseInt(plugins[instance].css('top'))
+        })
+    },
+
+    // Moves the rest of the selection to follow the dragged plugin. left/top are the
+    // dragged plugin's new position, in canvas units
+    dragGroupTo: function (left, top) {
+        var self = $(this)
+        var group = self.data('dragGroup')
+        if (! group) {
+            return
+        }
+        var origin = self.data('dragOrigin')
+        var dx = left - origin.left
+        var dy = top - origin.top
+        for (var i = 0; i < group.length; i++) {
+            group[i].icon.css({
+                left: group[i].left + dx,
+                top: group[i].top + dy
+            })
+            self.pedalboard('drawPluginJacks', group[i].icon)
+        }
+    },
+
+    // Persists the new position of every plugin that moved along with the dragged one
+    finishGroupDrag: function () {
+        var self = $(this)
+        var group = self.data('dragGroup')
+        if (! group) {
+            return
+        }
+        for (var i = 0; i < group.length; i++) {
+            self.data('pluginMove')(group[i].instance,
+                                    parseInt(group[i].icon.css('left')),
+                                    parseInt(group[i].icon.css('top')))
+        }
+        self.data('dragGroup', null)
+    },
+
     // Moves the viewable area of the pedalboard
     drag: function (start) {
         var self = $(this)
@@ -1090,16 +1336,41 @@ JqueryClass('pedalboard', {
         var self = $(this)
         // First, get the minmum bounding rectangle,
         // given by minX, maxX, minY and maxY
-        var minX, maxX, minY, maxY, rightMargin, w, h, x, y, plugin, pos
+        var minX, maxX, minY, maxY, padX, padY, w, h, x, y, plugin, pos
         //var pedals = self.find('.js-effect')
         var plugins = self.data('plugins')
         var scale = self.data('scale')
+        // Seeded from the size resetSize starts with rather than from the current canvas.
+        // Seeding with self.width()/height() made the box the union of canvas-and-plugins,
+        // so the canvas could only ever grow - deleting or moving plugins inwards left the
+        // vacated space behind forever. The floor already carries the viewport aspect
+        // ratio, which is what the ratio lock further down expects.
+        // Only the right and bottom are reclaimed this way, and neither moves a plugin.
+        // Left and top slack still cannot be given back without shifting every plugin.
         minX = 0
-        maxX = self.width()
+        maxX = self.parent().width() / self.data('baseScale')
         minY = 0
-        maxY = self.height()
-        rightMargin = 150
+        maxY = self.parent().height() / self.data('baseScale')
         var instance
+
+        // Keep one more plugin's worth of empty canvas past the outermost plugin, so
+        // there is always somewhere to drop the next one instead of having to shove one
+        // against an edge you cannot see past first. The unit is the biggest plugin
+        // currently on the board, so the gap is literally "one more of these fits".
+        // 150 is the old fixed margin, kept as the floor and as the empty board case.
+        //
+        // Right and bottom only. Growing left or up is implemented as a shift of every
+        // plugin (the minX/minY branches below), which runs through pluginMove and so
+        // rewrites and re-persists every saved position and marks the board modified.
+        // Those two sides still grow on demand when a plugin is actually dragged there.
+        padX = 150
+        padY = 150
+        for (instance in plugins) {
+            plugin = plugins[instance]
+            if (!plugin.position) continue
+            padX = Math.max(padX, plugin.width())
+            padY = Math.max(padY, plugin.height())
+        }
         for (instance in plugins) {
             plugin = plugins[instance]
             if (!plugin.position) continue
@@ -1110,9 +1381,9 @@ JqueryClass('pedalboard', {
             y = pos.top / scale
 
             minX = Math.min(minX, x)
-            maxX = Math.max(maxX, x + w + rightMargin)
+            maxX = Math.max(maxX, x + w + padX)
             minY = Math.min(minY, y)
-            maxY = Math.max(maxY, y + h)
+            maxY = Math.max(maxY, y + h + padY)
         }
 
         // Now calculate how much to increase in width and height,
@@ -1127,14 +1398,18 @@ JqueryClass('pedalboard', {
             wDif -= minX
             left -= minX
         }
-        if (maxX > w)
-            wDif += maxX - w
         if (minY < 0) {
             hDif -= minY
             top -= minY
         }
-        if (maxY > h)
-            hDif += maxY - h
+        // Unconditional, so these can come out negative and give space back. They used to
+        // be guarded by maxX > w / maxY > h, which is why the canvas could only grow: once
+        // maxX is the floor rather than the current width, the guard is false whenever
+        // there is slack to reclaim and adapt fell straight through to its early return.
+        // The result is w + wDif == maxX - minX, i.e. exactly the box we want, in either
+        // direction. Only the right and bottom move; left and top still need the shift.
+        wDif += maxX - w
+        hDif += maxY - h
 
         if (wDif == 0 && hDif == 0 && ! forcedUpdate) {
             // nothing has changed
@@ -1435,6 +1710,7 @@ JqueryClass('pedalboard', {
                 obj.icon.addClass('dragging')
                 obj.icon.css({'z-index': self.data('z_index')+1})
                 self.data('z_index', self.data('z_index')+1)
+                self.pedalboard('startGroupDrag', instance)
                 return true
             },
             drag: function (e, ui) {
@@ -1442,6 +1718,7 @@ JqueryClass('pedalboard', {
                 var scale = self.data('scale')
                 ui.position.left /= scale
                 ui.position.top /= scale
+                self.pedalboard('dragGroupTo', ui.position.left, ui.position.top)
                 self.trigger('modified')
                 self.pedalboard('drawPluginJacks', obj.icon)
             },
@@ -1451,9 +1728,22 @@ JqueryClass('pedalboard', {
                 self.pedalboard('drawPluginJacks', obj.icon)
                 obj.icon.removeClass('dragging')
                 self.data('pluginMove')(instance, ui.position.left, ui.position.top)
+                self.pedalboard('finishGroupDrag')
                 self.pedalboard('adapt', false)
             },
             click: function (event) {
+                if (event.shiftKey) {
+                    // A port has its own shift-click, which toggles its vu meter, and the
+                    // ports sit inside the plugin, so the click reaches here too on its
+                    // way up. Selecting is for the plugin's own body only. closest()
+                    // rather than is(), because the click can land on a jack or on some
+                    // other decoration inside the port.
+                    if ($(event.target).closest('[mod-port]').length) {
+                        return
+                    }
+                    self.pedalboard('toggleSelected', instance)
+                    return
+                }
                 obj.icon.css({'z-index': self.data('z_index')+1})
                 self.pedalboard('drawPluginJacks', obj.icon)
                 self.data('z_index', self.data('z_index')+1)
@@ -1546,6 +1836,7 @@ JqueryClass('pedalboard', {
             }
 
             icon.data('uri', pluginData.uri)
+            icon.data('ports', pluginData.ports)
             icon.data('gui', pluginGui)
             icon.data('settings', settings)
             icon.data('instance', instance)
@@ -2154,6 +2445,11 @@ JqueryClass('pedalboard', {
             }
 
             delete plugins[instance]
+            delete self.data('selected')[instance]
+
+            // nothing else asks the canvas to reconsider its size after a removal, and
+            // scheduleAdapt debounces, so deleting several plugins recalculates once
+            self.pedalboard('scheduleAdapt', false)
         } else {
             connMgr.iterate(function (jack) {
                 var input   = jack.data('destination')
@@ -2310,6 +2606,7 @@ JqueryClass('pedalboard', {
             drop: function (event, ui) {
                 var overCount = self.data('overCount');
                 self.data('overCount', 0);
+                self.data('background').droppable('enable')
 
                 var jack = ui.draggable
                 var outputType = jack.parent().attr('mod-role').split(/-/)[1]
@@ -2539,7 +2836,7 @@ JqueryClass('pedalboard', {
             // because we just closed the plugin settings and the vumeter was removed,
             // but the host is still sending some values for it
             const debounceBaseDate = self.data('currentSettingsWindowClosedTime') || 0
-            if (debounceBaseDate && (Date.now() - debounceBaseDate) < 1000) {
+            if (debounceBaseDate && (Date.now() - debounceBaseDate) < 3000) {
                 console.log("debouncing vumeter creation for port " + port + " because settings window was just closed")
                 return
             }
@@ -2628,6 +2925,9 @@ JqueryClass('pedalboard', {
         // one for the background shadow and one for the reflecting light.
         var canvas = $('<div>');
         canvas.addClass('ignore-arrive');
+        // named so the tracing css can dim every cable without also catching the canvas
+        // that startConnection makes for a cable being dragged
+        canvas.addClass('mod-cable-canvas');
 
         if (output.attr("class").search("mod-audio-") >= 0)
             canvas.addClass("mod-audio");
@@ -2769,6 +3069,10 @@ JqueryClass('pedalboard', {
                 // end it
                 self.pedalboard('finishConnection')
 
+                // the cable about to be dragged is drawn into this jack's own canvas, so
+                // any trace still running would dim it along with the rest
+                self.pedalboard('clearTracing')
+
                 // Highlight all inputs in which this jack can be dropped
                 self.pedalboard('highlightInputs', true, jack)
 
@@ -2834,10 +3138,212 @@ JqueryClass('pedalboard', {
         var self = $(this)
         var output = jack.data('origin')
         var input = jack.data('destination')
+        // Looked up while the connection is still there, because that is what identifies
+        // the pair. A merged stereo cable is painted into one half's canvas, so losing
+        // either half leaves the wrong thing on screen - a cable with a leg dangling
+        // where its partner used to land, or nothing at all - until what is left of the
+        // pair is redrawn on its own
+        var pair = self.pedalboard('stereoPartnerJack', jack)
+        self.pedalboard('clearTracing')
         self.data('connectionManager').disconnect(output.attr('mod-port'), input.attr('mod-port'))
         jack.data('canvas').remove()
         jack.remove()
         self.pedalboard('packJacks', input)
+        if (pair) {
+            self.pedalboard('drawJack', pair.jack)
+        }
+    },
+
+    // The port element that `element` forms a stereo pair with, or null. `first` tells
+    // whether `element` is the left/odd half of that pair, which is the half that owns
+    // the drawing of the merged cable.
+    stereoPartner: function (element) {
+        var self = $(this)
+
+        // Off by preference: every connection then draws as its own cable, which is
+        // what the rest of the code does anyway when nothing pairs up.
+        if (typeof PREFERENCES !== 'undefined' && PREFERENCES['merge-stereo-cables'] == "false") {
+            return null
+        }
+
+        var counterpart = stereoCounterpart(element.data('symbol'))
+        if (! counterpart) {
+            return null
+        }
+        var instance = element.data('instance')
+        var port = instance ? instance + '/' + counterpart.symbol : counterpart.symbol
+        var partner = self.find('[mod-port="' + port + '"]')
+        // Guessing the name is not enough. It has to be a port that exists, and one that
+        // faces the same way and carries the same kind of signal, or "gain_1" pairs with
+        // a control port and a hardware capture pairs with a playback
+        if (partner.length !== 1 ||
+            partner.hasClass('mod-output') !== element.hasClass('mod-output') ||
+            partner.data('portType') !== element.data('portType')) {
+            return null
+        }
+        return { element: partner, first: counterpart.first }
+    },
+
+    // The jack that pairs with `jack` to make one stereo cable, plus whether `jack` is
+    // the left/odd half. Null when there is no pair: the ports do not name themselves as
+    // one, they are crossed over, or nothing matching is wired up on the other side.
+    stereoPartnerJack: function (jack) {
+        var self = $(this)
+        var input = jack.data('destination')
+        if (! jack.data('connected') || ! input) {
+            return null
+        }
+        var output = self.pedalboard('stereoPartner', jack.data('origin'))
+        var dest = self.pedalboard('stereoPartner', input)
+        // A pair wired straight across is one cable. L to R and R to L is a channel swap,
+        // and drawing that as one cable would hide what it does
+        if (! output || ! dest || dest.first !== output.first) {
+            return null
+        }
+        var conns = self.data('connectionManager').origIndex[output.element.attr('mod-port')]
+        var partner = conns ? conns[dest.element.attr('mod-port')] : null
+        return partner ? { jack: partner, first: output.first } : null
+    },
+
+    // Origin and destination anchor points of one jack's cable, in canvas coordinates
+    jackCoords: function (jack, force) {
+        var self = $(this)
+        var source = jack.data('origin')
+        var scale = self.data('scale')
+
+        // Cable will follow a cubic bezier curve, which is defined by 4 points. They are:
+        // P0 (xi, yi) - starting point
+        // P3 (xo, yo) - the destination point
+        // P1 (xo - deltaX, yi) and P2 (xi + deltaX, yo): define the curve
+        // Gets origin and destination coordinates
+        var xi = source.offset().left / scale - self.offset().left / scale + source.width()
+        var yi = source.offset().top / scale - self.offset().top / scale + source.height() / 2
+        var xo = jack.offset().left / scale - self.offset().left / scale
+        var jackOffsetTop = jack.offset().top
+
+        // Adjust jack offset top position
+        // that is sometimes biased by jack destination previous sibling margin bottom
+        if (!force && parseInt(jack.css('top')) === 0 && parseInt(jack.css('bottom')) === 0) {
+          jackOffsetTop = jack.offset().top - jack.position().top
+        }
+        var yo = jackOffsetTop / scale - self.offset().top / scale + jack.height() / 2
+
+        return { xi: xi, yi: yi, xo: xo, yo: yo }
+    },
+
+    // The canvas actually carrying a jack's paint, and which half of it the jack is. Both
+    // halves of a merged stereo pair are painted together into the left half's canvas and
+    // the right half's is emptied, so hovering either half lights the left one; leg says
+    // which of the two sets of legs is the hovered jack's own. An unmerged cable is all
+    // one thing, so its leg is null.
+    litCanvas: function (jack) {
+        var self = $(this)
+        var pair = self.pedalboard('stereoPartnerJack', jack)
+        if (pair && pair.jack.data('connected')) {
+            return { canvas: (pair.first ? jack : pair.jack).data('canvas'),
+                     leg: pair.first ? 0 : 1, partner: pair.jack }
+        }
+        return { canvas: jack.data('canvas'), leg: null, partner: null }
+    },
+
+    // Every jack touching a port. origIndex is keyed by output port and destIndex by
+    // input port, each holding a map of the other end to its jack, so one lookup in each
+    // covers a port whichever way round it is.
+    jacksAtPort: function (port) {
+        var self = $(this)
+        var name = port.attr('mod-port')
+        var manager = self.data('connectionManager')
+        var jacks = []
+        if (! name || ! manager) {
+            return jacks
+        }
+        var indexes = [manager.origIndex[name], manager.destIndex[name]]
+        for (var i = 0; i < indexes.length; i++) {
+            for (var otherEnd in indexes[i]) {
+                jacks.push(indexes[i][otherEnd])
+            }
+        }
+        return jacks
+    },
+
+    // True while a new cable is being made, either by dragging a jack out of an output or
+    // by the click to start, click to finish path. Tracing keeps out of the way then: the
+    // cable being dragged is drawn into its own jack's canvas, which the dimming would
+    // catch, so the one cable the pointer is carrying is the one that would go dim.
+    connecting: function () {
+        var self = $(this)
+        return !! self.data('ongoingConnection') || self.find('.jack-connecting').length > 0
+    },
+
+    // Lights every cable on a port, and the jacks at both ends of each. A port with
+    // nothing connected traces nothing at all, which is what keeps the spare jack an
+    // output always holds for dragging from dimming the board and lighting nothing.
+    traceFrom: function (port) {
+        var self = $(this)
+        if (self.pedalboard('connecting')) {
+            return
+        }
+        var jacks = self.pedalboard('jacksAtPort', port)
+        var traced = 0
+        for (var i = 0; i < jacks.length; i++) {
+            var jack = jacks[i]
+            if (! jack || ! jack.data('connected')) {
+                continue
+            }
+            var lit = self.pedalboard('litCanvas', jack)
+            lit.canvas.attr('data-cable-lit', lit.leg === null ? '' : lit.leg)
+            jack.attr('data-jack-lit', '')
+            // both jacks of a merged pair belong to the one cable being traced
+            if (lit.partner) {
+                lit.partner.attr('data-jack-lit', '')
+            }
+            traced++
+        }
+        if (traced) {
+            self.addClass('mod-tracing')
+        }
+    },
+
+    // Ends a trace. Sweeps rather than remembering what it lit, because a trace can cover
+    // any number of cables, and because destroyJack calls this for a jack removed under
+    // the pointer, which never gets a mouseleave of its own.
+    clearTracing: function () {
+        var self = $(this)
+        self.find('[data-cable-lit]').removeAttr('data-cable-lit')
+        self.find('[data-jack-lit]').removeAttr('data-jack-lit')
+        self.removeClass('mod-tracing')
+    },
+
+    // A stereo pair running to a matching stereo pair is drawn as one cable that splits
+    // into a Y at each end, rather than as two cables following the same route. Both
+    // halves keep their own jack, canvas and host connection - only the paint is merged.
+    // Returns false when this jack is not half of a mergeable pair, and the caller then
+    // draws an ordinary cable.
+    drawStereoJack: function (jack, force) {
+        var self = $(this)
+        var pair = self.pedalboard('stereoPartnerJack', jack)
+        // The partner is still in the connection index between a disconnect and the host
+        // confirming it, so its own connected flag is what says the pair is still whole
+        if (! pair || ! pair.jack.data('connected')) {
+            return false
+        }
+
+        // The left half's canvas carries the whole cable and the right half's is emptied,
+        // so redrawing either half on its own still leaves both of them right
+        var left = pair.first ? jack : pair.jack
+        var right = pair.first ? pair.jack : jack
+        var rightSvg = right.data('svg')
+        if (rightSvg) {
+            rightSvg.clear()
+        }
+        right.data('canvas').removeClass('mod-stereo')
+
+        var l = self.pedalboard('jackCoords', left, force)
+        var r = self.pedalboard('jackCoords', right, force)
+        self.pedalboard('drawStereoBezier', left.data('canvas'),
+                        { x: l.xi, y: l.yi }, { x: r.xi, y: r.yi },
+                        { x: l.xo, y: l.yo }, { x: r.xo, y: r.yo }, '')
+        return true
     },
 
     // Draws a cable from jack's source (the output) to it's current position
@@ -2858,31 +3364,58 @@ JqueryClass('pedalboard', {
             if (!jack.data('connected') && !force)
                 return
 
-            var source = jack.data('origin')
-            var scale = self.data('scale')
+            if (self.pedalboard('drawStereoJack', jack, force))
+                return
 
-            // Cable will follow a cubic bezier curve, which is defined by 4 points. They are:
-            // P0 (xi, yi) - starting point
-            // P3 (xo, yo) - the destination point
-            // P1 (xo - deltaX, yi) and P2 (xi + deltaX, yo): define the curve
-            // Gets origin and destination coordinates
-            var xi = source.offset().left / scale - self.offset().left / scale + source.width()
-            var yi = source.offset().top / scale - self.offset().top / scale + source.height() / 2
-            var xo = jack.offset().left / scale - self.offset().left / scale
-            var jackOffsetTop = jack.offset().top
-
-            // Adjust jack offset top position
-            // that is sometimes biased by jack destination previous sibling margin bottom
-            if (!force && parseInt(jack.css('top')) === 0 && parseInt(jack.css('bottom')) === 0) {
-              jackOffsetTop = jack.offset().top - jack.position().top
-            }
-            var yo = jackOffsetTop / scale - self.offset().top / scale + jack.height() / 2
-
-            //if (source.hasClass("mod-audio-output"))
-                //self.pedalboard('drawBezier', jack.data('canvas'), xi+12, yi, xo, yo, '')
-            //else
-            self.pedalboard('drawBezier', jack.data('canvas'), xi, yi, xo, yo, '')
+            var c = self.pedalboard('jackCoords', jack, force)
+            self.pedalboard('drawBezier', jack.data('canvas'), c.xi, c.yi, c.xo, c.yo, '')
         }, 0)
+    },
+
+    // One trunk with a Y at each end: out1 and out2 converge, run as a single cable, then
+    // split again to in1 and in2. Same three stroked paths as drawBezier, so the cable,
+    // shadow and light CSS is shared. Each point is an {x, y}.
+    drawStereoBezier: function (canvas, out1, out2, in1, in2, stylePrefix) {
+        var svg = canvas.svg('get')
+        if (!svg)
+            return
+        svg.clear()
+        canvas.addClass('mod-stereo')
+
+        // Where the two halves meet. Far enough clear of the ports that the split reads
+        // as a split, and not as a kink in a cable that left at an angle
+        var stub = 18
+        var x1 = Math.max(out1.x, out2.x) + stub
+        var y1 = (out1.y + out2.y) / 2
+        var x2 = Math.min(in1.x, in2.x) - stub
+        var y2 = (in1.y + in2.y) / 2
+        var deltaX = cableDeltaX(x1, x2)
+
+        var parts = [['pathShadow', 'shadow'], ['pathCable', 'cable'], ['pathLight', 'light']]
+        var i
+
+        // The trunk is the only part carrying both channels, so it is the only part drawn
+        // as a stereo cable -- heavier, and striped.
+        for (i = 0; i < parts.length; i++) {
+            var trunk = canvas.data(parts[i][0])
+            trunk.reset()
+            trunk.move(x1, y1).curveC(x2 - deltaX, y1, x1 + deltaX, y2, x2, y2)
+            svg.path(null, trunk, { class_: stylePrefix + parts[i][1] + ' mod-trunk' })
+        }
+
+        // The four legs carry one channel each, so they are drawn as ordinary cable. They
+        // are separate paths from the trunk so the stereo styling can skip them, and one
+        // path per channel rather than one for all four so that hovering a jack can fade
+        // the half that is not its own.
+        var channels = [[out1, in1], [out2, in2]]
+        for (i = 0; i < parts.length; i++) {
+            for (var c = 0; c < channels.length; c++) {
+                var legs = svg.createPath()
+                legs.move(channels[c][0].x, channels[c][0].y).line(x1, y1)
+                legs.move(x2, y2).line(channels[c][1].x, channels[c][1].y)
+                svg.path(null, legs, { class_: stylePrefix + parts[i][1] + ' mod-leg-' + c })
+            }
+        }
     },
 
     drawBezier: function (canvas, xi, yi, xo, yo, stylePrefix) {
@@ -2890,6 +3423,7 @@ JqueryClass('pedalboard', {
         if (!svg)
             return
         svg.clear()
+        canvas.removeClass('mod-stereo')
 
         var pathS = canvas.data('pathShadow')
         var pathC = canvas.data('pathCable')
@@ -2899,14 +3433,7 @@ JqueryClass('pedalboard', {
         pathC.reset()
         pathL.reset()
 
-        // The calculations below were empirically obtained by trying several things.
-        // It gives us a pretty good result
-        var deltaX = xo - xi - 50
-        if (deltaX < 0) {
-            deltaX = 8.5 * (deltaX / 6) // ^ 0.8
-        } else {
-            deltaX /= 1.5
-        }
+        var deltaX = cableDeltaX(xi, xo)
 
         // Draw three lines following same path, one for shadow, one for cable and one for light
         // The recipe for a good cable is that shadow is wide and darke, cable is not so wide and not so dark,
@@ -2933,6 +3460,7 @@ JqueryClass('pedalboard', {
         var self = $(this)
         if (self.data('ongoingConnection'))
             return
+        self.pedalboard('clearTracing')
         var jack = output.find('[mod-role=output-jack]')
         var canvas = $('<div>')
         canvas.addClass('ignore-arrive')
@@ -3120,6 +3648,9 @@ JqueryClass('pedalboard', {
         var connected = jack.data('connected')
         var input = jack.data('destination')
         var output = jack.data('origin')
+        // Same as in destroyJack: the surviving half of a merged pair has to be repainted,
+        // and the pair can only be found while this jack still counts as connected
+        var pair = self.pedalboard('stereoPartnerJack', jack)
 
         if (connected) {
             self.data('portDisconnect')(output.attr('mod-port'), input.attr('mod-port'), function (ok) {})
@@ -3147,6 +3678,10 @@ JqueryClass('pedalboard', {
         }
 
         jack.data('connected', false)
+
+        if (pair) {
+            self.pedalboard('drawJack', pair.jack)
+        }
     },
 
     // Connect two ports using instance and symbol information.
@@ -3262,8 +3797,18 @@ JqueryClass('pedalboard', {
         plugin.css({ top: y, left: x })
         self.pedalboard('fitToWindow')
         self.pedalboard('drawPluginJacks', plugin)
-    }
+    },
 })
+
+// Horizontal pull on a cable's bezier control points. The numbers below were
+// empirically obtained by trying several things. It gives us a pretty good result
+function cableDeltaX(xi, xo) {
+    var deltaX = xo - xi - 50
+    if (deltaX < 0) {
+        return 8.5 * (deltaX / 6) // ^ 0.8
+    }
+    return deltaX / 1.5
+}
 
 function ConnectionManager() {
     /*
@@ -3378,5 +3923,420 @@ function ConnectionManager() {
 
         delete self.origByInstanceIndex[instance]
         delete self.destByInstanceIndex[instance]
+    }
+}
+
+
+function T3KIntegration(pedalboard, pubKey) {
+    /*
+     * Handle Tone3000 integration
+     *
+     * Terminology:
+     *
+     * CLIENT: is the javascript mod UI that runs in the browser
+     * SERVER: is the python mod server that runs in the unit (dwarf)
+     * T3K: is the Tone3000 remote REST api
+     *
+     * Flow:
+     *
+     * 1. The CLIENT start the select tone flow using the T3K API
+     * 2. T3K callback the python SERVER when a tone is selected or the popup is closed
+     * 3. The SERVER callback the CLIENT to inform the tone selection is done using the websocket connection using the command 't3k-tone-selected' or 't3k-cancel'
+     * 4. The CLIENT exchange the code with an auth token using T3K API
+     * 5. The CLIENT call the T3K to fetch the tones and upload to the SERVER
+     *
+     */
+    const self = this
+    let t3kOpenPopups = []
+
+    this.pedalboard = pedalboard
+    /*
+     * Find ongoing t3k state by effect.
+     *
+     * Returns the popup window or undefined
+     */
+    const findInfoByEffect = function(effect) {
+        for(let item of t3kOpenPopups) {
+            if (item.effect === effect) {
+                return item
+            }
+        }
+
+        return undefined
+    }
+
+    /*
+     * Delete the effect from the list of monitored effects
+     */
+    const deleteEffectPopup = function(effect) {
+        t3kOpenPopups = t3kOpenPopups.filter(item => item.effect != effect)
+    }
+
+    this.startSelectFlow = function(effect, parameter, skipAuthCheck) {
+        const hasApiKey = pubKey && pubKey.length > 0
+
+        if (!skipAuthCheck || !hasApiKey) {
+            let authenticated = false
+            if (hasApiKey) {
+                    // check if I'm authenticated
+                    const auth = window.Tone3000Client.getTokens()
+                    if (auth != null) {
+                        // note that this call is sync
+                        $.ajax({
+                        url: `https://www.tone3000.com/api/v1/user`,
+                        type: 'GET',
+                        async: false,
+                        headers: {
+                            'Authorization': 'Bearer ' + auth.tokens.access_token
+                        },
+                        success: function (tone) {
+                            authenticated = true
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("AJAX Error:", status, error);
+                        }
+                    })
+                }
+            }
+
+            if (!authenticated || !hasApiKey) {
+                // if not authenticated show the T3K welcome
+                const width = 480;
+                const height = 720;
+                const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+                const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+                let url = "/t3ksplash.html?v=" + VERSION
+                const t3kwelcome = window.open(url, 't3k_select', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
+
+                t3kwelcome.onSplashContinue = function() {
+                    // continue with the select workflow skipAuthCheck = true
+                    if (hasApiKey) {
+                        self.startSelectFlow(effect, parameter, true)
+                    }
+                }
+
+                return // stop now because we have shown the splash window
+            }
+        }
+
+        // start the select workflow
+        const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
+        // todo: gears -> check if we need to load an amp/effet or a cab/ir
+
+        gears = []
+        parameter.fileTypes.forEach(value => {
+            if (value == 'nammodel' || value == 'aidadspmodel') {
+                gears.push('amp')
+                gears.push('amp-cab')
+                gears.push('pedal')
+                gears.push('outboard')
+            } else if (value == 'cabsim') {
+                gears.push('cab')
+            } else if (value == 'ir') {
+                gears.push('space')
+            }
+        });
+
+        if (gears.length == 0) {
+            gears.push('amp')
+            gears.push('amp-cab')
+            gears.push('pedal')
+            gears.push('outboard')
+        } else {
+            gears = [...new Set(gears)];
+        }
+
+        const options = {
+            gears: gears.join('_'),
+            //format: string,
+            menubar: true,
+            //loginHint: string,
+            architecture: 2, // NAM A2
+            preview: true
+        }
+        window.Tone3000Client
+            .startSelectFlowPopup(pubKey, callbackUrl, options)
+            .then((data) => {
+                // add the popup to the traked popups
+                t3kOpenPopups.push({effect: effect, parameter: parameter, popup: data})
+            })
+            .catch((error) => {
+                console.error("T3KSelect error:", error);
+                t3kOpenPopups.close()
+            })
+    }
+
+    this.refreshPluginsFilelist = function(senderEffect, senderParameter, senderSetValue) {
+        const plugins = self.pedalboard.data('plugins')
+        const sender = plugins[senderEffect] // the effect who completed the download
+        const senderGui = sender.data('gui')
+        for(let pluginKey in plugins) {
+            // refresh the file lists
+            const plugin = plugins[pluginKey]
+            const pluginGui = plugin.data('gui')
+
+            pluginGui?.effect?.parameters?.forEach(parameter => {
+                // we need to refresh a plugin parameter if it has the same filetype of the senderParameter
+                if (parameter.fileTypes && senderParameter.fileTypes.some(item => parameter.fileTypes.includes(item))) {
+                    pluginGui.refreshPluginFileListParameter(pluginKey, parameter, (pluginKey == senderEffect ? senderSetValue?.fullname : undefined))
+                }
+            });
+        }
+    }
+
+    this.getToneInfo = async function (access_token, toneId) {
+        try {
+            const tone = await $.ajax({
+                url: 'https://www.tone3000.com/api/v1/tones/' + toneId,
+                type: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + access_token
+                },
+                cache: false,
+                dataType: 'json'
+            })
+
+            return tone
+        } catch (error) {
+            throw new Error(`Error downloading the tone metadata: ${error}`)
+        }
+    }
+
+    /*
+     * Get the tone models from T3K
+     */
+    this.getModels = async function (access_token, tone) {
+        // now fetch the models
+        try {
+            let models = []
+            const pageSize = 50
+            let page = 1
+            let total = 1
+
+            let baseurl = `https://www.tone3000.com/api/v1/models?tone_id=${tone.id}`
+            if (tone.a2_models_count > 0)
+                baseurl += '&architecture=2'
+
+            while (models.length < total) {
+                const pageModels = await $.ajax({
+                    url: `${baseurl}&page=${page}&page_size=${pageSize}`,
+                    headers: {
+                        'Authorization': 'Bearer ' + access_token
+                    },
+                    cache: false,
+                    dataType: 'json'
+                })
+
+                if (!pageModels.data || pageModels.data.length == 0)
+                    throw new Error('no models on data')
+                models = models.concat(pageModels.data)
+                total = pageModels.total
+                page += 1
+            }
+            return models
+        } catch (error) {
+            throw new Error(`Error downloading the tone models metadata: ${error}`)
+        }
+    }
+
+    /*
+     * This function download the models files and upload to the device using the file upload api
+     */
+    this.downloadModelsFiles = async function (access_token, tone, models, progressFunc) {
+        try {
+            const total = models.length
+            const files = []
+            let current = 0
+            let directory = total > 1 ? tone.title : "" // do not place in a subfolder if it's just one file
+
+            progressFunc?.(null, 0, total)
+            for(const model of models) {
+                current += 1
+                progressFunc?.(model, current, total)
+                const url = new URL(model.model_url);
+                const tmpFilename = url.pathname.split('/').pop();
+                const fileExtension = tmpFilename.split('.').pop();
+                let fileName = (total > 1 ? model.name : tone.title)
+
+                if (tone.gear == 'cab') {
+                    filetype = 'cabsim'
+                } else if (tone.gear == 'space') {
+                    filetype = 'ir'
+                } else {
+                    filetype = 'nammodel'
+                }
+                const uploadConfig = {
+                    directory: directory,
+                    onDirectoryConflict: current == 1 ? 'rename' : 'merge', // rename directory if exists, the file is always renamed on conflict
+                    filename: (fileName + (fileExtension ? '.' + fileExtension : '')).trim(),
+                    filetype: filetype,
+                    metadata: {
+                        source: 'T3K',
+                        data: {
+                            toneId: tone.id,
+                            modelId: model.id
+                        }
+                    }
+                }
+
+                const response = await new Promise((resolve, reject) => {
+                    var transfer = new SimpleTransference(
+                                        model.model_url,
+                                        '/files/upload',
+                                        {
+                                            from_args: {
+                                                headers: { 'Authorization': 'Bearer ' + access_token }
+                                            },
+                                            to_args: {
+                                                headers: {
+                                                    'Authorization' : 'MOD ' + desktop.cloudAccessToken,
+                                                    'X-Upload-Config': encodeURIComponent(JSON.stringify(uploadConfig))
+                                                }
+                                            }
+                                        })
+
+                    transfer.reauthorizeUpload = desktop.authenticateDevice
+
+                    transfer.reportFinished = function (resp2) {
+                        resolve(resp2)
+                    }
+
+                    transfer.reportError = function (error) {
+                    reject(new Error(error))
+                    }
+
+                    transfer.start()
+                })
+
+                if (!response.ok)
+                    throw new Error(model.name)
+
+                if (current == 1) // place all the other files in the same directory (the server can rename the directory to not overwrite files)
+                    directory = response.result.dirname
+
+                files.push(response.result)
+            }
+
+            return files
+        } catch (error) {
+            throw new Error(`Error downloading the tone models file: ${error}`)
+        }
+    }
+
+    /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kToneSelected = function(effect, code, state, toneId) {
+        // Select Flow — user browses TONE3000 and picks a tone
+        // Optional: gears, platform, architecture, menubar (same query params as authorize URL)
+        // console.log(`t3k cancel instance ${effect}, code ${code}, state ${state}, toneId ${toneId}`)
+        const cleanup = function(t3kinfo) {
+            t3kinfo.popup.location = 'about:blank'
+            t3kinfo.popup.close()
+            deleteEffectPopup(t3kinfo.effect)
+        }
+        const onError = function(t3kinfo, error) {
+            cleanup(t3kinfo)
+            new Notification('error', 'Error downloading from Tone3000.')
+            console.error(`t3kToneSelected status error: ${error} `);
+        }
+        const t3kinfo = findInfoByEffect(effect)
+
+        // check if we have a popup registered
+        if (!t3kinfo) {
+            console.error(`t3kToneSelected t3kinfo for instance ${effect} can't download models`)
+            return
+        }
+
+        t3kinfo.state = 'downloading'
+        t3kinfo.popup.location = "/t3k.html?v=" + VERSION
+
+        // must match the callbackUrl of the request we need to exchange the code for
+        const callbackUrl = window.location.origin + '/effect/t3k/select' + effect
+        // start the download
+        const t3kClient = window.Tone3000Client
+
+        t3kClient
+            .exchangeCode(pubKey, callbackUrl, code, state)
+            .then((auth) => {
+                if (auth?.ok) {
+                    // fetching the tone info
+                    t3kClient.setTokens(auth)
+                    self
+                        .getToneInfo(auth.tokens.access_token, toneId)
+                        .then((tone) => {
+                            // update the popup with the info of the tone
+                            const title = tone.title
+                            const des = tone.description
+                            const user = tone.user?.display_name
+                            const image = tone.images?.[0]
+
+                            t3kinfo.popup?.setToneInfo?.(user, title, des, image)
+                            self
+                                .getModels(auth.tokens.access_token, tone)
+                                .then((models) => {
+                                    // download models and store on the dwarf user files
+                                    self
+                                        .downloadModelsFiles(auth.tokens.access_token, tone, models, function(model, current, count) {
+                                            const msg = `Downloading files ${current}/${count}...`
+                                            const perc = Math.round(current / Math.min(1, count) * 100)
+                                            t3kinfo.popup?.progress?.(msg, perc)
+                                        })
+                                        .then((files) => {
+                                            // refresh plugins file list
+                                            let setValue = undefined
+                                            if (files && files.length > 0) {
+                                                files.sort((a, b) =>  a.fullname.localeCompare(b.fullname))
+                                                // first in alphabetic order
+                                                setValue = files[0]
+                                            }
+                                            self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)
+                                            cleanup(t3kinfo)
+                                            new Notification('info', 'Download from Tone3000 completed.', 2000)
+                                        })
+                                        .catch((errDownloadModels) => {
+                                            onError(t3kinfo, errDownloadModels)
+                                        })
+                                })
+                                .catch((errFetchModels) => {
+                                    onError(t3kinfo, errFetchModels)
+                                })
+
+                        })
+                        .catch((errTone) => {
+                            onError(t3kinfo, errTone)
+                        })
+                }
+            })
+            .catch((error) => {
+                onError(t3kinfo, error)
+            })
+    }
+
+    /*
+     * This function is called on tone selection (3)
+     */
+    this.t3kCancel = function(instance) {
+        console.log("t3k cancel " + instance)
+        const t3kinfo = findInfoByEffect(instance)
+
+        // check if we have a popup registered
+        if (t3kinfo) {
+            deleteEffectPopup(instance)
+            t3kinfo.popup?.close()
+        } else {
+            console.error(`t3kCancel no popup for instance ${instance} can't download models`)
+            return
+        }
+    }
+
+    /*
+     * Update the popup UI with the progress of the
+     * (download) current operation
+     */
+    this.t3kProgress = function(instance, msg, progress) {
+        const t3kinfo = findInfoByEffect(instance)
+
+        t3kinfo?.popup?.progress?.(msg, progress)
     }
 }

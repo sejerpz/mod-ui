@@ -185,13 +185,6 @@ class PluginAuthor(Structure):
         ("email", c_char_p),
     ]
 
-class PluginPortGroup(Structure):
-    _fields_ = [
-        ("valid", c_bool),
-        ("symbol", c_char_p),
-        ("name", c_char_p),
-    ]
-
 class PluginGUIPort(Structure):
     _fields_ = [
         ("valid", c_bool),
@@ -228,6 +221,15 @@ class PluginGUI_Mini(Structure):
         ("thumbnail", c_char_p),
     ]
 
+class PluginPortGroup(Structure):
+    _fields_ = [
+        ("valid", c_bool),
+        ("uri", c_char_p),
+        ("symbol", c_char_p),
+        ("name", c_char_p),
+        ("index", c_uint),
+    ]
+
 class PluginPortRanges(Structure):
     _fields_ = [
         ("minimum", c_float),
@@ -260,11 +262,11 @@ class PluginPort(Structure):
         ("units", PluginPortUnits),
         ("comment", c_char_p),
         ("designation", c_char_p),
+        ("group", c_char_p),
         ("properties", POINTER(c_char_p)),
         ("rangeSteps", c_int),
         ("scalePoints", POINTER(PluginPortScalePoint)),
         ("shortName", c_char_p),
-        ("groupSymbol", c_char_p),
     ]
 
 class PluginPortsI(Structure):
@@ -351,9 +353,9 @@ class PluginInfo(Structure):
         ("bundles", POINTER(c_char_p)),
         ("gui", PluginGUI),
         ("ports", PluginPorts),
+        ("portGroups", POINTER(PluginPortGroup)),
         ("parameters", POINTER(PluginParameter)),
         ("presets", POINTER(PluginPreset)),
-        ("portGroups", POINTER(PluginPortGroup)),
     ]
 
 # a subset of PluginInfo
@@ -403,7 +405,7 @@ class PerformancePluginInfo(Structure):
 class PedalboardMidiControl(Structure):
     _fields_ = [
         ("channel", c_int8),
-        ("control", c_uint8),
+        ("control", c_uint16), # change to 16 bits to support nrpns
         # ranges added in v1.2, flag needed for old format compatibility
         ("hasRanges", c_bool),
         ("minimum", c_float),

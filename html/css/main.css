@@ -7601,6 +7601,11 @@ so that the buttons are aligned and spaced nicely.
   color: #483e35;
   height: 100%;
 }
+.t3k-enumerated-option-logo {
+  height: 20px;
+  width: 40px;
+  margin-right: 6px;
+}
 /**
  * Typography
  */
