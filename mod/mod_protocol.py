@@ -224,7 +224,7 @@ CMD_DUOX_EXP_OVERCURRENT          = 'exp_overcurrent'
 CMD_DWARF_CONTROL_SUBPAGE         = 'cs'
 CMD_DWARF_PAGES_AVAILABLE         = 'pa'
 CMD_DWARF_BUILDER_PLUGINS         = 'bp'
-CMD_DWARF_BUILDER_CONTROLS        = 'bc'
+CMD_DWARF_BUILDER_CONTROLS        = 'bcl'
 CMD_DWARF_BUILDER_CONTROL_SET     = 'bcs'
 CMD_DWARF_BUILDER_CONTROL_PAGE    = 'bncp'
 CMD_DWARF_LOG                     = 'log'
@@ -492,7 +492,7 @@ def cmd_to_str(cmd):
         return "CMD_DWARF_PAGES_AVAILABLE"
     if cmd == "bp":
         return "CMD_DWARF_BUILDER_PLUGINS"
-    if cmd == "bc":
+    if cmd == "bcl":
         return "CMD_DWARF_BUILDER_CONTROLS"
     if cmd == "bcs":
         return "CMD_DWARF_BUILDER_CONTROL_SET"
