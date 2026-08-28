@@ -1254,7 +1254,6 @@ function GUI(effect, options) {
      * when the settings are closed, to avoid interfering with other plugins that may be using the same ports.
      */
     this.setupMonitorVUMeter = function () {
-        console.log("setupMonitorVUMeter")
         const vumeter = new VUMeter("100%", "22px", { orientation: "horizontal" })
         const vumeter_container = self.settings?.find(".js-plugin-vumeter")
 

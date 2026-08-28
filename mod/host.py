@@ -7138,11 +7138,19 @@ _:b%i
 
         # If running a real MOD, save this setting for next boot
         if IMAGE_VERSION is not None:
+            with open("/data/jack-buffer-size", 'w') as fh:
+                fh.write('%d\n' % size)
+
+            # backward compatibility with MOD jackd start script
+            # remove this code when mod-jackd will be ported to /data/jack-buffer-size
+            if os.path.exists('/data/using-256-frames'):
+                os.remove('/data/using-256-frames')
+            if os.path.exists('/data/using-64-frames'):
+                os.remove('/data/using-64-frames')
             if size == 256:
-                with open(USING_256_FRAMES_FILE, 'w') as fh:
-                    fh.write("# if this file exists, jack will use 256 frames instead of the default 128")
-            elif os.path.exists(USING_256_FRAMES_FILE):
-                os.remove(USING_256_FRAMES_FILE)
+                open('/data/using-256-frames','w')
+            elif size == 64:
+                open('/data/using-64-frames','w')
 
             os_sync()
 
