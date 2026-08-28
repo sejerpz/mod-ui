@@ -33,6 +33,7 @@ CMD_ARGS = {
         'psa': [str,],
         'pcl': [],
         'pbd': [int,int],
+        'bpd': [int,int],
         'sr': [int,int],
         'ssg': [int,int],
         'sn': [int,str,],
@@ -150,6 +151,7 @@ CMD_PEDALBOARD_SAVE               = 'ps'
 CMD_PEDALBOARD_SAVE_AS            = 'psa'
 CMD_PEDALBOARD_CLEAR              = 'pcl'
 CMD_PEDALBOARD_DELETE             = 'pbd'
+CMD_BUILDER_PEDALBOARD            = 'bpd'
 CMD_REORDER_SSS_IN_PB             = 'sr'
 CMD_SNAPSHOTS                     = 'ssg'
 CMD_SNAPSHOT_NAME_SET             = 'sn'
@@ -344,6 +346,8 @@ def cmd_to_str(cmd):
         return "CMD_PEDALBOARD_CLEAR"
     if cmd == "pbd":
         return "CMD_PEDALBOARD_DELETE"
+    if cmd == "bpd":
+        return "CMD_BUILDER_PEDALBOARD"
     if cmd == "sr":
         return "CMD_REORDER_SSS_IN_PB"
     if cmd == "ssg":

@@ -38,6 +38,11 @@ _PATTERNS = {
     TYPE_CV: (1, 2),
 }
 
+# a cable whose far end fell outside the emitted window is capped with a short
+# tick, so it reads as "the graph continues that way" rather than as a cable to
+# nowhere. Mirrors STUB_LENGTH in app/src/minimap.c, tick included.
+_STUB_LENGTH = 4
+
 
 def _walk(points):
     """Yield every pixel along an orthogonal polyline, in order."""
@@ -89,6 +94,24 @@ def render(scene, crop=None, invert=False, layers=None, selected=None):
                   if 0 <= x < scene.width and 0 <= y < scene.height]
         if pixels:
             draw.point(pixels, fill=1)
+
+        # the off-window end caps, drawn solid whatever the cable's dash is.
+        # A full scene has no ends outside itself, so this only ever fires on a
+        # windowed display list -- which is the one the HMI actually receives.
+        ends = []
+        if getattr(edge, 'src_outside', 0):
+            ends.append(edge.points[0])
+        if getattr(edge, 'dst_outside', 0):
+            ends.append(edge.points[-1])
+
+        caps = []
+        for end_x, end_y in ends:
+            for step in range(_STUB_LENGTH):
+                y = end_y - 2 + step
+                if 0 <= end_x < scene.width and 0 <= y < scene.height:
+                    caps.append((end_x, y))
+        if caps:
+            draw.point(caps, fill=1)
 
     for node in scene.nodes:
         x0, y0 = node.x, node.y
@@ -172,7 +195,7 @@ class _WirePort(object):
 
 
 class _WireEdge(object):
-    __slots__ = ('etype', 'points')
+    __slots__ = ('etype', 'points', 'src_outside', 'dst_outside')
 
 
 def parse_displaylist(text):
@@ -225,6 +248,8 @@ def parse_displaylist(text):
         elif kind == 'E':
             edge = _WireEdge()
             edge.etype = parts[4]
+            edge.src_outside = parts[5] == '1'
+            edge.dst_outside = parts[6] == '1'
             edge.points = []
             for token in parts[7:]:
                 xy = token.split(',')
