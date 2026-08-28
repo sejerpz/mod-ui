@@ -18,7 +18,7 @@ alongside it: Image.new/paste/crop/save and ImageDraw.point/line/rectangle.
 """
 
 from mod import minimap_font as font
-from mod.minimap import KIND_PLUGIN, TYPE_MIDI, TYPE_CV, parse_layers
+from mod.minimap import KIND_PLUGIN, TYPE_MIDI, TYPE_CV, RECORD_SEP, parse_layers
 
 try:
     from PIL import Image, ImageDraw
@@ -186,7 +186,10 @@ def parse_displaylist(text):
     wire = _Wire()
     nodes = {}
 
-    for line in text.splitlines():
+    # records are separated by RECORD_SEP, not by newlines: the HMI protocol splits a message
+    # on spaces only, so a newline would be glued onto the neighbouring token
+    for line in text.split(RECORD_SEP):
+        line = line.strip()
         if not line:
             continue
         parts = line.split(' ')

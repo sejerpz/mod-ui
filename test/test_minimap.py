@@ -244,7 +244,8 @@ SCENARIOS = [
 
 def parse_displaylist(text):
     out = {'M': None, 'N': [], 'P': [], 'E': [], 'A': []}
-    for line in text.splitlines():
+    for line in text.split(minimap.RECORD_SEP):
+        line = line.strip()
         if not line:
             continue
         kind = line[0]
@@ -422,7 +423,7 @@ def check_scenario(r, name, host, out_dir):
 
 
 def strip_version(text):
-    return re.sub(r'^M (\d+) (\d+) \d+ ', r'M \1 \2 V ', text, flags=re.M)
+    return re.sub(r'M (\d+) (\d+) \d+ ', r'M \1 \2 V ', text)
 
 
 def check_wire_sufficiency(r):
@@ -479,11 +480,18 @@ def check_insertion_order(r):
         h.connect(made['cc'] + '/out', '/graph/playback_1')
         return h
 
-    a, _ = minimap.Minimap().render(build(['aa', 'bb', 'cc']))
-    b, _ = minimap.Minimap().render(build(['cc', 'bb', 'aa']))
-    r.check(strip_version(a) == strip_version(b),
+    # Node ids are the mapper's instance_id now, so they legitimately differ when the plugins
+    # were created in a different order. What must not differ is the geometry: same graph,
+    # same picture.
+    def geometry(host):
+        dl = parse_displaylist(minimap.Minimap().render(host)[0])
+        return sorted((n['x'], n['y'], n['w'], n['h'], n['label']) for n in dl['N'])
+
+    ga = geometry(build(['aa', 'bb', 'cc']))
+    gb = geometry(build(['cc', 'bb', 'aa']))
+    r.check(ga == gb,
             'insertion order does not change the picture',
-            'differs:\n%s\n---\n%s' % (a[:300], b[:300]))
+            'differs:\n%s\n%s' % (ga, gb))
 
 
 def check_layers(r):
@@ -564,6 +572,8 @@ def check_windowing(r):
         # coverage: walk adjacency and outgoing cables, fetching a new window
         # whenever we reach something outside, and expect to see every plugin
         all_plugin_ids = set(n.nid for n in plugins)
+        # ids are the mapper's instance_id, not array indices, so resolve them explicitly
+        node_by_id = dict((n.nid, n) for n in scene.nodes)
         reached = set()
         frontier = [focus]
         visited_focus = set()
@@ -583,15 +593,15 @@ def check_windowing(r):
             for e in wdl['E']:
                 for nid in (e['src'], e['dst']):
                     if nid in all_plugin_ids and nid not in reached:
-                        frontier.append(scene.nodes[nid].key)
+                        frontier.append(node_by_id[nid].key)
             for a in wdl['A']:
                 for direction in ('up', 'down', 'left', 'right'):
                     nid = a[direction]
                     if nid in all_plugin_ids and nid not in reached:
-                        frontier.append(scene.nodes[nid].key)
+                        frontier.append(node_by_id[nid].key)
             for nid in sorted(local):
-                if nid in all_plugin_ids and scene.nodes[nid].key not in visited_focus:
-                    frontier.append(scene.nodes[nid].key)
+                if nid in all_plugin_ids and node_by_id[nid].key not in visited_focus:
+                    frontier.append(node_by_id[nid].key)
 
         r.check(reached == all_plugin_ids,
                 'window %s: every plugin reachable by navigation' % name,

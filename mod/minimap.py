@@ -54,6 +54,12 @@ GUT_X = 10            # horizontal gutter, where cables turn
 GUT_Y = 6
 MARGIN = 3
 
+# Records are separated by this, emitted as a token of its own, because the HMI protocol splits a
+# message on spaces only (protocol.c: strarr_split(msg->data, ' ')) and would otherwise glue a
+# newline onto the neighbouring token. sanitize_label() keeps it out of labels, and LV2 symbols
+# cannot contain it, so it is unambiguous rather than merely unlikely.
+RECORD_SEP = ';'
+
 KIND_PLUGIN = 'p'
 KIND_HW_SRC = 'i'     # feeds the graph -> drawn on the left
 KIND_HW_SINK = 'o'    # consumes from the graph -> drawn on the right
@@ -168,7 +174,8 @@ def sanitize_label(text, max_width):
     out = []
     for ch in text.upper():
         code = ord(ch)
-        if ch == ' ':
+        if ch == ' ' or ch == RECORD_SEP:
+            # spaces would break the field split, the separator would break the record split
             out.append('_')
         elif 32 <= code <= 126:
             out.append(ch)
@@ -198,8 +205,9 @@ class Node(object):
     __slots__ = ('key', 'kind', 'label', 'raw_label', 'cx', 'cy', 'bypassed',
                  'inputs', 'outputs', 'layer', 'row', 'x', 'y', 'w', 'h', 'nid')
 
-    def __init__(self, key, kind, raw_label, cx, cy, bypassed):
+    def __init__(self, key, kind, raw_label, cx, cy, bypassed, nid=-1):
         self.key = key
+        self.nid = nid
         self.kind = kind
         self.raw_label = raw_label
         self.label = ''
@@ -214,7 +222,6 @@ class Node(object):
         self.y = 0
         self.w = 0
         self.h = 0
-        self.nid = -1
 
     def port(self, symbol, direction):
         for p in (self.inputs if direction == 'i' else self.outputs):
@@ -240,7 +247,7 @@ class Scene(object):
     """A laid-out graph: nodes with pixel rects, ports, edges with polylines."""
 
     def __init__(self):
-        self.nodes = []          # ordered, index == nid
+        self.nodes = []          # ordered; ids are on the node, not the index
         self.edges = []
         self.by_key = {}
         self.width = 0
@@ -270,7 +277,7 @@ class Minimap(object):
         unsorted fingerprint would differ run to run, defeating the cache.
         """
         plugins = []
-        for pluginData in self._iter_plugins(host):
+        for _instance_id, pluginData in self._iter_plugins(host):
             plugins.append((
                 pluginData['instance'],
                 pluginData.get('uri', ''),
@@ -313,8 +320,8 @@ class Minimap(object):
                 continue
             if not isinstance(pluginData, dict) or 'instance' not in pluginData:
                 continue
-            items.append(pluginData)
-        items.sort(key=lambda p: p['instance'])
+            items.append((instance_id, pluginData))
+        items.sort(key=lambda pair: pair[1]['instance'])
         return items
 
     def scene(self, host):
@@ -337,14 +344,17 @@ class Minimap(object):
         nodes = []
         by_key = {}
 
-        for pluginData in self._iter_plugins(host):
+        for instance_id, pluginData in self._iter_plugins(host):
             key = pluginData['instance']
             raw = (pluginData.get('label') or pluginData.get('name')
                    or label_from_uri(pluginData.get('uri', '')))
+            # the wire id is the mapper's instance_id, stable for the life of the
+            # instance, because the device sends it back when it asks for another window
             node = Node(key, KIND_PLUGIN, raw,
                         float(pluginData.get('x', 0) or 0),
                         float(pluginData.get('y', 0) or 0),
-                        bool(pluginData.get('bypassed', False)))
+                        bool(pluginData.get('bypassed', False)),
+                        int(instance_id))
             self._attach_ports(node, pluginData.get('uri', ''))
             nodes.append(node)
             by_key[key] = node
@@ -380,6 +390,9 @@ class Minimap(object):
                 if parsed is not None and parsed[0] == 'hw':
                     note_hw(parsed[1], is_source)
 
+        # -1 is reserved: it is the 'no node' sentinel in the A records and in the
+        # header's focus field, so hardware ids start at -2
+        hw_id = -1
         for symbol in sorted(hw_seen):
             is_source = hw_seen[symbol]
             if is_source is None:
@@ -388,7 +401,10 @@ class Minimap(object):
             key = '/graph/' + symbol
             if key in by_key:
                 continue
-            node = Node(key, kind, hw_label(symbol), 0.0, 0.0, False)
+            # hardware has no instance_id, so it takes the negative half of the id space,
+            # assigned over the sorted symbols so it is stable across renders too
+            hw_id -= 1
+            node = Node(key, kind, hw_label(symbol), 0.0, 0.0, False, hw_id)
             ptype = hw_port_type(symbol)
             port = Port(symbol, 'o' if is_source else 'i', ptype, 0)
             if is_source:
@@ -543,8 +559,7 @@ class Minimap(object):
         scene.width = width
         scene.height = height
 
-        for index, n in enumerate(nodes):
-            n.nid = index
+        for n in nodes:
             self._place_ports(n)
 
         for index, e in enumerate(edges):
@@ -784,7 +799,10 @@ class Minimap(object):
         for line in self._adjacency(nodes):
             lines.append(line)
 
-        text = '\n'.join(lines) + '\n'
+        # Records joined by a standalone separator token rather than by newlines: the HMI
+        # protocol splits a message on spaces only, so a newline would be glued onto the
+        # neighbouring token. One line, unambiguous either way -- see RECORD_SEP.
+        text = (' ' + RECORD_SEP + ' ').join(lines) + ' ' + RECORD_SEP
 
         if windowed and len(text) > MINIMAP_MAX_MSG and budget > 1:
             # the budget is normally tuned to fit; shrink and retry rather than
