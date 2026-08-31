@@ -2208,14 +2208,7 @@ class SetBufferSize(JsonRequestHandler):
     def post(self, size):
         size = int(size)
 
-        # If running a real MOD, save this setting for next boot
-        if IMAGE_VERSION is not None:
-            with open("/data/jack-buffer-size", 'w') as fh:
-                fh.write('%d\n' % size)
-
-            os_sync()
-
-        newsize = set_jack_buffer_size(size)
+        newsize = SESSION.host.set_buffer_size(size)
         self.write({
             'ok'  : newsize == size,
             'size': newsize,
