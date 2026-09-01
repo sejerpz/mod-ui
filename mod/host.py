@@ -22,6 +22,7 @@ from random import randint
 from tornado import gen, iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
 from urllib.parse import quote, unquote
+from pprint import pprint
 import os, json, socket, time, logging, sys
 import shutil
 
@@ -2146,11 +2147,32 @@ class Host(object):
 
             rinstances[instance_id] = pluginData['instance']
 
-            websocket.write_message("add %s %s %.1f %.1f %d %s %d" % (pluginData['instance'], pluginData['uri'],
+            # dump performance data
+            # print("[host] Plugin: %s (%s), performance index: %d%s" % (pluginData['instance'],
+            #                                                          pluginData['uri'],
+            #                                                          pluginData['performance'],
+            #                                                          " (FAVORITE)" if pluginData['performance_visible'] else ""))
+            print ("********************")
+            pprint(pluginData)
+            print ("********************")
+
+            # websocket.write_message("add %s %s %.1f %.1f %d %s %d %s %d %d" % (pluginData['instance'], pluginData['uri'],
+            #                                                           pluginData['x'], pluginData['y'],
+            #                                                           int(pluginData['bypassed']),
+            #                                                           pluginData['sversion'],
+            #                                                           int(bool(pluginData['buildEnv'])),
+            #                                                           pluginData['slabel'],
+            #                                                           int(pluginData['performance_index']),
+            #                                                           int(bool(pluginData['performance_visible']))))
+
+            websocket.write_message("add %s %s %.1f %.1f %d %s %d %s %d %d" % (pluginData['instance'], pluginData['uri'],
                                                                       pluginData['x'], pluginData['y'],
                                                                       int(pluginData['bypassed']),
                                                                       pluginData['sversion'],
-                                                                      int(bool(pluginData['buildEnv']))))
+                                                                      int(bool(pluginData['buildEnv'])),
+                                                                      pluginData['slabel'],
+                                                                      int(pluginData['performance']['index']),
+                                                                      int(bool(pluginData['performance']['visible']))))
 
             if crashed:
                 self.send_notmodified("add %s %d" % (pluginData['uri'], instance_id))
@@ -2554,6 +2576,10 @@ class Host(object):
                                                  extinfo['microVersion'],
                                                  extinfo['minorVersion'],
                                                  extinfo['release']))
+            label = extinfo["label"]
+            slabel = label.replace(" ","_")
+
+            print("loaded uri %s" % uri)
             self.plugins[instance_id] = {
                 "instance"    : instance,
                 "uri"         : uri,
@@ -2574,6 +2600,9 @@ class Host(object):
                 "nextPreset"  : "",
                 "buildEnv"    : extinfo['buildEnvironment'],
                 "sversion"    : sversion,
+                "label"       : label,
+                "slabel"       : slabel,
+                "performance" :  extinfo['performance']
             }
 
             for output in extinfo['monitoredOutputs']:
@@ -2588,10 +2617,13 @@ class Host(object):
                     snapshot['plugins_added'].append(instance_id)
 
             callback(True)
-            self.msg_callback("add %s %s %.1f %.1f %d %s %d" % (instance, uri, x, y,
+            self.msg_callback("add %s %s %.1f %.1f %d %s %d %s %d %d" % (instance, uri, x, y,
                                                                 int(bypassed),
                                                                 sversion,
-                                                                int(bool(extinfo['buildEnvironment']))))
+                                                                int(bool(extinfo['buildEnvironment'])),
+                                                                slabel,
+                                                                int(extinfo['performance'].index),
+                                                                int(bool(extinfo['performance'].visible))))
 
         self.send_modified("add %s %d" % (uri, instance_id), host_callback, datatype='int')
 
@@ -2752,6 +2784,19 @@ class Host(object):
 
         pluginData['x'] = x
         pluginData['y'] = y
+
+    def set_label(self, instance, label):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+
+        pluginData['label'] = label
+        pluginData['slabel'] = label.replace(" ","_")
+
+    def set_performance_plugin_visibility(self, instance, visible):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+
+        pluginData['performance']['visible'] = visible
 
     # check if addressing is momentary or trigger, in which case we do not want to save current/changed value
     def should_save_addressing_value(self, addressing, value):
@@ -3853,6 +3898,9 @@ class Host(object):
                                                           extinfo['microVersion'],
                                                           extinfo['minorVersion'],
                                                           extinfo['release'])),
+                "label"       : p['label'],
+                "slabel"      : p['label'].replace(' ', '_') if p['label'] is not None else "", # replace spaces with _
+                "performance" : dict((prop, p['performance'].get(prop)) for prop in p['performance'].keys())
             }
 
             self.send_notmodified("add %s %d" % (p['uri'], instance_id))
@@ -3860,11 +3908,14 @@ class Host(object):
             if p['bypassed']:
                 self.send_notmodified("bypass %d 1" % (instance_id,))
 
-            self.msg_callback("add %s %s %.1f %.1f %d %s %d" % (instance,
+            self.msg_callback("add %s %s %.1f %.1f %d %s %d %s %d %d" % (instance,
                                                                 p['uri'], p['x'], p['y'],
                                                                 int(p['bypassed']),
                                                                 pluginData['sversion'],
-                                                                int(bool(extinfo['buildEnvironment']))))
+                                                                int(bool(extinfo['buildEnvironment'])),
+                                                                pluginData['slabel'],
+                                                                int(p['performance']['index']),
+                                                                int(bool(p['performance']['visible']))))
 
             if p['bypassCC']['channel'] >= 0 and p['bypassCC']['control'] >= 0:
                 pluginData['addressings'][':bypass'] = self.addressings.add_midi(instance_id, ":bypass",
@@ -4129,13 +4180,16 @@ _:b%i
     lv2:minorVersion %i ;
     mod:builderVersion %i ;
     mod:releaseNumber %i ;
+    mod:label '%s' ;
     lv2:port <%s> ;
     lv2:prototype <%s> ;
     pedal:instanceNumber %i ;
+    pedal:favorite %s ;
+    pedal:index %i ;
     pedal:preset <%s> ;
     a ingen:Block .
 """ % (instance, pluginData['x'], pluginData['y'], "false" if pluginData['bypassed'] else "true",
-       info['microVersion'], info['minorVersion'], info['builder'], info['release'],
+       info['microVersion'], info['minorVersion'], info['builder'], info['release'], pluginData['label'],
        "> ,\n             <".join(tuple("%s/%s" % (instance, port['symbol']) for port in (info['ports']['audio']['input']+
                                                                                           info['ports']['audio']['output']+
                                                                                           info['ports']['control']['input']+
@@ -4145,7 +4199,11 @@ _:b%i
                                                                                           info['ports']['midi']['input']+
                                                                                           info['ports']['midi']['output']+
                                                                                           [{'symbol': ":bypass"}]))),
-       pluginData['uri'], instance_id, pluginData['preset'])
+       pluginData['uri'],
+       instance_id,
+       "true" if pluginData['performance']['visible'] else "false",
+       pluginData['performance']['index'],
+       pluginData['preset'])
 
             # audio input
             for port in info['ports']['audio']['input']:

@@ -114,6 +114,7 @@ $('document').ready(function() {
         pedalPresetsList: $("#pedal-presets-list"),
         pedalPresetsOverlay: $("#pedal-presets-list-input"),
         updateDeviceWindow: $('#cc-device-update-window'),
+        inputBox: $('#input-box'),
         saveBox: $('#save-pedalboard'),
         saveButton: $('#pedalboard-info .js-save'),
         saveAsButton: $('#pedalboard-info .js-save-as'),
@@ -917,10 +918,9 @@ $('document').ready(function() {
                 </h1>
             </header>
             <div class="remote clearfix">
-                <div class="clearfix">
-                    <div class="js-performance js-performance-plugins"></div>
-                    <div class="js-performance js-performance-plugin-settings"></div>
-                </div>
+                <i id="performance-filter-favorites" class="view-filter icon-eye"></i>
+                <div class="js-performance js-performance-plugins"></div>
+                <div class="js-performance js-performance-plugin-settings"></div>
             </div>
         </div>
     </div>
@@ -1147,6 +1147,23 @@ $('document').ready(function() {
     </div>
     <!-- TRANSPORT BOX -->
 
+    <!-- INPUT BOX WINDOW -->
+    <div id="input-box" class="input-box-popup mod-hidden">
+        <div class="mod-box">
+            <h1 class="pull-left">Edit</h1><span class="js-cancel close">&times;</span>
+            <form class="bottom">
+                <div class="clearfix"></div>
+                <div class="controls">
+                    <input type="text" class="form-control"/>
+                </div>
+                <div class="controls actions">
+                    <button class="js-cancel btn btn-danger">Cancel</button>
+                    <button class="js-done btn btn-success">Ok</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- END SAVE INOUT BOX WINDOW -->
 <!-- END WRAPPER -->
 </div>
 

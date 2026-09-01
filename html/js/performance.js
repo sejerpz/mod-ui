@@ -20,8 +20,12 @@ JqueryClass('performanceBox', {
             pedalPresets: undefined,
             resultCanvasPlugins: self.find('.js-performance-plugins'),
             resultCanvasPluginSettings: self.find('.js-performance-plugin-settings'),
+            visibleFilter: true,
             selectedElement: undefined,
             selectedIndex: -1,
+            plugins: [], // filtered plugins
+            isMainWindow: true,
+            windowName: "Performance",
             selectElement: function (element, callback) {
                 const pedalboard = self.data("pedalboard")
 
@@ -46,11 +50,13 @@ JqueryClass('performanceBox', {
                             div.innerHTML = Mustache.render(TEMPLATES.performance_snapshots, {presets: data})
                             let rendered = $(Array.prototype.slice.call(div.childNodes, 0))
                             const settings = rendered[0];
-                            
+
                             // add the selected class
-                            $("#mod-performance-plugin-0")?.addClass("selected")    
                             selectedIndex = 0;
+
                             displaySelectedElementSettings(element, selectedIndex, settings, function() {
+                                self.data('scrollAndSelectElement')("#mod-performance-plugin-0")
+
                                 // attach events
                                 $(".performance .snapshot").each(function(index, snapshotDiv) {
                                     snapshotDiv.onclick = function (e) {
@@ -62,15 +68,29 @@ JqueryClass('performanceBox', {
                     } else {
                         //TODO: if element is plugin, show plugin settings
                         const plugin = element
-                        const plugins = pedalboard.data("plugins")
+                        const plugins = self.data("plugins")
                         const settings = plugin.settingsPerformance[0];
-                        
-                        selectedIndex = Object.keys(plugins).indexOf(plugin.instance) + 1 // +1 'cause 0 is the snapshot page
+
+                        selectedIndex = plugins.indexOf(plugin) + 1 // +1 'cause 0 is the snapshot page
+
                         displaySelectedElementSettings(element, selectedIndex, settings)
-                        $("#mod-performance-plugin-" + selectedIndex.toString())?.addClass("selected")
+                        self.data('scrollAndSelectElement')("#mod-performance-plugin-" + selectedIndex.toString())
                     }
                 }
-               
+            },
+
+            scrollAndSelectElement: function(elementSelector) {
+                let element = $(elementSelector)
+
+                if (element && element[0]) {
+                    element.addClass("selected")
+                    element[0].scrollIntoView({
+                        "behavior" : "smooth",
+                        "block": "start",
+                        "container": "nearest",
+                        "inline": "nearest"
+                    });
+                }
             },
 
             // show the settings for the selected plugin or snapshots
@@ -81,12 +101,12 @@ JqueryClass('performanceBox', {
                 if (settingsDiv) {
                     $(settingsDiv).fadeOut(200, function() {
                         settingsDiv.innerHTML = ""
-                        
+
                         if (settings) {
                             settingsDiv.appendChild(settings);
                             $(settingsDiv).fadeIn(200);
                         }
-                        
+
                         self.data("selectedElement", selectedElement)
                         self.data("selectedIndex", selectedIndex)
                         if (callback)
@@ -95,18 +115,15 @@ JqueryClass('performanceBox', {
                 }
             },
 
-            isMainWindow: true,
-            windowName: "Performance",
-        }, options)
+            /*
+             * Update the plugin effect list
+             */
+            updatePlugins: function() {
+                const pedalboard = self.data("pedalboard")
 
-        self.data(options)
+                if (!pedalboard)
+                    return
 
-        options.open = function () {
-            var plugins = []
-            const pedalboard = self.data("pedalboard")
-
-            if (pedalboard)
-            {
                 const plugins = pedalboard.data("plugins")
                 const canvas = self.data("resultCanvasPlugins")
 
@@ -115,7 +132,7 @@ JqueryClass('performanceBox', {
                 // append snapshot view
                 var div = document.createElement("div");
         
-                div.innerHTML = Mustache.render(TEMPLATES.plugin, {
+                div.innerHTML = Mustache.render(TEMPLATES.performance_plugin, {
                     uri   : ":presets",
                     brand : "&nbsp;",
                     label : "Snapshots",
@@ -133,16 +150,67 @@ JqueryClass('performanceBox', {
                 // TODO: controls assigned to phisical mod
 
                 // append effects controls one by one
+                const visibleFilter = self.data("visibleFilter")
+                var guis = []
+
+                for (pluginKey in plugins) {
+                    guis.push(plugins[pluginKey].data("gui"))
+                }
+                guis = guis
+                        .filter(item => !visibleFilter || item.getPerformanceOptions()?.visible === visibleFilter)
+                        .sort(function(a,b) {
+                            const pa = a.getPerformanceOptions()
+                            const pb = b.getPerformanceOptions()
+
+                            if (pa.index < pb.index)
+                                return -1
+                            else if (pa.index > pb.index)
+                                return 1
+                            else {
+                                if (a.label < b.label)
+                                    return -1
+                                else if (a.label > b.label)
+                                    return 1
+                                else
+                                    return 0
+                            }
+                        })
+
                 let index = 1
-                for (pluginKey in plugins) { 
-                    const plugin = plugins[pluginKey].data("gui"); 
+                self.data('plugins', guis)
+                for (key in guis) { 
+                    const gui = guis[key];
                     
-                    self.performanceBox("renderPlugin", index, plugin, canvas)
+                    self.performanceBox("renderPlugin", index, gui, canvas)
                     index += 1
                 }
 
                 self.data("selectElement")(":presets")
+            },
+
+        }, options)
+
+        self.data(options)
+
+        options.open = function () {
+            // check the default for the visibleFilter: if any plugin is favorite the filter will be true on oper
+            const pedalboard = self.data("pedalboard")
+
+            if (pedalboard) {
+                let defaultvisibleFilter = false;
+                const plugins = pedalboard.data("plugins")
+                for (pluginKey in plugins) {
+                    const gui = plugins[pluginKey].data("gui")
+
+                    if (gui.getPerformanceOptions().visible) {
+                        defaultvisibleFilter = true;
+                        break;
+                    }
+                }
+
+                self.data('visibleFilter', defaultvisibleFilter)
             }
+            self.data('updatePlugins')()
             return false
         }
 
@@ -153,11 +221,10 @@ JqueryClass('performanceBox', {
             index -= deltaY;
             if (index < 0)
                 index = 0;
-        
+
             const pluginDiv = $("#mod-performance-plugin-" + index.toString())
 
             if (pluginDiv && pluginDiv[0]) {
-                const divTop = pluginDiv[0].offsetTop;
                 let selectedElement;
 
                 if (index == 0) { // snapshots
@@ -170,13 +237,30 @@ JqueryClass('performanceBox', {
                     }
                 }
                 self.data('selectElement')(selectedElement)
-                canvas.scrollTop(divTop);
             }
             event.preventDefault();
         });
         canvas.bind("swipe", function(e) {
             console.log(`swipe ${e}`)
         })
+
+        const visibleFilterButton = self.find('#performance-filter-favorites')
+        visibleFilterButton.click(function() {
+            const newValue = !self.data('visibleFilter')
+
+            if (newValue) {
+                visibleFilterButton.addClass("is-favorite")
+                visibleFilterButton.removeClass('icon-eye-off')
+                visibleFilterButton.addClass('icon-eye')
+            } else {
+                visibleFilterButton.removeClass("is-favorite")
+                visibleFilterButton.removeClass('icon-eye')
+                visibleFilterButton.addClass('icon-eye-off')
+            }
+
+            self.data('visibleFilter', newValue)
+            self.data('updatePlugins')()
+        });
         self.window(options)
 
         return self
@@ -191,8 +275,8 @@ JqueryClass('performanceBox', {
 
         var plugin_data = {
             uri   : uri,
-            brand : plugin.effect.brand || "&nbsp;",
-            label : plugin.effect.label,
+            brand : !plugin.effect.brand ? "&nbsp;": plugin.effect.brand,
+            label : plugin.label || plugin.effect.label,
             thumbnail_href: (plugin.effect.gui && plugin.effect.gui.thumbnail)
                           ? ("/effect/image/thumbnail.png?uri=" + uri + "&v=" + ver)
                           :  "/resources/pedals/default-thumbnail.png",
@@ -202,14 +286,52 @@ JqueryClass('performanceBox', {
             plugin_data.thumbnail_href = plugin_data.thumbnail_href.replace("thumbnail","screenshot")
         }
 
+        const visibleFilter = self.data('visibleFilter')
         var div = document.createElement("div");
-        
-        div.innerHTML = Mustache.render(TEMPLATES.plugin, plugin_data);
+
+        div.innerHTML = Mustache.render(TEMPLATES.performance_plugin, plugin_data);
         var rendered = $(Array.prototype.slice.call(div.childNodes, 0));
 
         rendered[0].id = "mod-performance-plugin-" + index.toString()
         $(rendered).data('plugin', plugin)
         rendered[0].setAttribute('mod-instance', plugin.instance)
+
+        const iconFavorite = rendered.find('.icon-favorite')
+
+        if (iconFavorite) {
+            if (visibleFilter === false) {
+                iconFavorite.removeClass('hidden')
+                if (plugin.getPerformanceOptions()?.visible ?? false) {
+                    iconFavorite.addClass("icon-eye")
+                    iconFavorite.addClass("is-favorite")
+                } else {
+                    iconFavorite.addClass("icon-eye-off")
+                }
+                iconFavorite.click(function(e) {
+                    const performanceOptions = plugin.getPerformanceOptions()
+                    const visible = !(performanceOptions.visible ?? false);
+
+                    if (visible) {
+                        iconFavorite.removeClass('icon-eye-off')
+                        iconFavorite.addClass("icon-eye")
+                        iconFavorite.addClass("is-favorite")
+                    } else {
+                        iconFavorite.addClass('icon-eye-off')
+                        iconFavorite.removeClass("icon-eye")
+                        iconFavorite.removeClass("is-favorite")
+                    }
+                    console.log(`plugin ${plugin.instance} toggle favorite: ${visible}`)
+                    
+                    performanceOptions.visible = visible
+                    // let the host know about this change
+                    desktop.pedalboard.data('performancePluginVisibilitySet')(plugin.instance, visible)
+
+                    e.stopPropagation()
+                })
+            } else {
+                iconFavorite.addClass('hidden')
+            }
+        }
 
         rendered.click(function () {
             self.data('selectElement')(plugin)

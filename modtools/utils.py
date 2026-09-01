@@ -394,6 +394,12 @@ class PluginInfo_Essentials(Structure):
         ("builder", c_int),
     ]
 
+class PerformancePluginInfo(Structure):
+    _fields_ = [
+        ("visible", c_bool),
+        ("index", c_int),
+    ]
+
 class PedalboardMidiControl(Structure):
     _fields_ = [
         ("channel", c_int8),
@@ -424,6 +430,8 @@ class PedalboardPlugin(Structure):
         ("y", c_float),
         ("ports", POINTER(PedalboardPluginPort)),
         ("preset", c_char_p),
+        ("label", c_char_p),
+        ("performance", PerformancePluginInfo)
     ]
 
 class PedalboardConnection(Structure):
@@ -535,6 +543,7 @@ c_struct_types = (PluginAuthor,
                   PluginPorts,
                   PluginLongParameterRanges,
                   PedalboardMidiControl,
+                  PerformancePluginInfo,
                   PedalboardHardware,
                   PedalboardTimeInfo)
 

@@ -1,6 +1,9 @@
 <div class="mod-pedal-settings">
     <header class="clearfix">
-        <h1 class="alignleft">{{effect.name}}</h1>
+        <h1 class="alignleft">{{effect.name}}
+            <span class="plugin-label">{{#userLabel}} - {{userLabel}}{{/userLabel}}</span>
+            <span class="mod-edit"></span>
+        </h1>
         <button class="js-close alignright btn btn-danger">Close</button>
     </header>
     <div class="mod-controls clearfix">
