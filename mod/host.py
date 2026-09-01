@@ -6272,6 +6272,7 @@ _:b%i
         if not enabled:
             self.plugin_map_seen = None
             logging.debug("hmi builder plugin notify off")
+            self.hmi_builder_reload_addressings()
             return
 
         self.plugin_map_seen = PLUGIN_MAP.fingerprint(self)
@@ -6279,6 +6280,38 @@ _:b%i
                                                  self.PLUGIN_MAP_WATCH_INTERVAL)
         self.plugin_map_watch.start()
         logging.debug("hmi builder plugin notify on")
+
+    def hmi_builder_reload_addressings(self):
+        """Put control mode's controls back, now that the panel has left the builder.
+
+        A binding made in the builder does reach the panel -- Host.address() sends it --
+        but it arrives while the panel is still in builder mode, and cb_control_add() hands
+        anything arriving then to the plugin editor's encoders instead of to control mode.
+        So control mode never hears about a binding made from the very screen that exists
+        to make them, and only finds out when the pedalboard is next loaded.
+
+        Rather than teach that routing to tell the two apart, the whole lot is sent again
+        once the panel is somewhere it can use them. Scheduled, not called: the panel is
+        still spinning on the reply to the command that got us here, and this ends in
+        commands of its own that it has to answer.
+        """
+        def reload():
+            if not self.hmi.initialized:
+                return
+
+            actuators = [a['uri'] for a in self.descriptor.get('actuators', [])]
+            if not actuators:
+                return
+
+            abort_catcher = self.abort_previous_loading_progress("builder_reload_addressings")
+
+            try:
+                self.addressings.load_current(actuators, (None, None), False, True,
+                                              abort_catcher)
+            except Exception:
+                logging.exception("[host] cannot reload the panel's addressings")
+
+        IOLoop.instance().add_callback(reload)
 
     def plugin_map_watch_callback(self):
         """Tell the panel when the board it is looking at has changed under it.
