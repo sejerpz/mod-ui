@@ -43,7 +43,7 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
                           DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE,
-                          MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT,
+                          PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT,
                           API_KEY)
 
 from mod import (
@@ -52,7 +52,7 @@ from mod import (
     get_hardware_descriptor, get_unique_name, os_sync, symbolify,
 )
 from mod.bank import list_banks, save_banks, remove_pedalboard_from_banks
-from mod.minimap import INSTANCE as MINIMAP, instance_for as minimap_for
+from mod.plugin_map import INSTANCE as PLUGIN_MAP
 from mod.session import SESSION
 from mod.licensing import check_missing_licenses, save_license, get_new_licenses_and_flush
 from modtools.utils import (
@@ -1704,7 +1704,7 @@ class PedalboardImageWait(JsonRequestHandler):
             'ctime': "%.1f" % ctime,
         })
 
-class PedalboardMinimap(TimelessRequestHandler):
+class PedalboardPluginMap(TimelessRequestHandler):
     """Display list of the live plugin graph, for the HMI to draw itself.
 
     Plain text, one record per line, parseable with strtok/sscanf so the
@@ -1716,36 +1716,36 @@ class PedalboardMinimap(TimelessRequestHandler):
     def get(self):
         focus = self.get_argument('focus', None)
         layers = self.get_argument('layers', None)
-        minimap = minimap_for(self.get_argument('mode', None))
+        plugin_map = PLUGIN_MAP
 
-        text, version = minimap.render(SESSION.host, focus=focus, layers=layers)
+        text, version = plugin_map.render(SESSION.host, focus=focus, layers=layers)
 
         self.set_header("Content-Type", "text/plain; charset=UTF-8")
         # TimelessRequestHandler deliberately disables etag/304, so the version
         # travels in a header instead; polling it is cheap by design
         self.set_header("Cache-Control", "no-cache")
-        self.set_header("X-Minimap-Version", str(version))
+        self.set_header("X-PluginMap-Version", str(version))
         self.write(text)
         self.finish()
 
-class PedalboardMinimapInfo(JsonRequestHandler):
+class PedalboardPluginMapInfo(JsonRequestHandler):
     def get(self):
-        self.write(minimap_for(self.get_argument('mode', None)).info(SESSION.host))
+        self.write(PLUGIN_MAP.info(SESSION.host))
 
-class PedalboardMinimapPreview(TimelessRequestHandler):
+class PedalboardPluginMapPreview(TimelessRequestHandler):
     """Reference rasterisation of the same scene -- a debug view, not the product.
 
     The HMI draws from the display list above; this only exists so a human can
     see what that scene looks like without a device in hand.
     """
     def get(self):
-        from mod import minimap_render
+        from mod import plugin_map_render
 
-        if not minimap_render.available():
+        if not plugin_map_render.available():
             self.set_status(503)
             self.set_header("Content-Type", "text/plain; charset=UTF-8")
             self.write("Pillow is not installed; the display list at "
-                       "/pedalboard/minimap still works.\n")
+                       "/pedalboard/plugin_map still works.\n")
             self.finish()
             return
 
@@ -1753,24 +1753,24 @@ class PedalboardMinimapPreview(TimelessRequestHandler):
         invert = self.get_argument('invert', None) in ('1', 'true', 'yes')
         selected = self.get_argument('selected', None)
 
-        minimap = minimap_for(self.get_argument('mode', None))
-        scene = minimap.scene(SESSION.host)
+        plugin_map = PLUGIN_MAP
+        scene = plugin_map.scene(SESSION.host)
 
         crop = None
         if self.get_argument('view', None) in ('1', 'true', 'yes'):
             crop = (int(float(self.get_argument('x', 0))),
                     int(float(self.get_argument('y', 0))),
-                    int(float(self.get_argument('w', MINIMAP_VIEW_WIDTH))),
-                    int(float(self.get_argument('h', MINIMAP_VIEW_HEIGHT))))
+                    int(float(self.get_argument('w', PLUGIN_MAP_VIEW_WIDTH))),
+                    int(float(self.get_argument('h', PLUGIN_MAP_VIEW_HEIGHT))))
 
-        img = minimap_render.render(scene, crop=crop, invert=invert,
+        img = plugin_map_render.render(scene, crop=crop, invert=invert,
                                     layers=layers, selected=selected)
         buf = BytesIO()
         img.save(buf, format='PNG', compress_level=1)
 
         self.set_header("Content-Type", "image/png")
         self.set_header("Cache-Control", "no-cache")
-        self.set_header("X-Minimap-Version", str(minimap.version))
+        self.set_header("X-PluginMap-Version", str(plugin_map.version))
         self.write(buf.getvalue())
         self.finish()
 
@@ -2772,9 +2772,9 @@ application = web.Application(
             (r"/pedalboard/image/generate", PedalboardImageGenerate),
             (r"/pedalboard/image/check", PedalboardImageCheck),
             (r"/pedalboard/image/wait", PedalboardImageWait),
-            (r"/pedalboard/minimap", PedalboardMinimap),
-            (r"/pedalboard/minimap/info", PedalboardMinimapInfo),
-            (r"/pedalboard/minimap/preview.png", PedalboardMinimapPreview),
+            (r"/pedalboard/plugin_map", PedalboardPluginMap),
+            (r"/pedalboard/plugin_map/info", PedalboardPluginMapInfo),
+            (r"/pedalboard/plugin_map/preview.png", PedalboardPluginMapPreview),
             (r"/pedalboard/cv_addressing_plugin_port/add", PedalboardCvAddressingPluginPortAdd),
             (r"/pedalboard/cv_addressing_plugin_port/remove", PedalboardCvAddressingPluginPortRemove),
             (r"/pedalboard/transport/set_sync_mode/*(/[A-Za-z0-9_:/]+[^/])/?", PedalboardTransportSetSyncMode),

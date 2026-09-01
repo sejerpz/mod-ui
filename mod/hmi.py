@@ -17,7 +17,7 @@ from mod.mod_protocol import (
     CMD_CONTROL_ADD,
     CMD_CONTROL_REMOVE,
     CMD_CONTROL_SET,
-    CMD_DWARF_BUILDER_CONTROL_SET,
+    CMD_BUILDER_CONTROL_SET,
     CMD_PEDALBOARD_CHANGE,
     CMD_PEDALBOARD_CLEAR,
     CMD_PEDALBOARD_NAME_SET,
@@ -30,8 +30,9 @@ from mod.mod_protocol import (
     CMD_DUO_CONTROL_INDEX_SET,
     CMD_DUO_BANK_CONFIG,
     CMD_DUOX_PAGES_AVAILABLE,
-    CMD_PEDALBOARD_LOAD_BEGIN,
-    CMD_PEDALBOARD_LOAD_END,
+    CMD_PEDALBOARD_LOADING_BEGIN,
+    CMD_PEDALBOARD_LOADING_END,
+    CMD_BUILDER_PLUGIN_UPDATED,
     CMD_DUOX_EXP_OVERCURRENT,
     CMD_RESPONSE,
     CMD_RESTORE,
@@ -464,7 +465,7 @@ class HMI(object):
     def builder_control_set(self, hw_id, value, callback):
         """Set a plug-in's control port value on the HMI when in builder mode."""
         # control_set <hw_id> <value>"""
-        self.send('%s %d %f' % (CMD_DWARF_BUILDER_CONTROL_SET, hw_id, value), callback, 'boolean')
+        self.send('%s %d %f' % (CMD_BUILDER_CONTROL_SET, hw_id, value), callback, 'boolean')
 
     def control_rm(self, hw_ids, callback):
         """
@@ -544,10 +545,14 @@ class HMI(object):
         a view onto the board stands down -- and whatever wants to tell the user a load is
         running has its two edges here.
         """
-        self.send(CMD_PEDALBOARD_LOAD_BEGIN, callback, 'boolean')
+        self.send(CMD_PEDALBOARD_LOADING_BEGIN, callback, 'boolean')
+
+    def plugin_map_updated(self, callback):
+        """The board changed under a panel that asked to be told."""
+        self.send(CMD_BUILDER_PLUGIN_UPDATED, callback, 'boolean')
 
     def pedalboard_load_end(self, callback):
-        self.send(CMD_PEDALBOARD_LOAD_END, callback, 'boolean')
+        self.send(CMD_PEDALBOARD_LOADING_END, callback, 'boolean')
 
     # even newer messages. really need to clean this up later..
 

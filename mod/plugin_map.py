@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Pedalboard minimap: a compact scene description of the live plugin graph.
+"""Pedalboard plugin_map: a compact scene description of the live plugin graph.
 
 The HMI has a 128x64 monochrome LCD that acts as a window onto a larger scene.
 Rather than shipping pixels, this module emits a *display list*: an ASCII
@@ -26,25 +26,24 @@ otherwise both the fingerprint and the layout would be unstable.
 
 import logging
 
-from mod import minimap_font as font
+from mod import plugin_map_font as font
 from mod.settings import (
     PEDALBOARD_INSTANCE_ID,
-    MINIMAP_MAX_WIDTH,
-    MINIMAP_MAX_HEIGHT,
-    MINIMAP_VIEW_WIDTH,
-    MINIMAP_VIEW_HEIGHT,
-    MINIMAP_HMI_VIEW_WIDTH,
-    MINIMAP_HMI_VIEW_HEIGHT,
-    MINIMAP_LAYERS,
-    MINIMAP_MODE,
-    MINIMAP_MAX_MSG,
-    MINIMAP_MAX_NODES,
-    MINIMAP_MAX_PORTS,
-    MINIMAP_MAX_EDGES,
-    MINIMAP_MAX_MENU,
-    MINIMAP_MAX_PAIRS,
-    MINIMAP_MAX_ROW_PAIRS,
-    MINIMAP_WIN_PLUGINS,
+    PLUGIN_MAP_MAX_WIDTH,
+    PLUGIN_MAP_MAX_HEIGHT,
+    PLUGIN_MAP_VIEW_WIDTH,
+    PLUGIN_MAP_VIEW_HEIGHT,
+    PLUGIN_MAP_HMI_VIEW_WIDTH,
+    PLUGIN_MAP_HMI_VIEW_HEIGHT,
+    PLUGIN_MAP_LAYERS,
+    PLUGIN_MAP_MAX_MSG,
+    PLUGIN_MAP_MAX_NODES,
+    PLUGIN_MAP_MAX_PORTS,
+    PLUGIN_MAP_MAX_EDGES,
+    PLUGIN_MAP_MAX_MENU,
+    PLUGIN_MAP_MAX_PAIRS,
+    PLUGIN_MAP_MAX_ROW_PAIRS,
+    PLUGIN_MAP_WIN_PLUGINS,
 )
 
 # ---------------------------------------------------------------------------
@@ -88,7 +87,7 @@ TITLE_W = 100         # 25 characters of Terminal3x5, inside the 128px bar
 PAIR_W = 44           # 11 characters: two port names fit the strip under the menu
 CANVAS_STEP = 180     # a box and a gap on the web canvas, for placing a spliced one
 
-# MINIMAP_NONE in the firmware: the id that means no box at all. Hardware takes the
+# BM_NONE in the firmware: the id that means no box at all. Hardware takes the
 # negative half of the id space from -2 down, so a negative id is not on its own a
 # refusal -- IN1 is as spliceable as anything else.
 NO_NODE = -1
@@ -98,19 +97,23 @@ NO_NODE = -1
 # representations
 # ---------------------------------------------------------------------------
 
-MODE_DETAIL = 'detail'
-MODE_COMPACT = 'compact'
 
 
 class Style(object):
-    """Geometry and level of detail for one way of drawing the same graph."""
+    """Geometry for the picture: box sizes, gutters, how much room a stub takes.
 
-    __slots__ = ('name', 'cell_w', 'hw_cell_w', 'min_cell_h', 'port_pitch',
-                 'cell_pad_v', 'gut_x', 'gut_y', 'collapse', 'uniform')
+    One of these, because there is one picture. There used to be a port-accurate style
+    beside it -- every cable drawn, boxes sized to hold their stubs -- and on a 124 pixel
+    panel it was unreadable, so nothing ever shipped with it. What the port-accurate view
+    was really needed for was not the drawing but the model behind it, and that is what
+    PluginMap.model() hands out now.
+    """
 
-    def __init__(self, name, cell_w, hw_cell_w, min_cell_h, port_pitch,
-                 cell_pad_v, gut_x, gut_y, collapse, uniform):
-        self.name = name
+    __slots__ = ('cell_w', 'hw_cell_w', 'min_cell_h', 'port_pitch',
+                 'cell_pad_v', 'gut_x', 'gut_y')
+
+    def __init__(self, cell_w, hw_cell_w, min_cell_h, port_pitch,
+                 cell_pad_v, gut_x, gut_y):
         self.cell_w = cell_w
         self.hw_cell_w = hw_cell_w
         self.min_cell_h = min_cell_h
@@ -118,29 +121,13 @@ class Style(object):
         self.cell_pad_v = cell_pad_v
         self.gut_x = gut_x
         self.gut_y = gut_y
-        self.collapse = collapse        # one cable per pair of boxes, not per pair of ports
-        self.uniform = uniform          # every box the same size, whatever it holds
 
 
-STYLES = {
-    # Port accurate. Boxes are sized to hold their stubs, so a 4-in mixer is
-    # taller than a mono pedal, and every cable is drawn.
-    MODE_DETAIL: Style(MODE_DETAIL, 38, 20, 16, 4, 6, 14, 9, False, False),
-
-    # "What feeds what". A stereo pair is one line, four cables into a mixer are
-    # one line, and boxes are all the same small size -- roughly twice as much
-    # board on screen, at the cost of not showing which port goes where.
-    MODE_COMPACT: Style(MODE_COMPACT, 24, 24, 11, 4, 4, 10, 7, True, True),
-}
-
-
-def normalize_mode(mode):
-    """A mode name, falling back to the configured default and then to detail."""
-    if mode in STYLES:
-        return mode
-    if MINIMAP_MODE in STYLES:
-        return MINIMAP_MODE
-    return MODE_DETAIL
+# "What feeds what". A stereo pair is one line, four cables into a mixer are one line, and
+# boxes are all the same small size -- roughly twice as much board on screen as drawing
+# every cable would give, at the cost of not showing which port goes where. Which port goes
+# where is a question for the connection menu, and it asks model() rather than the picture.
+STYLE = Style(24, 24, 11, 4, 4, 10, 7)
 
 # Records are separated by this, emitted as a token of its own, because the HMI protocol splits a
 # message on spaces only (protocol.c: strarr_split(msg->data, ' ')) and would otherwise glue a
@@ -159,13 +146,13 @@ TYPE_CV = 'c'
 _TYPE_NAMES = {'audio': TYPE_AUDIO, 'midi': TYPE_MIDI, 'cv': TYPE_CV}
 _ALL_TYPES = (TYPE_AUDIO, TYPE_MIDI, TYPE_CV)
 
-# The bits the firmware uses for the same three, in app/inc/minimap.h. The connection
+# The bits the firmware uses for the same three, in app/inc/plugin_map.h. The connection
 # commands speak in these because the HMI protocol carries integers, not names.
 TYPE_BITS = ((TYPE_AUDIO, 1), (TYPE_MIDI, 2), (TYPE_CV, 4))
 
 
 def types_from_bits(bits):
-    """MINIMAP_AUDIO | MINIMAP_MIDI | MINIMAP_CV -> the type letters they stand for."""
+    """BM_AUDIO | BM_MIDI | BM_CV -> the type letters they stand for."""
     if not bits:
         return frozenset(_ALL_TYPES)
     return frozenset(t for t, bit in TYPE_BITS if bits & bit)
@@ -373,15 +360,16 @@ class Scene(object):
 
 
 # ---------------------------------------------------------------------------
-# Minimap
+# PluginMap
 # ---------------------------------------------------------------------------
 
-class Minimap(object):
-    def __init__(self, mode=None):
-        self.mode = normalize_mode(mode)
-        self.style = STYLES[self.mode]
+class PluginMap(object):
+    def __init__(self):
+        self.style = STYLE
         self._fingerprint = None
         self._scene = None
+        self._model_fingerprint = None
+        self._model = None
         self._version = 0
         # emitted text keyed by (version, focus, layers, budget); the firmware
         # polls for changes, so an unchanged request should cost a dict lookup
@@ -446,6 +434,24 @@ class Minimap(object):
         items.sort(key=lambda pair: pair[1]['instance'])
         return items
 
+    def model(self, host):
+        """The graph before anything is merged or placed: every port, every cable.
+
+        The picture merges a stereo pair into one line and one stub, which is what makes it
+        readable and what makes it useless for answering "which port feeds which". Every
+        question about actual ports -- what a menu line stands for, what a box could be
+        wired to, what a cable really is -- is asked here instead.
+
+        Built fresh rather than shared with scene(): _collapse() empties a node's port list
+        in place and _layout() writes coordinates onto the same objects, so handing out the
+        same model would hand out one that is about to be taken apart.
+        """
+        fp = self.fingerprint(host)
+        if fp != self._model_fingerprint or self._model is None:
+            self._model = self._build_model(host)
+            self._model_fingerprint = fp
+        return self._model
+
     def scene(self, host):
         """Laid-out scene for the current state, rebuilt only when it changed."""
         fp = self.fingerprint(host)
@@ -474,7 +480,7 @@ class Minimap(object):
 
     @staticmethod
     def default_focus(scene):
-        """Where a device opening the minimap should start.
+        """Where a device opening the plugin_map should start.
 
         The first hardware input -- IN1 on a Dwarf -- because that is where the
         signal enters and reading the chain left to right is what the box
@@ -575,7 +581,7 @@ class Minimap(object):
                 # reach us, but it does under a fake host. Drop it rather than
                 # drawing a cable to nowhere -- and say so, because a silently
                 # under-reported graph is the worst outcome for an editor.
-                logging.warning("[minimap] cannot resolve connection '%s' -> '%s'",
+                logging.warning("[plugin_map] cannot resolve connection '%s' -> '%s'",
                                 conn[0], conn[1])
                 continue
             etype = src[1].ptype if src[1].ptype != TYPE_AUDIO else dst[1].ptype
@@ -615,11 +621,7 @@ class Minimap(object):
         a MIDI cable running beside audio keeps its own line and its own dash,
         and the layer filter still means something.
 
-        A no-op in the detail style, which is the port-accurate picture.
         """
-        if not self.style.collapse:
-            return model
-
         nodes, edges, by_key = model
 
         # A stub per signal type that a cable actually uses, not per type the plugin
@@ -716,14 +718,11 @@ class Minimap(object):
 
         # sizes
         style = self.style
+        # every box the same size: the stubs have been merged by now, so there is nothing
+        # left for a box to be taller than another one about
         for n in nodes:
-            if style.uniform:
-                n.w = style.cell_w
-                n.h = style.min_cell_h
-            else:
-                n.w = style.cell_w if n.kind == KIND_PLUGIN else style.hw_cell_w
-                span = max(len(n.inputs), len(n.outputs))
-                n.h = max(style.min_cell_h, span * style.port_pitch + style.cell_pad_v)
+            n.w = style.cell_w
+            n.h = style.min_cell_h
             n.label = sanitize_label(n.raw_label, n.w - 4)
             n.title = sanitize_label(n.raw_label, TITLE_W)
 
@@ -746,8 +745,8 @@ class Minimap(object):
         # not cancel out and the picture sat too low. A scene smaller than the viewport is
         # centred by the firmware instead, which is the only side that knows how much of
         # the panel is left for the graph.
-        width = min(content_w + MARGIN * 2, MINIMAP_MAX_WIDTH)
-        height = min(content_h + MARGIN * 2, MINIMAP_MAX_HEIGHT)
+        width = min(content_w + MARGIN * 2, PLUGIN_MAP_MAX_WIDTH)
+        height = min(content_h + MARGIN * 2, PLUGIN_MAP_MAX_HEIGHT)
 
         x = MARGIN
         top = MARGIN
@@ -1136,28 +1135,28 @@ class Minimap(object):
             plugins = [n for n in scene.nodes if n.kind == KIND_PLUGIN]
             focus = plugins[0] if plugins else scene.nodes[0]
 
-        # Horizontally, exactly the viewport the device will be looking at: minimap_select()
-        # centres the selection and minimap_scroll() clamps to the scene. Guessing this
+        # Horizontally, exactly the viewport the device will be looking at: plugin_map_select()
+        # centres the selection and plugin_map_scroll() clamps to the scene. Guessing this
         # wrong is not cosmetic -- near an edge the panel shows boxes on one side only, and
         # a window built around an unclamped centre leaves some of them out of the message.
-        view_x = max(0, min(focus.x + focus.w // 2 - MINIMAP_HMI_VIEW_WIDTH // 2,
-                            max(0, scene.width - MINIMAP_HMI_VIEW_WIDTH)))
+        view_x = max(0, min(focus.x + focus.w // 2 - PLUGIN_MAP_HMI_VIEW_WIDTH // 2,
+                            max(0, scene.width - PLUGIN_MAP_HMI_VIEW_WIDTH)))
 
         # Vertically the device scrolls only when the box would not fit whole on the panel,
         # so where it is looking depends on how the user arrived. The window has to cover
         # every position that keeps the focus fully visible, which is the band from a
         # viewport above the box to a viewport below it.
-        band_top = focus.y + focus.h - MINIMAP_HMI_VIEW_HEIGHT
-        band_bottom = focus.y + MINIMAP_HMI_VIEW_HEIGHT
+        band_top = focus.y + focus.h - PLUGIN_MAP_HMI_VIEW_HEIGHT
+        band_bottom = focus.y + PLUGIN_MAP_HMI_VIEW_HEIGHT
 
         def distance(n):
             # Gap between the box and that region, as a rectangle because the panel is
             # one. A box merely touching it scores zero, so everything that could be on
             # screen sorts ahead of everything that could not.
-            dx = max(0, view_x - (n.x + n.w), n.x - (view_x + MINIMAP_HMI_VIEW_WIDTH))
+            dx = max(0, view_x - (n.x + n.w), n.x - (view_x + PLUGIN_MAP_HMI_VIEW_WIDTH))
             dy = max(0, band_top - (n.y + n.h), n.y - band_bottom)
-            return (max(dx / float(MINIMAP_HMI_VIEW_WIDTH),
-                        dy / float(MINIMAP_HMI_VIEW_HEIGHT)),
+            return (max(dx / float(PLUGIN_MAP_HMI_VIEW_WIDTH),
+                        dy / float(PLUGIN_MAP_HMI_VIEW_HEIGHT)),
                     dx + dy)
 
         # the key is total, so the picture is stable on 3.4's unordered dicts
@@ -1171,7 +1170,7 @@ class Minimap(object):
                 continue
             # hardware boxes do not count against the plugin budget, but they do take a
             # slot in the firmware's fixed array like everything else
-            if len(chosen) >= MINIMAP_MAX_NODES:
+            if len(chosen) >= PLUGIN_MAP_MAX_NODES:
                 break
             if n.kind == KIND_PLUGIN:
                 if taken >= budget:
@@ -1202,7 +1201,7 @@ class Minimap(object):
             visible = set(n.key for n in scene.nodes)
             windowed = False
         else:
-            budget = budget or MINIMAP_WIN_PLUGINS
+            budget = budget or PLUGIN_MAP_WIN_PLUGINS
             visible = self._window_nodes(scene, focus, budget)
             windowed = True
             # Whatever we were asked to centre on is in the picture, whatever its kind.
@@ -1238,7 +1237,7 @@ class Minimap(object):
 
         # N <nid> <kind> <x> <y> <w> <h> <bypassed> <layer> <row> <label> <title>
         # <title> is '=' when it would repeat <label>, which is most of the time in the
-        # detail picture and costs nothing to say
+        # picture and costs nothing to say
         for n in nodes:
             label = n.label or '-'
             title = n.title or label
@@ -1271,10 +1270,10 @@ class Minimap(object):
         # neighbouring token. One line, unambiguous either way -- see RECORD_SEP.
         text = (' ' + RECORD_SEP + ' ').join(lines) + ' ' + RECORD_SEP
 
-        if windowed and budget > 1 and (len(text) > MINIMAP_MAX_MSG
-                                        or len(nodes) > MINIMAP_MAX_NODES
-                                        or ports > MINIMAP_MAX_PORTS
-                                        or len(shown_edges) > MINIMAP_MAX_EDGES):
+        if windowed and budget > 1 and (len(text) > PLUGIN_MAP_MAX_MSG
+                                        or len(nodes) > PLUGIN_MAP_MAX_NODES
+                                        or ports > PLUGIN_MAP_MAX_PORTS
+                                        or len(shown_edges) > PLUGIN_MAP_MAX_EDGES):
             # Shrink and retry rather than emit a message the firmware's 4K buffer would
             # drop, or more records than one of its fixed arrays can hold -- it keeps what
             # fits and drops the rest without a word, so a box or a cable just vanishes.
@@ -1317,7 +1316,7 @@ class Minimap(object):
         One entry per box at the far end and per signal type, never one per pair of
         ports: a stereo pair is one line on the picture and one line in the menu, and
         deleting it means dropping both cables. The compact picture already collapses
-        that way, so this only has to deduplicate for the detail one.
+        that way, so the deduplication here is belt and braces.
         """
         scene = self.scene(host)
         wanted = types_from_bits(bits)
@@ -1351,13 +1350,13 @@ class Minimap(object):
 
         # what feeds this box first, then what it feeds, alphabetical inside each
         out.sort(key=lambda c: (c['direction'] != 'i', c['label'], c['key']))
-        out = out[:MINIMAP_MAX_MENU]
+        out = out[:PLUGIN_MAP_MAX_MENU]
 
         # the individual cables behind each line, for the strip under the menu. Budgeted
         # over the visible rows, which is why it happens after the truncation and not
         # inside the loop above.
         pairs = self._cable_pairs(host, nid, wanted)
-        budget = MINIMAP_MAX_PAIRS
+        budget = PLUGIN_MAP_MAX_PAIRS
         for entry in out:
             got = pairs.get((entry['direction'], entry['nid'], entry['type']), [])
             entry['pairs'] = got[:budget]
@@ -1370,11 +1369,11 @@ class Minimap(object):
 
         The lines come from whichever scene is on screen, and the compact one has already
         merged a stereo pair into a single cable -- the two ports behind it are gone by
-        the time connections() sees it. The detail scene still has them and numbers its
-        boxes the same way, so the cables are counted there and handed back per line.
+        the time connections() sees it. The model still has them and numbers its boxes
+        the same way, so the cables are counted there and handed back per line.
         """
         pairs = {}
-        for e in instance_for(MODE_DETAIL).scene(host).edges:
+        for e in self.model(host)[1]:
             if e.etype not in wanted:
                 continue
             if e.src.nid == nid:
@@ -1385,7 +1384,7 @@ class Minimap(object):
                 continue
 
             bucket = pairs.setdefault(key, [])
-            if len(bucket) >= MINIMAP_MAX_ROW_PAIRS:
+            if len(bucket) >= PLUGIN_MAP_MAX_ROW_PAIRS:
                 continue
 
             # The feeding end first, whichever side of the cable we are on: the strip
@@ -1406,11 +1405,11 @@ class Minimap(object):
         is wired one side at a time. A cable that already exists is refused later, by
         connect_port, where the ports are known.
         """
-        scene = instance_for(MODE_DETAIL).scene(host)
+        nodes, edges, _by_key = self.model(host)
         wanted = types_from_bits(bits)
 
         ours = None
-        for node in scene.nodes:
+        for node in nodes:
             if node.nid == nid:
                 ours = node
                 break
@@ -1421,7 +1420,7 @@ class Minimap(object):
         direction = 'i' if want_outputs else 'o'
 
         out = []
-        for node in scene.nodes:
+        for node in nodes:
             if node.nid == nid:
                 continue
 
@@ -1433,8 +1432,6 @@ class Minimap(object):
                     'type': ptype,
                     'bits': dict(TYPE_BITS).get(ptype, 0),
                     'label': node.title or node.label or '-',
-                    'layer': node.layer,
-                    'row': node.row,
                     'key': node.key,
                 })
 
@@ -1445,7 +1442,7 @@ class Minimap(object):
 
         # the device holds a fixed number of rows; anything past that would be dropped on
         # arrival without a word, so it is cut here where the count is known
-        return out[:MINIMAP_MAX_MENU]
+        return out[:PLUGIN_MAP_MAX_MENU]
 
     def ports(self, host, nid, bits=0, outputs=True):
         """One side of a box's ports, in the shape the connection menus already use.
@@ -1454,11 +1451,11 @@ class Minimap(object):
         back: the device never sees a symbol, so the two have to agree on the ordering,
         and the ordering is the one the plugin declares.
         """
-        scene = instance_for(MODE_DETAIL).scene(host)
+        nodes, edges, _by_key = self.model(host)
         wanted = types_from_bits(bits)
 
         node = None
-        for candidate in scene.nodes:
+        for candidate in nodes:
             if candidate.nid == nid:
                 node = candidate
                 break
@@ -1494,7 +1491,7 @@ class Minimap(object):
                 })
                 index += 1
 
-        return out[:MINIMAP_MAX_MENU]
+        return out[:PLUGIN_MAP_MAX_MENU]
 
     def connect_port(self, host, from_nid, from_index, to_nid, to_index, bits=0):
         """The one cable behind picking a port: source end, target end, done.
@@ -1503,10 +1500,10 @@ class Minimap(object):
         least used port of the right type. Least used rather than first: wiring a stereo
         box twice then fills both its sides instead of doubling up on one.
         """
-        scene = instance_for(MODE_DETAIL).scene(host)
+        nodes, _edges, _by_key = self.model(host)
 
-        source = self._pick_port(host, scene, from_nid, from_index, bits, True)
-        target = self._pick_port(host, scene, to_nid, to_index, bits, False)
+        source = self._pick_port(host, nodes, from_nid, from_index, bits, True)
+        target = self._pick_port(host, nodes, to_nid, to_index, bits, False)
 
         if source is None or target is None:
             return []
@@ -1517,10 +1514,10 @@ class Minimap(object):
 
         return [link]
 
-    def _pick_port(self, host, scene, nid, index, bits, outputs):
+    def _pick_port(self, host, nodes, nid, index, bits, outputs):
         """The endpoint string for one end, choosing it when the device did not."""
         node = None
-        for candidate in scene.nodes:
+        for candidate in nodes:
             if candidate.nid == nid:
                 node = candidate
                 break
@@ -1550,16 +1547,16 @@ class Minimap(object):
     def links_between(self, host, from_nid, to_nid, bits=0):
         """The real port-to-port cables behind one line of the picture.
 
-        Taken from the detail scene, where the ports were never collapsed, so the
+        Taken from the model, where the ports were never collapsed, so the
         endpoints come back in exactly the form Host.disconnect() expects. Node ids are
         the mapper's instance ids and do not depend on the mode, so they match whatever
         the device is looking at.
         """
-        scene = instance_for(MODE_DETAIL).scene(host)
+        nodes, edges, _by_key = self.model(host)
         wanted = types_from_bits(bits)
 
         out = []
-        for e in scene.edges:
+        for e in edges:
             if e.etype not in wanted:
                 continue
             if e.src.nid != from_nid or e.dst.nid != to_nid:
@@ -1592,65 +1589,68 @@ class Minimap(object):
 
         Returns None, or the cables to take over and the canvas spot to sit in.
         """
-        if nid is None or nid == NO_NODE or channels < 1:
+        def decline(why, *args):
+            """Say why out loud: from the panel a refusal and a bug look the same."""
+            logging.info("[splice] box %s, %d channel(s): " + why, nid, channels, *args)
             return None
 
-        scene = instance_for(MODE_DETAIL).scene(host)
+        if nid is None or nid == NO_NODE or channels < 1:
+            return decline("nothing selected")
+
+        nodes, edges, _by_key = self.model(host)
 
         source = None
-        for node in scene.nodes:
+        for node in nodes:
             if node.nid == nid:
                 source = node
                 break
         if source is None:
-            return None
+            return decline("no such box")
 
-        outgoing = [e for e in scene.edges if e.src is source]
+        outgoing = [e for e in edges if e.src is source]
 
         # a box wired to nothing has no cable to be spliced into
         if not outgoing:
-            return None
+            return decline("it feeds nothing")
 
         # audio only: "the same number of channels" is an audio idea, and a chain
         # carrying MIDI or CV alongside it is not one to rearrange unasked
         if any(e.etype != TYPE_AUDIO for e in outgoing):
-            return None
+            return decline("what it feeds is not all audio")
+
+        sources = set(id(e.src_port) for e in outgoing)
+        sinks = set(id(e.dst_port) for e in outgoing)
+
+        # One port leaving the box is one signal, however many places it goes: the new box
+        # sits in front of the split and every destination hears what it heard. Several
+        # ports going to several boxes is not one chain but two, and threading a single box
+        # through both would merge paths the user kept apart.
+        one_signal = (len(sources) == 1)
 
         target = outgoing[0].dst
 
-        # fanning out means choosing which cable to take, which is the user's choice
-        if any(e.dst is not target for e in outgoing):
-            return None
         if target is source:
-            return None
+            return decline("it feeds itself")
 
-        # ... and a far end fed by more than us is a mixing point, not a chain
-        if any(e.src is not source for e in scene.edges if e.dst is target):
-            return None
+        # Several ports going to several boxes is not one chain but two, and threading a
+        # single box through both would merge paths the user kept apart. One signal is
+        # exempt: where it goes is not a choice anyone made.
+        if not one_signal and any(e.dst is not target for e in outgoing):
+            return decline("%d ports of it go to %d different boxes, which is two chains"
+                           " rather than one",
+                           len(sources), len(set(id(e.dst) for e in outgoing)))
+
+        # a far end fed by more than us is a mixing point, not a chain
+        if any(e.src is not source for e in edges if e.dst is target):
+            return decline("what it feeds is fed by others too, a mixing point")
 
         # A stereo box dropped into a single cable splits at its inputs and sums again at
-        # its outputs, which leaves the far box hearing what it heard before. Nothing else
-        # gets to differ: stereo into a mono plugin would have to fold two signals into one
-        # and throw the difference away, and that is a decision, not a default.
-        doubled = (channels == 2 and len(outgoing) == 1)
-
-        if not doubled and len(outgoing) != channels:
-            return None
-
-        # One side has to have a port for every cable, or there is nothing to pair the
-        # new box off against. Both sides do in a plain stereo run. A mono box feeding a
-        # stereo one repeats its single output across the two inputs, and there it is the
-        # far end that says which cable is which -- and the other way round for a stereo
-        # box summed into a mono one. Only a run that repeats ports at both ends at once
-        # is left alone, because then nothing in it names the channels.
-        sources = set(id(e.src_port) for e in outgoing)
-        sinks = set(id(e.dst_port) for e in outgoing)
-        if len(sources) != len(outgoing) and len(sinks) != len(outgoing):
-            return None
-
+        # its outputs, which leaves the far box hearing what it heard before. Stereo into a
+        # mono plugin is the one that stays refused: it would have to fold two signals into
+        # one and throw the difference away, and that is a decision, not a default.
         # left to right in the order the boxes declare their ports, so a stereo pair comes
         # out L to L and R to R rather than crossed. The far end breaks the tie when the
-        # near one repeats a port, which is the mono-into-stereo case above.
+        # near one repeats a port, which is what happens when one output feeds two inputs.
         from_order = dict((id(p), i) for i, p in enumerate(source.outputs))
         to_order = dict((id(p), i) for i, p in enumerate(target.inputs))
         outgoing.sort(key=lambda e: (from_order.get(id(e.src_port), 0),
@@ -1661,12 +1661,45 @@ class Minimap(object):
         cut = [(_endpoint(e.src, e.src_port), _endpoint(e.dst, e.dst_port))
                for e in outgoing]
 
-        # `cut` is the cables to drop and `links` the channels of the new box, one entry
-        # each. The two differ only for the split-and-sum above, where both channels come
-        # off the same cable and it must not be dropped twice.
+        """
+        The two sides worked out separately, and each simply adapted to however many
+        channels the new box has. There used to be a case for every shape -- a plain run, a
+        stereo box in a mono one, a fan out -- and they were all the same two questions
+        asked twice: what feeds each input, and where does each output go.
+
+        More ends than channels means they share one: two outputs into a mono plugin are
+        summed, and one output feeding four boxes leaves the new box feeding all four.
+        Fewer ends than channels means one end serves several: a mono output reaching a
+        stereo plugin arrives at both of its inputs.
+
+        Summing is a real change to the signal and the old rule refused it. It is what a
+        player expects when they drop a mono pedal into a stereo run, and editing the
+        cables afterwards is there for when it is not.
+        """
+        src_ends = []
+        for source_end, _t in cut:
+            if source_end not in src_ends:
+                src_ends.append(source_end)
+
+        dst_ends = []
+        for _s, target_end in cut:
+            if target_end not in dst_ends:
+                dst_ends.append(target_end)
+
+        if len(src_ends) >= channels:
+            feed = [(end, i % channels) for i, end in enumerate(src_ends)]
+        else:
+            feed = [(src_ends[i % len(src_ends)], i) for i in range(channels)]
+
+        if len(dst_ends) >= channels:
+            drain = [(i % channels, end) for i, end in enumerate(dst_ends)]
+        else:
+            drain = [(i, dst_ends[i % len(dst_ends)]) for i in range(channels)]
+
         return {
             'cut': cut,
-            'links': (cut + cut) if doubled else cut,
+            'feed': feed,
+            'drain': drain,
             'x': x,
             'y': y,
         }
@@ -1686,25 +1719,21 @@ class Minimap(object):
         if nid is None or nid == NO_NODE:
             return None
 
-        scene = instance_for(MODE_DETAIL).scene(host)
+        nodes, edges, _by_key = self.model(host)
 
         node = None
-        for candidate in scene.nodes:
+        for candidate in nodes:
             if candidate.nid == nid:
                 node = candidate
                 break
         if node is None:
             return None
 
-        incoming = [e for e in scene.edges if e.dst is node]
-        outgoing = [e for e in scene.edges if e.src is node]
+        incoming = [e for e in edges if e.dst is node]
+        outgoing = [e for e in edges if e.src is node]
 
         # at either end of a chain there is nothing on one side to join to the other
         if not incoming or not outgoing:
-            return None
-
-        # as many cables out as in, or which channel meets which is a guess
-        if len(incoming) != len(outgoing):
             return None
 
         if any(e.etype != TYPE_AUDIO for e in incoming):
@@ -1715,32 +1744,64 @@ class Minimap(object):
         source = incoming[0].src
         target = outgoing[0].dst
 
+        # one box on each side, or closing over it would join things that were never on
+        # the same path
         if any(e.src is not source for e in incoming):
-            return None
-        if any(e.dst is not target for e in outgoing):
             return None
         if source is target:
             return None
 
-        # our own ports are what number the channels, so each has to appear once
-        if len(set(id(e.dst_port) for e in incoming)) != len(incoming):
-            return None
-        if len(set(id(e.src_port) for e in outgoing)) != len(outgoing):
-            return None
-
+        # Several destination boxes are allowed where one endpoint feeds them all: that is
+        # a split, and putting it back where it was chooses nothing.
         into = dict((id(p), i) for i, p in enumerate(node.inputs))
         out_of = dict((id(p), i) for i, p in enumerate(node.outputs))
 
-        incoming.sort(key=lambda e: into.get(id(e.dst_port), 0))
-        outgoing.sort(key=lambda e: out_of.get(id(e.src_port), 0))
+        # Our own port first, then the endpoint at the other end as a tie break -- an
+        # object address would order these by where they happen to sit in memory, which
+        # reads as random and changes between runs.
+        incoming.sort(key=lambda e: (into.get(id(e.dst_port), 0),
+                                     _endpoint(e.src, e.src_port)))
+        outgoing.sort(key=lambda e: (out_of.get(id(e.src_port), 0),
+                                     _endpoint(e.dst, e.dst_port)))
 
-        # Channel by channel, and deduplicated: a stereo box between two mono ends carries
-        # both its channels on the same cable at either end, so closing over it is the one
-        # cable it was dropped into coming back.
+        src_ends = []
+        for e in incoming:
+            end = _endpoint(e.src, e.src_port)
+            if end not in src_ends:
+                src_ends.append(end)
+
+        dst_ends = []
+        for e in outgoing:
+            end = _endpoint(e.dst, e.dst_port)
+            if end not in dst_ends:
+                dst_ends.append(end)
+
+        # Several destination boxes are fine where one endpoint reaches them all -- that
+        # is a split, and putting it back chooses nothing -- and fine too where the box
+        # being removed is what made them differ, since without it they carry one signal.
+        # What stays refused is several sources: joining each of them to each destination
+        # would wire together paths that never met.
+
+        """
+        The ends paired off, the same way splice_plan shares them over the channels of the
+        box it puts in. Whichever side has more of them decides how many cables come back,
+        and the shorter side repeats.
+
+        This is what closes a summing box: stereo into a mono pedal into stereo has two
+        ends on each side, so taking the pedal out joins them in order and the run is
+        stereo again. It is a pairing by position, not a recovery -- once two signals have
+        been summed there is nothing left that says which went where -- but in every shape
+        splice_plan can produce, position is what they were.
+        """
+        if len(src_ends) >= len(dst_ends):
+            pairs = [(src_ends[i], dst_ends[i % len(dst_ends)])
+                     for i in range(len(src_ends))]
+        else:
+            pairs = [(src_ends[i % len(src_ends)], dst_ends[i])
+                     for i in range(len(dst_ends))]
+
         links = []
-        for feed, drain in zip(incoming, outgoing):
-            link = (_endpoint(feed.src, feed.src_port),
-                    _endpoint(drain.dst, drain.dst_port))
+        for link in pairs:
             if link not in links:
                 links.append(link)
 
@@ -1784,7 +1845,7 @@ class Minimap(object):
             'version': self._version,
             'width': scene.width,
             'height': scene.height,
-            'view': [MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT],
+            'view': [PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT],
             'nodes': len(scene.nodes),
             'plugins': scene.plugin_count,
             'edges': len(scene.edges),
@@ -1798,7 +1859,7 @@ class Minimap(object):
 def parse_layers(spec):
     """'audio,midi' -> frozenset('a','m'). None means the configured default."""
     if spec is None:
-        spec = MINIMAP_LAYERS
+        spec = PLUGIN_MAP_LAYERS
     if isinstance(spec, (set, frozenset, tuple, list)):
         return frozenset(spec)
 
@@ -1822,18 +1883,5 @@ def layers_to_str(mask):
     return ''.join(t for t in _ALL_TYPES if t in mask) or '-'
 
 
-# One instance per representation, each holding its own cached scene: the HMI and
-# the browser debug view can ask for different pictures without evicting each other.
-_INSTANCES = {}
-
-
-def instance_for(mode=None):
-    name = normalize_mode(mode)
-    inst = _INSTANCES.get(name)
-    if inst is None:
-        inst = Minimap(name)
-        _INSTANCES[name] = inst
-    return inst
-
-
-INSTANCE = instance_for(MINIMAP_MODE)
+# One picture, one instance, holding the cached scene and the cached model behind it.
+INSTANCE = PluginMap()

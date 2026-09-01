@@ -2,26 +2,26 @@
 # SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Cross-check the firmware minimap renderer against the mod-ui reference one.
+"""Cross-check the firmware plugin_map renderer against the mod-ui reference one.
 
 Both sides are fed the *same* display list and must produce the same 128x64
 panel, pixel for pixel:
 
-    mod/minimap.py  --display list-->  mod/minimap_render.py   (reference)
-                                   \\->  app/src/minimap.c      (firmware)
+    mod/plugin_map.py  --display list-->  mod/plugin_map_render.py   (reference)
+                                   \\->  app/src/plugin_map.c      (firmware)
 
-Without this the two renderers can drift apart silently: test_minimap.py only
+Without this the two renderers can drift apart silently: test_plugin_map.py only
 checks that the display list is well formed, and the firmware harness only
 checks that it does not crash. Here the two pictures are diffed.
 
-The firmware side runs through test/minimap_host_test.c, which reads a display
+The firmware side runs through test/plugin_map_host_test.c, which reads a display
 list on stdin and prints the panel as ASCII art. It only builds on Linux, so on
 Windows everything past the display list is shipped into WSL in one go.
 
-    python test/minimap_crosscheck.py               # build and compare
-    python test/minimap_crosscheck.py --no-build    # reuse the built harness
-    python test/minimap_crosscheck.py -s linear     # one scenario
-    python test/minimap_crosscheck.py -v            # show both panels on failure
+    python test/plugin_map_crosscheck.py               # build and compare
+    python test/plugin_map_crosscheck.py --no-build    # reuse the built harness
+    python test/plugin_map_crosscheck.py -s linear     # one scenario
+    python test/plugin_map_crosscheck.py -v            # show both panels on failure
 """
 
 import argparse
@@ -35,20 +35,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # importing the test module installs the fake plugin info provider and gives us
 # the very same scenarios the display list tests run against
-import test_minimap
-from mod import minimap
-from mod import minimap_render
-from mod.minimap import KIND_PLUGIN, RECORD_SEP
-from mod.settings import MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT, MINIMAP_WIN_PLUGINS
+import test_plugin_map
+from mod import plugin_map
+from mod import plugin_map_render
+from mod.plugin_map import KIND_PLUGIN, RECORD_SEP
+from mod.settings import PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT, PLUGIN_MAP_WIN_PLUGINS
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_FIRMWARE = os.path.normpath(os.path.join(REPO, '..', 'mod-dwarf-controller'))
 
-# test/minimap_host_test.c reads into a fixed buffer; a longer display list
+# test/plugin_map_host_test.c reads into a fixed buffer; a longer display list
 # would be silently truncated and the diff would be meaningless
 HARNESS_BUFFER = 8192
 
-HARNESS_BIN = '/tmp/minimap_test'
+HARNESS_BIN = '/tmp/plugin_map_test'
 
 BUILD = r'''
 set -e
@@ -57,7 +57,7 @@ cd %(fw)s
 gcc -std=gnu99 -Wall -Wextra -Inxp-lpc -Iapp/inc -Idrivers/inc -Ifreertos/inc \
     -Imod-controller-proto -Inxp-lpc/CMSISv2p00_LPC177x_8xLib/inc \
     -Inxp-lpc/LPC177x_8xLib/inc \
-    test/minimap_host_test.c app/src/minimap.c app/src/glcd_clip.c \
+    test/plugin_map_host_test.c app/src/plugin_map.c app/src/glcd_clip.c \
     -o %(bin)s
 '''
 
@@ -79,23 +79,23 @@ def to_posix_path(path):
 # ---------------------------------------------------------------------------
 
 def read_limits(firmware):
-    """The MINIMAP_MAX_* caps, read out of app/inc/minimap.h.
+    """The PLUGIN_MAP_MAX_* caps, read out of app/inc/plugin_map.h.
 
     A display list that overflows the firmware's fixed arrays is truncated on
     arrival, so the two renderers legitimately draw different pictures. Reading
     the numbers instead of hardcoding them keeps this honest when they change.
     """
     limits = {'NODES': 24, 'PORTS': 72, 'EDGES': 48, 'POINTS': 8}
-    header = os.path.join(firmware, 'app', 'inc', 'minimap.h')
+    header = os.path.join(firmware, 'app', 'inc', 'plugin_map.h')
     if not os.path.exists(header):
         return limits
 
     with open(header, 'r', errors='replace') as fh:
         for line in fh:
             fields = line.split()
-            if len(fields) >= 3 and fields[0] == '#define' and fields[1].startswith('MINIMAP_MAX_'):
+            if len(fields) >= 3 and fields[0] == '#define' and fields[1].startswith('PLUGIN_MAP_MAX_'):
                 try:
-                    limits[fields[1][len('MINIMAP_MAX_'):]] = int(fields[2])
+                    limits[fields[1][len('PLUGIN_MAP_MAX_'):]] = int(fields[2])
                 except ValueError:
                     pass
     return limits
@@ -123,9 +123,9 @@ def capacity_reason(text, limits):
     for kind, key, label in (('N', 'NODES', 'nodes'), ('P', 'PORTS', 'ports'),
                              ('E', 'EDGES', 'edges')):
         if counts[kind] > limits[key]:
-            return '%d %s, over MINIMAP_MAX_%s (%d)' % (counts[kind], label, key, limits[key])
+            return '%d %s, over PLUGIN_MAP_MAX_%s (%d)' % (counts[kind], label, key, limits[key])
     if longest > limits['POINTS']:
-        return 'a cable has %d points, over MINIMAP_MAX_POINTS (%d)' % (longest, limits['POINTS'])
+        return 'a cable has %d points, over PLUGIN_MAP_MAX_POINTS (%d)' % (longest, limits['POINTS'])
     return None
 
 
@@ -205,7 +205,7 @@ class Runner(object):
 # ---------------------------------------------------------------------------
 
 def scroll_range(span, extent):
-    """What minimap_scroll() will clamp an offset to, on this axis.
+    """What plugin_map_scroll() will clamp an offset to, on this axis.
 
     A scene smaller than the viewport is centred rather than pinned to zero, so the
     range collapses onto a single negative offset. C truncates towards zero on the
@@ -225,8 +225,8 @@ def pan_offsets(width, height):
     Clipping only misbehaves at the edges, so the corners are where the two
     renderers are most likely to disagree.
     """
-    min_x, max_x = scroll_range(width, MINIMAP_VIEW_WIDTH)
-    min_y, max_y = scroll_range(height, MINIMAP_VIEW_HEIGHT)
+    min_x, max_x = scroll_range(width, PLUGIN_MAP_VIEW_WIDTH)
+    min_y, max_y = scroll_range(height, PLUGIN_MAP_VIEW_HEIGHT)
     candidates = [(min_x, min_y), (max_x, min_y), (min_x, max_y), (max_x, max_y),
                   ((min_x + max_x) // 2, (min_y + max_y) // 2)]
     out = []
@@ -251,7 +251,7 @@ def focus_keys(scene):
 
 def add_case(cases, tag, text, scene, offsets):
     for offset_x, offset_y in offsets:
-        argv = [0, 0, MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT, 0, offset_x, offset_y]
+        argv = [0, 0, PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT, 0, offset_x, offset_y]
         cases.append(('%s@%d,%d' % (tag, offset_x, offset_y), text, argv, scene))
 
 
@@ -265,15 +265,15 @@ def build_cases(names, limits):
     """
     cases = []
     skipped = []
-    for name, factory in test_minimap.SCENARIOS:
+    for name, factory in test_plugin_map.SCENARIOS:
         if names and name not in names:
             continue
 
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
 
         text, _ = mm.render(host)
-        scene = minimap_render.parse_displaylist(text)
+        scene = plugin_map_render.parse_displaylist(text)
         offsets = pan_offsets(scene.width, scene.height)
 
         reason = capacity_reason(text, limits)
@@ -283,12 +283,12 @@ def build_cases(names, limits):
             skipped.append(('full ' + name, reason))
 
         for key in focus_keys(mm.scene(host)):
-            focused, _ = mm.render(host, focus=key, budget=MINIMAP_WIN_PLUGINS)
+            focused, _ = mm.render(host, focus=key, budget=PLUGIN_MAP_WIN_PLUGINS)
             reason = capacity_reason(focused, limits)
             if reason is not None:
                 skipped.append(('focus %s/%s' % (name, key), reason))
                 continue
-            windowed = minimap_render.parse_displaylist(focused)
+            windowed = plugin_map_render.parse_displaylist(focused)
             # a window keeps the full scene bounds, so it pans over the same area
             add_case(cases, 'focus %s/%s' % (name, key), focused, windowed, offsets)
 
@@ -300,12 +300,12 @@ def build_cases(names, limits):
 # ---------------------------------------------------------------------------
 
 def side_by_side(left, right, title_left, title_right):
-    out = ['%-*s   %s' % (MINIMAP_VIEW_WIDTH, title_left, title_right)]
+    out = ['%-*s   %s' % (PLUGIN_MAP_VIEW_WIDTH, title_left, title_right)]
     for index in range(max(len(left), len(right))):
         a = left[index] if index < len(left) else ''
         b = right[index] if index < len(right) else ''
         mark = ' ' if a == b else '!'
-        out.append('%-*s %s %s' % (MINIMAP_VIEW_WIDTH, a, mark, b))
+        out.append('%-*s %s %s' % (PLUGIN_MAP_VIEW_WIDTH, a, mark, b))
     return '\n'.join(out)
 
 
@@ -348,7 +348,7 @@ def main():
                         help='print both panels side by side on a mismatch')
     args = parser.parse_args()
 
-    if not minimap_render.available():
+    if not plugin_map_render.available():
         print('Pillow is missing: the reference renderer cannot rasterise anything.')
         return 2
 
@@ -386,11 +386,11 @@ def main():
             continue
 
         # the harness zeroes the offset and scrolls by exactly what we asked;
-        # minimap_scroll() clamps to the range scroll_range() mirrors and
+        # plugin_map_scroll() clamps to the range scroll_range() mirrors and
         # pan_offsets() never leaves it, so the pan it lands on is the pan we
         # requested. (The offset the harness prints on stderr is the pre-scroll one.)
-        crop = (argv[5], argv[6], MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT)
-        reference = minimap_render.to_ascii(scene, crop=crop, layers='all').split('\n')
+        crop = (argv[5], argv[6], PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT)
+        reference = plugin_map_render.to_ascii(scene, crop=crop, layers='all').split('\n')
         actual = [line for line in got['out'] if line]
 
         ok, detail = compare(reference, actual, args.verbose)

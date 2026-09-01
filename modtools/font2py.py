@@ -19,7 +19,7 @@ A pixel (x, y) of a glyph is bit (y % 8) of data[(y // 8) * glyph_width + x].
 Run at development time; the generated module is committed so the runtime never
 parses the header.
 
-    python3 -m modtools.font2py <fonts.h> Terminal3x5 -o mod/minimap_font.py
+    python3 -m modtools.font2py <fonts.h> Terminal3x5 -o mod/plugin_map_font.py
 """
 
 import argparse
@@ -134,7 +134,7 @@ HEADER = '''#!/usr/bin/env python3
 # GENERATED FILE - do not edit by hand.
 # Produced by modtools/font2py.py from the HMI firmware's fonts.h.
 # Regenerate with:
-#     python3 -m modtools.font2py <fonts.h> %(name)s -o mod/minimap_font.py
+#     python3 -m modtools.font2py <fonts.h> %(name)s -o mod/plugin_map_font.py
 #
 # Font %(name)s: %(width)dx%(height)d, %(spacing)s, %(count)d glyphs from 0x%(first)02X.
 # Each glyph is a tuple of column bitmasks; bit N of a column means row N is lit.

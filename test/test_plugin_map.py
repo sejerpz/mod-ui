@@ -2,15 +2,15 @@
 # SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Standalone checks for the pedalboard minimap.
+"""Standalone checks for the pedalboard plugin_map.
 
 Runs without JACK, LV2 or mod-host: a FakeHost mirrors the real Host attributes
 and get_plugin_info is stubbed, so this works on a plain desktop checkout.
 
-    python test/test_minimap.py                 # run everything
-    python test/test_minimap.py --out DIR       # also write reference PNGs
-    python test/test_minimap.py --check-compat  # Python 3.4 syntax audit
-    python test/test_minimap.py --show NAME     # ASCII art for one scenario
+    python test/test_plugin_map.py                 # run everything
+    python test/test_plugin_map.py --out DIR       # also write reference PNGs
+    python test/test_plugin_map.py --check-compat  # Python 3.4 syntax audit
+    python test/test_plugin_map.py --show NAME     # ASCII art for one scenario
 """
 
 import argparse
@@ -22,11 +22,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mod import minimap
-from mod import minimap_font as font
-from mod.settings import (MINIMAP_MAX_MSG, MINIMAP_WIN_PLUGINS, MINIMAP_MAX_MENU,
-                          MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT,
-                          MINIMAP_HMI_VIEW_WIDTH, MINIMAP_HMI_VIEW_HEIGHT)
+from mod import plugin_map
+from mod import plugin_map_font as font
+from mod.settings import (PLUGIN_MAP_MAX_MSG, PLUGIN_MAP_WIN_PLUGINS, PLUGIN_MAP_MAX_MENU,
+                          PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT,
+                          PLUGIN_MAP_HMI_VIEW_WIDTH, PLUGIN_MAP_HMI_VIEW_HEIGHT)
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ from mod.settings import (MINIMAP_MAX_MSG, MINIMAP_WIN_PLUGINS, MINIMAP_MAX_MENU
 # ---------------------------------------------------------------------------
 
 class FakeHost(object):
-    """Mirrors the attributes mod/minimap.py reads off the real Host."""
+    """Mirrors the attributes mod/plugin_map.py reads off the real Host."""
 
     def __init__(self):
         self.plugins = {}
@@ -93,7 +93,7 @@ def fake_plugin_info(uri):
     return {'ports': ports}
 
 
-minimap.set_plugin_info_provider(fake_plugin_info)
+plugin_map.set_plugin_info_provider(fake_plugin_info)
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ SCENARIOS = [
 
 def parse_displaylist(text):
     out = {'M': None, 'N': [], 'P': [], 'E': [], 'A': []}
-    for line in text.split(minimap.RECORD_SEP):
+    for line in text.split(plugin_map.RECORD_SEP):
         line = line.strip()
         if not line:
             continue
@@ -351,7 +351,7 @@ def check_font(r):
 
 
 def check_scenario(r, name, host, out_dir):
-    mm = minimap.Minimap()
+    mm = plugin_map.PluginMap()
     text, version = mm.render(host)
     dl = parse_displaylist(text)
     scene = mm.scene(host)
@@ -444,7 +444,7 @@ def check_scenario(r, name, host, out_dir):
             'got %d' % scene.plugin_count)
 
     # determinism: same graph, rebuilt from scratch
-    mm2 = minimap.Minimap()
+    mm2 = plugin_map.PluginMap()
     text2, _ = mm2.render(host)
     r.check(strip_version(text) == strip_version(text2),
             '%s: render is deterministic' % prefix)
@@ -466,19 +466,19 @@ def check_wire_sufficiency(r):
     only discover that once the firmware existed.
     """
     try:
-        from mod import minimap_render
+        from mod import plugin_map_render
     except ImportError:
         return
-    if not minimap_render.available():
+    if not plugin_map_render.available():
         return
 
     for name, factory in SCENARIOS:
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
         text, _ = mm.render(host)
 
-        from_scene = minimap_render.render(mm.scene(host))
-        from_wire = minimap_render.render_displaylist(text)
+        from_scene = plugin_map_render.render(mm.scene(host))
+        from_wire = plugin_map_render.render_displaylist(text)
 
         if from_scene is None or from_wire is None:
             continue
@@ -515,7 +515,7 @@ def check_insertion_order(r):
     # were created in a different order. What must not differ is the geometry: same graph,
     # same picture.
     def geometry(host):
-        dl = parse_displaylist(minimap.Minimap().render(host)[0])
+        dl = parse_displaylist(plugin_map.PluginMap().render(host)[0])
         return sorted((n['x'], n['y'], n['w'], n['h'], n['label']) for n in dl['N'])
 
     ga = geometry(build(['aa', 'bb', 'cc']))
@@ -528,7 +528,7 @@ def check_insertion_order(r):
 def check_layers(r):
     """Layer masks must hide cables without ever moving a box."""
     host = sc_mixed_types()
-    mm = minimap.Minimap()
+    mm = plugin_map.PluginMap()
 
     rects = {}
     for spec in ('audio,midi,cv', 'audio', 'midi', 'cv', 'none', 'audio,midi'):
@@ -558,9 +558,9 @@ def check_windowing(r):
     for name, factory in (('stress-40', sc_stress), ('islands', sc_islands),
                           ('stereo-split', sc_stereo_split)):
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
         scene = mm.scene(host)
-        plugins = [n for n in scene.nodes if n.kind == minimap.KIND_PLUGIN]
+        plugins = [n for n in scene.nodes if n.kind == plugin_map.KIND_PLUGIN]
         if not plugins:
             continue
 
@@ -568,12 +568,12 @@ def check_windowing(r):
         text, _ = mm.render(host, focus=focus)
         dl = parse_displaylist(text)
 
-        r.check(len(text) <= MINIMAP_MAX_MSG,
+        r.check(len(text) <= PLUGIN_MAP_MAX_MSG,
                 'window %s: message fits the firmware 4K buffer' % name,
                 '%d bytes' % len(text))
 
-        win_plugins = [n for n in dl['N'] if n['kind'] == minimap.KIND_PLUGIN]
-        r.check(len(win_plugins) <= MINIMAP_WIN_PLUGINS,
+        win_plugins = [n for n in dl['N'] if n['kind'] == plugin_map.KIND_PLUGIN]
+        r.check(len(win_plugins) <= PLUGIN_MAP_WIN_PLUGINS,
                 'window %s: plugin budget respected' % name,
                 '%d plugins' % len(win_plugins))
 
@@ -652,7 +652,7 @@ def check_windowing(r):
 def check_caching(r):
     """The fingerprint must skip work when nothing changed, and notice when it does."""
     host = sc_linear()
-    mm = minimap.Minimap()
+    mm = plugin_map.PluginMap()
 
     _, v1 = mm.render(host)
     _, v2 = mm.render(host)
@@ -677,9 +677,9 @@ def check_caching(r):
 
 
 def check_hmi_request(r):
-    """The CMD_DWARF_BUILDER_MINIMAP round trip, without importing mod.host.
+    """The CMD_BUILDER_PLUGIN_MAP round trip, without importing mod.host.
 
-    Mirrors what Host.hmi_builder_minimap does: pick a focus, render, hand the
+    Mirrors what Host.hmi_builder_plugin_map does: pick a focus, render, hand the
     text back as the command response. What matters here is that the answer is
     something one HMI message can carry, and that every node the firmware
     could name back resolves to a focus -- that pair is what makes panning
@@ -687,7 +687,7 @@ def check_hmi_request(r):
     """
     for name, factory in SCENARIOS:
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
         scene = mm.scene(host)
 
         # FLAG_PAGINATION_INITIAL_REQ: no node named yet, the server picks one
@@ -696,7 +696,7 @@ def check_hmi_request(r):
                 'hmi %s: initial request has a focus' % name)
 
         text, version = mm.render(host, focus=focus)
-        r.check(len(text) <= MINIMAP_MAX_MSG,
+        r.check(len(text) <= PLUGIN_MAP_MAX_MSG,
                 'hmi %s: initial window fits one message' % name, len(text))
         r.check(version > 0, 'hmi %s: response carries a version' % name, version)
 
@@ -719,7 +719,7 @@ def check_hmi_request(r):
 
         for node in records['N']:
             follow, _ = mm.render(host, focus=mm.key_for_id(scene, node['nid']))
-            if len(follow) > MINIMAP_MAX_MSG:
+            if len(follow) > PLUGIN_MAP_MAX_MSG:
                 r.check(False, 'hmi %s: window around node %d fits one message'
                         % (name, node['nid']), len(follow))
                 break
@@ -731,12 +731,31 @@ def check_hmi_request(r):
                 'hmi %s: unknown node id resolves to nothing' % name)
 
         # The sign of an id is what tells a plugin from a piece of hardware, and
-        # hmi_builder_remove leans on it: capture and playback are drawn like everything
+        # hmi_builder_plugin_delete leans on it: capture and playback are drawn like everything
         # else but are not on the board, and a delete must never reach them.
         wrong = [n.key for n in scene.nodes
-                 if (n.nid < 0) != (n.kind != minimap.KIND_PLUGIN)]
+                 if (n.nid < 0) != (n.kind != plugin_map.KIND_PLUGIN)]
         r.check(not wrong,
                 'hmi %s: only hardware takes a negative id' % name, wrong[:3])
+
+
+def spliced(plan, ins, outs):
+    """The wiring a plan produces, the way Host._splice_plugin lays it.
+
+    Asserting on this rather than on the plan's own lists: what matters is which cable
+    ends up where, and the two sides of the plan differ in length as soon as a box fans
+    out or a stereo one goes into a mono run.
+    """
+    out = []
+    for source, channel in plan['feed']:
+        out.append((source, 'new/' + ins[channel]))
+    for channel, target in plan['drain']:
+        out.append(('new/' + outs[channel], target))
+    return out
+
+
+MONO = (['in'], ['out'])
+STEREO = (['in_l', 'in_r'], ['out_l', 'out_r'])
 
 
 def check_splice(r):
@@ -747,7 +766,7 @@ def check_splice(r):
     rearranges a board the user did not want rearranged costs far more than the wiring it
     saved, so everything below the first two cases has to come back with nothing.
     """
-    mm = minimap.instance_for(minimap.MODE_COMPACT)
+    mm = plugin_map.INSTANCE
 
     # -- mono, the plain case: one cable, taken over ---------------------------------
     host = FakeHost()
@@ -759,37 +778,37 @@ def check_splice(r):
     plan = mm.splice_plan(host, ids[gain], 1)
 
     r.check(plan is not None, 'splice: a lone cable is spliceable')
-    r.check(plan and plan['links'] == [(gain + '/out', amp + '/in')],
-            'splice: the cable to take over is the one between the two', plan)
+    r.check(plan and spliced(plan, *MONO) == [(gain + '/out', 'new/in'),
+                                              ('new/out', amp + '/in')],
+            'splice: the cable to take over is the one between the two',
+            plan and spliced(plan, *MONO))
     r.check(plan and (plan['x'], plan['y']) == (300, 40),
             'splice: the new box lands between the two it comes between', plan)
-    r.check(plan and plan['cut'] == plan['links'],
-            'splice: with a channel per cable there is nothing to double', plan)
+    r.check(plan and len(plan['feed']) == 1 and len(plan['drain']) == 1,
+            'splice: with a channel per cable there is one of each side', plan)
 
     # -- a stereo box between two mono ends: split in, sum out ------------------------
     plan = mm.splice_plan(host, ids[gain], 2)
 
     r.check(plan and plan['cut'] == [(gain + '/out', amp + '/in')],
             'splice: the one cable is dropped once, not once per channel', plan)
-    r.check(plan and plan['links'] == [(gain + '/out', amp + '/in')] * 2,
-            'splice: and both channels of the new box come off it', plan)
+    r.check(plan and spliced(plan, *STEREO) == [
+                (gain + '/out', 'new/in_l'), (gain + '/out', 'new/in_r'),
+                ('new/out_l', amp + '/in'), ('new/out_r', amp + '/in')],
+            'splice: and both channels of the new box come off it',
+            plan and spliced(plan, *STEREO))
 
     # what the far box hears has to be what it heard: the cable feeds both inputs and
     # both outputs meet the one input again, so the split and the sum cancel
-    wired = []
-    for index, link in enumerate(plan['links']):
-        source, target = link
-        wired.append((source, 'IN%d' % index))
-        wired.append(('OUT%d' % index, target))
+    r.check(plan and plan['cut'] == [(gain + '/out', amp + '/in')],
+            'splice: which is one cable dropped, not one per channel', plan)
 
-    r.check(wired == [(gain + '/out', 'IN0'), ('OUT0', amp + '/in'),
-                      (gain + '/out', 'IN1'), ('OUT1', amp + '/in')],
-            'splice: which is one cable into each input and each output into the far one',
-            wired)
-
-    # four channels off one cable is not a split anyone asked for
-    r.check(mm.splice_plan(host, ids[gain], 4) is None,
-            'splice: only stereo splits a single cable')
+    # and a box with more channels than the run has ends simply gets them all off it
+    plan = mm.splice_plan(host, ids[gain], 4)
+    r.check(plan and [c for _e, c in plan['feed']] == [0, 1, 2, 3],
+            'splice: every channel of a wider box is fed from the one cable', plan)
+    r.check(plan and set(e for _c, e in plan['drain']) == set([amp + '/in']),
+            'splice: and all of them come back together at the far end', plan)
 
     # -- stereo, where the pairing has to come out straight ---------------------------
     host = FakeHost()
@@ -802,20 +821,25 @@ def check_splice(r):
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
     plan = mm.splice_plan(host, ids[left], 2)
 
-    r.check(plan and plan['links'] == [(left + '/out_l', right + '/in_l'),
-                                       (left + '/out_r', right + '/in_r')],
-            'splice: a stereo pair is taken over left to left', plan)
-    r.check(plan and plan['cut'] == plan['links'],
-            'splice: two cables, two channels, nothing doubled', plan)
+    r.check(plan and spliced(plan, *STEREO) == [
+                (left + '/out_l', 'new/in_l'), (left + '/out_r', 'new/in_r'),
+                ('new/out_l', right + '/in_l'), ('new/out_r', right + '/in_r')],
+            'splice: a stereo pair is taken over left to left',
+            plan and spliced(plan, *STEREO))
     r.check(plan and (plan['x'], plan['y']) == (100, 20),
             'splice: stereo lands halfway too', plan)
 
     # a mono plugin has no shape to take a stereo cable over with, and the other way round
-    # folding two signals into one throws the difference away: a decision, not a default
-    r.check(mm.splice_plan(host, ids[left], 1) is None,
-            'splice: a mono plugin is not spliced into a stereo cable')
-    r.check(mm.splice_plan(host, ids[left], 4) is None,
-            'splice: nor a four channel one')
+    # A mono plugin in a stereo run sums the two ends into its one input and hands the
+    # result to both. That is a real change to the signal, and it is what a player means
+    # when they drop a mono pedal into a stereo path; editing the cables is there for the
+    # times it is not.
+    plan = mm.splice_plan(host, ids[left], 1)
+    r.check(plan and spliced(plan, *MONO) == [
+                (left + '/out_l', 'new/in'), (left + '/out_r', 'new/in'),
+                ('new/out', right + '/in_l'), ('new/out', right + '/in_r')],
+            'splice: a mono plugin sums a stereo run rather than refusing it',
+            plan and spliced(plan, *MONO))
 
     # -- a mono box feeding a stereo one over two cables ------------------------------
     # Two cables leaving one output: the run is stereo even though the near end is not,
@@ -830,13 +854,23 @@ def check_splice(r):
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
     plan = mm.splice_plan(host, ids[drive], 2)
 
-    r.check(plan and plan['links'] == [(drive + '/out', verb + '/in_l'),
-                                       (drive + '/out', verb + '/in_r')],
-            'splice: a mono output feeding a stereo box is a two channel run', plan)
+    r.check(plan and spliced(plan, *STEREO) == [
+                (drive + '/out', 'new/in_l'), (drive + '/out', 'new/in_r'),
+                ('new/out_l', verb + '/in_l'), ('new/out_r', verb + '/in_r')],
+            'splice: a mono output feeding a stereo box is a two channel run',
+            plan and spliced(plan, *STEREO))
 
-    # ... and a mono plugin still has no business in a two cable run
-    r.check(mm.splice_plan(host, ids[drive], 1) is None,
-            'splice: one channel does not fit two cables')
+    # -- the same run with a mono plugin: one signal in, the same fan out again ---------
+    # One output feeding several places is carrying one signal however many places it
+    # goes, so a one channel plugin sits in front of the split rather than being refused.
+    plan = mm.splice_plan(host, ids[drive], 1)
+    r.check(plan and spliced(plan, *MONO) == [
+                (drive + '/out', 'new/in'),
+                ('new/out', verb + '/in_l'), ('new/out', verb + '/in_r')],
+            'splice: a mono plugin goes in front of a fan out, not into it',
+            plan and spliced(plan, *MONO))
+    r.check(plan and len(plan['cut']) == 2,
+            'splice: and both cables of the fan out are taken over', plan)
 
     # the other way round: a stereo box summed into a mono one
     host = FakeHost()
@@ -847,9 +881,11 @@ def check_splice(r):
 
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
     plan = mm.splice_plan(host, ids[wide], 2)
-    r.check(plan and plan['links'] == [(wide + '/out_l', sum_in + '/in'),
-                                       (wide + '/out_r', sum_in + '/in')],
-            'splice: and a stereo box summed into a mono one is one as well', plan)
+    r.check(plan and spliced(plan, *STEREO) == [
+                (wide + '/out_l', 'new/in_l'), (wide + '/out_r', 'new/in_r'),
+                ('new/out_l', sum_in + '/in'), ('new/out_r', sum_in + '/in')],
+            'splice: and a stereo box summed into a mono one is one as well',
+            plan and spliced(plan, *STEREO))
 
     # a run that repeats ports at both ends has nothing left to name its channels with
     host = FakeHost()
@@ -859,9 +895,24 @@ def check_splice(r):
     host.connect(fat + '/o1', pair + '/in_r')
     host.connect(fat + '/o2', pair + '/in_r')
 
+    # three cables off two ports into two ports: the ends are shared out over the
+    # channels rather than the whole thing being refused
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
-    r.check(mm.splice_plan(host, ids[fat], 3) is None,
-            'splice: a run that repeats ports at both ends names no channels')
+    plan = mm.splice_plan(host, ids[fat], 3)
+    r.check(plan is not None,
+            'splice: cables that repeat ports are shared out over the channels')
+
+    # The invariant that has to hold whatever the shape: a spliced box has every one of
+    # its channels fed and every one drained. A channel left dangling is silence on it.
+    for channels in (1, 2, 3, 4):
+        p = mm.splice_plan(host, ids[fat], channels)
+        if p is None:
+            continue
+        fed = set(c for _e, c in p['feed'])
+        drained = set(c for c, _e in p['drain'])
+        r.check(fed == set(range(channels)) and drained == set(range(channels)),
+                'splice: with %d channels every one is fed and drained' % channels,
+                (sorted(fed), sorted(drained)))
 
     # -- hardware at either end still has a spot to aim at ----------------------------
     host = FakeHost()
@@ -887,8 +938,15 @@ def check_splice(r):
     host.connect(head + '/out', two + '/in')
 
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
-    r.check(mm.splice_plan(host, ids[head], 1) is None,
-            'splice: a box that fans out is left alone')
+
+    # One output feeding two boxes is still one signal, and a one channel plugin goes in
+    # front of the split. Which destinations they are does not come into it.
+    plan = mm.splice_plan(host, ids[head], 1)
+    r.check(plan and spliced(plan, *MONO) == [
+                (head + '/out', 'new/in'),
+                ('new/out', one + '/in'), ('new/out', two + '/in')],
+            'splice: a fan out to several boxes is still one signal',
+            plan and spliced(plan, *MONO))
     r.check(mm.splice_plan(host, ids[one], 1) is None,
             'splice: a box wired to nothing has no cable to be spliced into')
 
@@ -902,6 +960,21 @@ def check_splice(r):
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
     r.check(mm.splice_plan(host, ids[a], 1) is None,
             'splice: a far end that sums two sources is a mixing point, not a chain')
+
+    # ... but a box fanning out from two DIFFERENT ports is carrying two signals, and
+    # which of them the new box would sit in is a choice nobody made
+    host = FakeHost()
+    wide = host.add('wide', 'urn:test:stereo')
+    left = host.add('left', 'urn:test:mono')
+    right = host.add('right', 'urn:test:mono')
+    host.connect(wide + '/out_l', left + '/in')
+    host.connect(wide + '/out_r', right + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    r.check(mm.splice_plan(host, ids[wide], 1) is None,
+            'splice: two ports going two ways is a choice, and is left alone')
+    r.check(mm.splice_plan(host, ids[wide], 2) is None,
+            'splice: whatever the new box has to offer')
 
     host = FakeHost()
     host.midiports = [('/graph/serial_midi_in', 'MIDI', '')]
@@ -928,7 +1001,7 @@ def check_splice(r):
 
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
     plan = mm.splice_plan(host, ids[gain], 1)
-    r.check(plan and all(link in host.connections for link in plan['links']),
+    r.check(plan and all(link in host.connections for link in plan['cut']),
             'splice: the cables named are cables the host actually holds', plan)
 
 
@@ -939,7 +1012,7 @@ def check_unsplice(r):
     inverse: splicing a box into a chain and then removing it again has to leave the
     board exactly as it started, whichever of the three shapes the splice took.
     """
-    mm = minimap.instance_for(minimap.MODE_COMPACT)
+    mm = plugin_map.INSTANCE
 
     def board(kinds, cables):
         host = FakeHost()
@@ -982,19 +1055,30 @@ def check_unsplice(r):
             'unsplice: the split and the sum collapse back to the one cable', plan)
 
     # -- and the round trip, which is the whole point ----------------------------------
-    for label, uri, wiring in (
-            ('mono', 'urn:test:mono',
-             [(('gain', 'out'), ('amp', 'in'))]),
-            ('stereo', 'urn:test:stereo',
-             [(('gain', 'out_l'), ('amp', 'in_l')), (('gain', 'out_r'), ('amp', 'in_r'))]),
-            ('split', 'urn:test:stereo',
-             [(('gain', 'out'), ('amp', 'in'))])):
+    MONO, STEREO_URI = 'urn:test:mono', 'urn:test:stereo'
 
-        ends = 'urn:test:stereo' if label == 'stereo' else 'urn:test:mono'
-        host, names, ids = board([('gain', ends), ('amp', ends)], wiring)
+    # label, what is being inserted, the two ends, the wiring between them
+    for label, uri, ends, wiring in (
+            ('mono', MONO, (MONO, MONO),
+             [(('gain', 'out'), ('amp', 'in'))]),
+            ('stereo', STEREO_URI, (STEREO_URI, STEREO_URI),
+             [(('gain', 'out_l'), ('amp', 'in_l')), (('gain', 'out_r'), ('amp', 'in_r'))]),
+            ('split', STEREO_URI, (MONO, MONO),
+             [(('gain', 'out'), ('amp', 'in'))]),
+            # one output feeding both inputs of a stereo box, with a mono plugin going in
+            # front of the split: the shape the device was refusing to splice at all
+            ('fanned', MONO, (MONO, STEREO_URI),
+             [(('gain', 'out'), ('amp', 'in_l')), (('gain', 'out'), ('amp', 'in_r'))]),
+            # a mono pedal in a stereo run: summed on the way in, split again on the way
+            # out, and taking it back out has to leave the run stereo as it found it
+            ('summed', MONO, (STEREO_URI, STEREO_URI),
+             [(('gain', 'out_l'), ('amp', 'in_l')),
+              (('gain', 'out_r'), ('amp', 'in_r'))])):
+
+        host, names, ids = board([('gain', ends[0]), ('amp', ends[1])], wiring)
         before = sorted(host.connections)
 
-        channels = 2 if uri == 'urn:test:stereo' else 1
+        channels = 2 if uri == STEREO_URI else 1
         plan = mm.splice_plan(host, ids[names['gain']], channels)
         r.check(plan is not None, 'unsplice: the %s board splices at all' % label)
         if plan is None:
@@ -1007,9 +1091,10 @@ def check_unsplice(r):
 
         for link in plan['cut']:
             host.connections.remove(link)
-        for index, link in enumerate(plan['links']):
-            host.connect(link[0], mid + '/' + ins[index])
-            host.connect(mid + '/' + outs[index], link[1])
+        for source, channel in plan['feed']:
+            host.connect(source, mid + '/' + ins[channel])
+        for channel, target in plan['drain']:
+            host.connect(mid + '/' + outs[channel], target)
 
         ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
         undo = mm.unsplice_plan(host, ids[mid])
@@ -1041,8 +1126,33 @@ def check_unsplice(r):
          ('x', 'urn:test:mono'), ('y', 'urn:test:mono')],
         [(('a', 'out'), ('fan', 'in')),
          (('fan', 'out'), ('x', 'in')), (('fan', 'out'), ('y', 'in'))])
-    r.check(mm.unsplice_plan(host, ids[names['fan']]) is None,
-            'unsplice: a box that fanned out was carrying a decision')
+    # one cable in, one signal out to two places: closing over it puts the split back
+    plan = mm.unsplice_plan(host, ids[names['fan']])
+    r.check(plan and plan['links'] == [(names['a'] + '/out', names['x'] + '/in'),
+                                       (names['a'] + '/out', names['y'] + '/in')],
+            'unsplice: a fan out closes back to the same fan out', plan)
+
+    # A box fed on one input and leaving from two ports is what made those two ends
+    # differ; without it they carry the one signal that was feeding it, so both get it.
+    host, names, ids = board(
+        [('a', 'urn:test:mono'), ('wide', 'urn:test:stereo'),
+         ('x', 'urn:test:mono'), ('y', 'urn:test:mono')],
+        [(('a', 'out'), ('wide', 'in_l')),
+         (('wide', 'out_l'), ('x', 'in')), (('wide', 'out_r'), ('y', 'in'))])
+    plan = mm.unsplice_plan(host, ids[names['wide']])
+    r.check(plan and plan['links'] == [(names['a'] + '/out', names['x'] + '/in'),
+                                       (names['a'] + '/out', names['y'] + '/in')],
+            'unsplice: what fed it reaches both ends it was feeding', plan)
+
+    # what stays refused: several boxes feeding it, since joining each of them to each
+    # end would wire together paths that never met
+    host, names, ids = board(
+        [('a', 'urn:test:mono'), ('b', 'urn:test:mono'),
+         ('mid', 'urn:test:stereo'), ('z', 'urn:test:mono')],
+        [(('a', 'out'), ('mid', 'in_l')), (('b', 'out'), ('mid', 'in_r')),
+         (('mid', 'out_l'), ('z', 'in'))])
+    r.check(mm.unsplice_plan(host, ids[names['mid']]) is None,
+            'unsplice: two boxes feeding it is a mixing point, and is left open')
 
     host, names, ids = board(
         [('src', 'urn:test:cv'), ('mid', 'urn:test:cv'), ('dst', 'urn:test:cv')],
@@ -1224,7 +1334,7 @@ def check_cable_clearance(r):
     """
     for name, factory in SCENARIOS:
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
         scene = mm.scene(host)
 
         through = []
@@ -1255,18 +1365,18 @@ def check_viewport_coverage(r):
     picked by graph distance: stepping to the box next door swapped the picture
     for a different neighbourhood and boxes on screen disappeared.
 
-    Modelled on the firmware: minimap_select() centres the selection horizontally
+    Modelled on the firmware: plugin_map_select() centres the selection horizontally
     and clamps, but scrolls vertically only when the box would not fit whole on the
     panel. Where it is looking vertically therefore depends on how the user got
     there, so the check is made against every position that keeps the focus fully
     visible -- if any of them would draw a box the message does not carry, that is
     a gap waiting to happen.
     """
-    view_w, view_h = MINIMAP_HMI_VIEW_WIDTH, MINIMAP_HMI_VIEW_HEIGHT
+    view_w, view_h = PLUGIN_MAP_HMI_VIEW_WIDTH, PLUGIN_MAP_HMI_VIEW_HEIGHT
 
     for name, factory in SCENARIOS:
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
         scene = mm.scene(host)
 
         missing = []
@@ -1309,7 +1419,7 @@ def check_connections(r):
     host.connect('/graph/capture_1', left + '/in_l')
     host.connect(right + '/out_l', '/graph/playback_1')
 
-    mm = minimap.instance_for(minimap.MODE_COMPACT)
+    mm = plugin_map.INSTANCE
     scene = mm.scene(host)
     ids = dict((n.key, n.nid) for n in scene.nodes)
 
@@ -1332,7 +1442,7 @@ def check_connections(r):
             'connections: endpoints match what the host actually holds', links)
 
     # The strip under the menu names the cables behind one line, and it is the compact
-    # scene that collapsed them, so the names have to be dug back out of the detail one.
+    # picture that collapsed them, so the names have to be dug back out of the model.
     incoming = entries[0]
     r.check(sorted(incoming['pairs']) == [('OUT_L', 'IN_L'), ('OUT_R', 'IN_R')],
             'connections: a collapsed line still carries both its cables', incoming['pairs'])
@@ -1350,15 +1460,15 @@ def check_connections(r):
             'connections: port names are wire safe')
 
     # the budget is what keeps the whole menu inside the device's receive buffer
-    saved = minimap.MINIMAP_MAX_PAIRS
+    saved = plugin_map.PLUGIN_MAP_MAX_PAIRS
     try:
-        minimap.MINIMAP_MAX_PAIRS = 1
+        plugin_map.PLUGIN_MAP_MAX_PAIRS = 1
         starved = mm.connections(host, ids[right])
         r.check([len(e['pairs']) for e in starved] == [1, 0],
                 'connections: the pair budget runs out on the later lines, not the first',
                 [len(e['pairs']) for e in starved])
     finally:
-        minimap.MINIMAP_MAX_PAIRS = saved
+        plugin_map.PLUGIN_MAP_MAX_PAIRS = saved
 
     # asking for a type nothing uses must come back empty, not with everything
     midi_only = mm.connections(host, ids[right], 2)
@@ -1388,14 +1498,14 @@ def check_menu_wire_format(r):
 
     for name, factory in SCENARIOS:
         host = factory()
-        mm = minimap.instance_for(minimap.MODE_COMPACT)
+        mm = plugin_map.INSTANCE
         scene = mm.scene(host)
 
         worst = 0
         for node in scene.nodes:
             entries = mm.connections(host, node.nid)
 
-            # exactly what Host.hmi_builder_connections builds
+            # exactly what Host.hmi_builder_connection_list builds
             fields = [str(len(entries))]
             for entry in entries:
                 pairs = entry['pairs']
@@ -1460,7 +1570,7 @@ def check_new_connection(r):
     wide = host.add('wide', 'urn:test:stereo', 300, 100)
     host.connect('/graph/capture_1', mono + '/in')
 
-    mm = minimap.instance_for(minimap.MODE_COMPACT)
+    mm = plugin_map.INSTANCE
     ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
     before = sorted(host.connections)
 
@@ -1536,11 +1646,11 @@ def check_new_connection(r):
 
     # neither menu may outrun the rows the device has to put them in
     big = sc_stress()
-    node = [n for n in mm.scene(big).nodes if n.kind == minimap.KIND_PLUGIN][0]
+    node = [n for n in mm.scene(big).nodes if n.kind == plugin_map.KIND_PLUGIN][0]
     for name, entries in (('connections', mm.connections(big, node.nid, 1)),
                           ('targets', mm.candidates(big, node.nid, 1, True)),
                           ('ports', mm.ports(big, node.nid, 1, None))):
-        r.check(len(entries) <= MINIMAP_MAX_MENU,
+        r.check(len(entries) <= PLUGIN_MAP_MAX_MENU,
                 'new connection: the %s menu fits the device' % name, len(entries))
 
 
@@ -1643,7 +1753,7 @@ def check_plugin_catalog(r):
 
     # the info overlay, addressed by the same two positions as the pick itself
     details = catalog.details(all_index, 96, 0)
-    r.check(details and details['name'] == minimap.sanitize_label(picked['name'], 120),
+    r.check(details and details['name'] == plugin_map.sanitize_label(picked['name'], 120),
             'catalog: info resolves the same entry a pick would',
             (details or {}).get('name'))
     r.check(details and details['audio'] == (1, 1) and details['midi'] == (0, 0),
@@ -1695,7 +1805,7 @@ def check_compact(r):
     """The compact picture must actually collapse, and stay uniform.
 
     Built with a stereo pair and a four-into-one mixer, which is exactly what
-    the detail picture draws as a bundle of parallel cables.
+    the model holds as a bundle of parallel cables.
     """
     host = FakeHost()
     split = host.add('split', 'urn:test:stereo', 100, 100)
@@ -1716,20 +1826,22 @@ def check_compact(r):
     host.connect(mix + '/out_l', '/graph/playback_1')
     host.connect(mix + '/out_r', '/graph/playback_2')
 
-    compact = parse_displaylist(minimap.Minimap(minimap.MODE_COMPACT).render(host)[0])
-    detail = parse_displaylist(minimap.Minimap(minimap.MODE_DETAIL).render(host)[0])
+    mm = plugin_map.INSTANCE
+    compact = parse_displaylist(mm.render(host)[0])
+
+    # the un-collapsed truth the picture is a summary of, and what the connection menu
+    # asks when it needs to know which port feeds which
+    raw_edges = mm.model(host)[1]
 
     pairs = [(e['src'], e['dst'], e['type']) for e in compact['E']]
     r.check(len(pairs) == len(set(pairs)),
             'compact: one cable per pair of boxes and signal type', pairs)
-    r.check(len(compact['E']) < len(detail['E']),
-            'compact: fewer cables than the detail picture',
-            (len(compact['E']), len(detail['E'])))
+    r.check(len(compact['E']) < len(raw_edges),
+            'compact: fewer lines drawn than there are cables',
+            (len(compact['E']), len(raw_edges)))
 
     sizes = set((n['w'], n['h']) for n in compact['N'])
     r.check(len(sizes) == 1, 'compact: every box the same size', sizes)
-    r.check(len(set((n['w'], n['h']) for n in detail['N'])) > 1,
-            'compact: the detail picture still sizes boxes to their stubs')
 
     # one stub per side per signal type, never one per port
     per_side = {}
@@ -1740,9 +1852,9 @@ def check_compact(r):
             'compact: one stub per side and signal type',
             [k for k, v in per_side.items() if v != 1])
 
-    r.check(len(compact['N']) == len(detail['N']),
+    r.check(len(compact['N']) == len(mm.model(host)[0]),
             'compact: no box goes missing',
-            (len(compact['N']), len(detail['N'])))
+            (len(compact['N']), len(mm.model(host)[0])))
 
     # the box is too narrow to tell two similarly named plugins apart, so the title
     # bar gets a label cut to the width of the panel instead
@@ -1766,12 +1878,12 @@ def check_wire_safe_labels(r):
     host.add('semi', label='a;b')
     host.add('mixed', label='"; ok')
 
-    mm = minimap.Minimap()
+    mm = plugin_map.PluginMap()
     text, _ = mm.render(host)
 
     # every record must split into the field count its reader expects: one stray
     # delimiter inside a label shifts every field after it
-    for record in text.split(minimap.RECORD_SEP):
+    for record in text.split(plugin_map.RECORD_SEP):
         parts = record.strip().split(' ')
         if parts[0] == 'N':
             r.check(len(parts) == 12, 'wire-safe: N record has 12 fields', record)
@@ -1786,9 +1898,9 @@ def check_compat(r):
     """Audit the new modules for syntax that Python 3.4 would reject."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     targets = [
-        os.path.join(root, 'mod', 'minimap.py'),
-        os.path.join(root, 'mod', 'minimap_font.py'),
-        os.path.join(root, 'mod', 'minimap_render.py'),
+        os.path.join(root, 'mod', 'plugin_map.py'),
+        os.path.join(root, 'mod', 'plugin_map_font.py'),
+        os.path.join(root, 'mod', 'plugin_map_render.py'),
         os.path.join(root, 'modtools', 'font2py.py'),
     ]
     banned_names = ('math.inf', 'textbbox', 'textlength', 'load_default(',
@@ -1831,20 +1943,20 @@ def check_compat(r):
 
 def write_preview(name, mm, host, out_dir):
     try:
-        from mod import minimap_render
+        from mod import plugin_map_render
     except ImportError:
         return
-    if not minimap_render.available():
+    if not plugin_map_render.available():
         return
 
     scene = mm.scene(host)
-    img = minimap_render.render(scene)
+    img = plugin_map_render.render(scene)
     if img is None:
         return
     try:
         os.makedirs(out_dir, exist_ok=True)
         img.save(os.path.join(out_dir, '%s.png' % name))
-        view = minimap_render.render(scene, crop=(0, 0, 128, 64))
+        view = plugin_map_render.render(scene, crop=(0, 0, 128, 64))
         view.save(os.path.join(out_dir, '%s-view.png' % name))
     except Exception as ex:
         sys.stderr.write('preview %s failed: %s\n' % (name, ex))
@@ -1857,19 +1969,19 @@ def show(name):
         return 1
 
     host = factory()
-    mm = minimap.Minimap()
+    mm = plugin_map.PluginMap()
     text, _ = mm.render(host)
     print(text)
 
     try:
-        from mod import minimap_render
+        from mod import plugin_map_render
     except ImportError:
         return 0
-    if not minimap_render.available():
+    if not plugin_map_render.available():
         print('(PIL not available, skipping ASCII art)')
         return 0
 
-    print(minimap_render.to_ascii(mm.scene(host)))
+    print(plugin_map_render.to_ascii(mm.scene(host)))
     return 0
 
 
@@ -1877,7 +1989,7 @@ def bench():
     print('== benchmark ==')
     for name, factory in (('linear', sc_linear), ('stress-40', sc_stress)):
         host = factory()
-        mm = minimap.Minimap()
+        mm = plugin_map.PluginMap()
 
         start = time.perf_counter()
         mm.render(host)
@@ -1899,7 +2011,7 @@ def bench():
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Minimap checks')
+    parser = argparse.ArgumentParser(description='PluginMap checks')
     parser.add_argument('--out', help='directory for reference PNGs')
     parser.add_argument('--check-compat', action='store_true', help='only run the 3.4 audit')
     parser.add_argument('--show', help='print one scenario and exit')

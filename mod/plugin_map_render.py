@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Reference rasteriser for the pedalboard minimap.
+"""Reference rasteriser for the pedalboard plugin_map.
 
 This is *not* the product: the HMI draws the scene itself from the display list
-emitted by mod/minimap.py. This module rasterises the very same scene so the
+emitted by mod/plugin_map.py. This module rasterises the very same scene so the
 result can be inspected on a desktop or in a browser while developing, and so
 the firmware has something concrete to match. If the two ever disagree, the
 display list is the arbiter.
@@ -17,8 +17,8 @@ Targets Python 3.4, and only PIL APIs old enough for the Pillow that ships
 alongside it: Image.new/paste/crop/save and ImageDraw.point/line/rectangle.
 """
 
-from mod import minimap_font as font
-from mod.minimap import KIND_PLUGIN, TYPE_MIDI, TYPE_CV, RECORD_SEP, parse_layers
+from mod import plugin_map_font as font
+from mod.plugin_map import KIND_PLUGIN, TYPE_MIDI, TYPE_CV, RECORD_SEP, parse_layers
 
 try:
     from PIL import Image, ImageDraw
@@ -40,7 +40,7 @@ _PATTERNS = {
 
 # a cable whose far end fell outside the emitted window is capped with a short
 # tick, so it reads as "the graph continues that way" rather than as a cable to
-# nowhere. Mirrors STUB_LENGTH in app/src/minimap.c, tick included.
+# nowhere. Mirrors STUB_LENGTH in app/src/plugin_map.c, tick included.
 _STUB_LENGTH = 4
 
 

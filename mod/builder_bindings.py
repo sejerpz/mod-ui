@@ -10,13 +10,13 @@ position the way the Add screen is: the device carries no port symbols and no ac
 URIs, only the index of the row it was shown.
 
 Nothing here acts. The lookups are here and the two verbs are in mod/host.py, where the
-callbacks live, which is the same split minimap.py and its handlers already use.
+callbacks live, which is the same split plugin_map.py and its handlers already use.
 """
 
 import logging
 
-from mod.settings import MINIMAP_HMI_SUBPAGES
-from mod.minimap import sanitize_label
+from mod.settings import PLUGIN_MAP_HMI_SUBPAGES
+from mod.plugin_map import sanitize_label
 
 # The two columns, in pixels: what to bind on the left, what to bind it to on the right.
 PARAM_W = 56
@@ -61,7 +61,7 @@ def subpages(host):
     if not getattr(getattr(host, 'addressings', None), 'has_hmi_subpages', False):
         return 1
 
-    return max(1, min(MINIMAP_HMI_SUBPAGES, len(SUBPAGE_MARKS)))
+    return max(1, min(PLUGIN_MAP_HMI_SUBPAGES, len(SUBPAGE_MARKS)))
 
 
 def actuators(host):

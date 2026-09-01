@@ -5,7 +5,7 @@
 # GENERATED FILE - do not edit by hand.
 # Produced by modtools/font2py.py from the HMI firmware's fonts.h.
 # Regenerate with:
-#     python3 -m modtools.font2py <fonts.h> Terminal3x5 -o mod/minimap_font.py
+#     python3 -m modtools.font2py <fonts.h> Terminal3x5 -o mod/plugin_map_font.py
 #
 # Font Terminal3x5: 3x5, monospaced, 95 glyphs from 0x20.
 # Each glyph is a tuple of column bitmasks; bit N of a column means row N is lit.

@@ -42,7 +42,7 @@ from mod import (
 )
 from mod.presets_metadata import PresetsMetadata
 from mod.addressings import Addressings
-from mod.minimap import INSTANCE as MINIMAP
+from mod.plugin_map import INSTANCE as PLUGIN_MAP
 from mod import builder_plugins as CATALOG
 from mod import builder_bindings as BINDINGS
 from mod.bank import (
@@ -89,28 +89,28 @@ from mod.mod_protocol import (
     CMD_DUOX_SNAPSHOT_LOAD,
     CMD_DUOX_SNAPSHOT_SAVE,
     CMD_DWARF_CONTROL_SUBPAGE,
-    CMD_DWARF_BUILDER_PLUGINS,
-    CMD_DWARF_BUILDER_CONTROLS,
-    CMD_DWARF_BUILDER_CONTROL_SET,
-    CMD_DWARF_BUILDER_CONTROL_PAGE,
-    CMD_DWARF_BUILDER_MINIMAP,
-    CMD_DWARF_BUILDER_CONNECTIONS,
-    CMD_DWARF_BUILDER_DISCONNECT,
-    CMD_DWARF_BUILDER_TARGETS,
-    CMD_DWARF_BUILDER_PORTS,
-    CMD_DWARF_BUILDER_CONNECT,
-    CMD_DWARF_BUILDER_CATEGORIES,
-    CMD_DWARF_BUILDER_CATALOG,
-    CMD_DWARF_BUILDER_ADD,
-    CMD_DWARF_BUILDER_INFO,
-    CMD_DWARF_BUILDER_REMOVE,
-    CMD_DWARF_BUILDER_ACTUATORS,
-    CMD_DWARF_BUILDER_PARAMS,
-    CMD_DWARF_BUILDER_BINDINGS,
-    CMD_DWARF_BUILDER_BIND,
-    CMD_DWARF_BUILDER_UNBIND,
-    CMD_DWARF_BUILDER_INITIALS,
-    CMD_DWARF_LOG,
+    CMD_BUILDER_CONTROL_LIST,
+    CMD_BUILDER_CONTROL_SET,
+    CMD_BUILDER_CONTROL_PAGE,
+    CMD_BUILDER_PLUGIN_MAP,
+    CMD_BUILDER_CONNECTION_LIST,
+    CMD_BUILDER_CONNECTION_DELETE,
+    CMD_BUILDER_CONNECTION_TARGETS,
+    CMD_BUILDER_CONNECTION_PORTS,
+    CMD_BUILDER_CONNECTION_ADD,
+    CMD_BUILDER_CATALOG_CATEGORIES,
+    CMD_BUILDER_CATALOG_LIST,
+    CMD_BUILDER_PLUGIN_ADD,
+    CMD_BUILDER_CATALOG_INFO,
+    CMD_BUILDER_PLUGIN_DELETE,
+    CMD_BUILDER_PLUGIN_BYPASS,
+    CMD_BUILDER_PLUGIN_NOTIFY,
+    CMD_BUILDER_BINDING_ACTUATORS,
+    CMD_BUILDER_BINDING_PARAMS,
+    CMD_BUILDER_BINDING_LIST,
+    CMD_BUILDER_BINDING_ADD,
+    CMD_BUILDER_BINDING_DELETE,
+    CMD_BUILDER_CATALOG_INITIALS,
     BANK_FUNC_NONE,
     BANK_FUNC_PEDALBOARD_NEXT,
     BANK_FUNC_PEDALBOARD_PREV,
@@ -167,7 +167,7 @@ from mod.protocol import (
     Protocol, ProtocolError, process_resp,
 )
 from mod.settings import (
-    MINIMAP_MAX_MENU,
+    PLUGIN_MAP_MAX_MENU,
     LOG, DEFAULT_PEDALBOARD, DEVICE_HOST_PORT,
     DATA_DIR, LV2_PEDALBOARDS_DIR, LV2_PLUGIN_DIR, LV2_FACTORY_PEDALBOARDS_DIR, USER_FILES_DIR,
     PEDALBOARD_INSTANCE, PEDALBOARD_INSTANCE_ID, PEDALBOARD_URI, PEDALBOARD_TMP_DIR,
@@ -416,8 +416,13 @@ class Host(object):
         self.first_pedalboard    = True
         self.pedalboard_empty    = True
         self.pedalboard_modified = False
-        # what a removal asked for by the panel held back; see hmi_builder_remove
+        # what a removal asked for by the panel held back; see hmi_builder_plugin_delete
         self.deferred_hmi_removal = None
+
+        # the board watch: a timer while the panel is looking at the graph, and the board
+        # as it was last seen. See hmi_builder_plugin_notify.
+        self.plugin_map_watch = None
+        self.plugin_map_seen = None
         self.pedalboard_name     = ""
         self.pedalboard_path     = ""
         self.pedalboard_size     = [0,0]
@@ -592,28 +597,28 @@ class Host(object):
 
         Protocol.register_cmd_callback('DWARF', CMD_DWARF_CONTROL_SUBPAGE, self.hmi_parameter_load_subpage)
 
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_PLUGINS, self.hmi_list_pedalboard_plugins)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROLS, self.hmi_builder_controls)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_LOG, self.hmi_log_message)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROL_SET, self.hmi_builder_control_set)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROL_PAGE, self.hmi_builder_control_page)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_MINIMAP, self.hmi_builder_minimap)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONNECTIONS, self.hmi_builder_connections)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_DISCONNECT, self.hmi_builder_disconnect)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_TARGETS, self.hmi_builder_targets)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_PORTS, self.hmi_builder_ports)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONNECT, self.hmi_builder_connect)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CATEGORIES, self.hmi_builder_categories)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CATALOG, self.hmi_builder_catalog)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_ADD, self.hmi_builder_add)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_INFO, self.hmi_builder_info)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_REMOVE, self.hmi_builder_remove)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_ACTUATORS, self.hmi_builder_actuators)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_PARAMS, self.hmi_builder_params)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_BINDINGS, self.hmi_builder_bindings)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_BIND, self.hmi_builder_bind)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_UNBIND, self.hmi_builder_unbind)
-        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_INITIALS, self.hmi_builder_initials)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONTROL_LIST, self.hmi_builder_control_list)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONTROL_SET, self.hmi_builder_control_set)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONTROL_PAGE, self.hmi_builder_control_page)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_PLUGIN_MAP, self.hmi_builder_plugin_map)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONNECTION_LIST, self.hmi_builder_connection_list)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONNECTION_DELETE, self.hmi_builder_connection_delete)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONNECTION_TARGETS, self.hmi_builder_connection_targets)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONNECTION_PORTS, self.hmi_builder_connection_ports)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CONNECTION_ADD, self.hmi_builder_connection_add)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CATALOG_CATEGORIES, self.hmi_builder_catalog_categories)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CATALOG_LIST, self.hmi_builder_catalog_list)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_PLUGIN_ADD, self.hmi_builder_plugin_add)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CATALOG_INFO, self.hmi_builder_catalog_info)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_PLUGIN_DELETE, self.hmi_builder_plugin_delete)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_PLUGIN_BYPASS, self.hmi_builder_plugin_bypass)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_PLUGIN_NOTIFY, self.hmi_builder_plugin_notify)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_BINDING_ACTUATORS, self.hmi_builder_binding_actuators)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_BINDING_PARAMS, self.hmi_builder_binding_params)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_BINDING_LIST, self.hmi_builder_binding_list)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_BINDING_ADD, self.hmi_builder_binding_add)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_BINDING_DELETE, self.hmi_builder_binding_delete)
+        Protocol.register_cmd_callback('DWARF', CMD_BUILDER_CATALOG_INITIALS, self.hmi_builder_catalog_initials)
         IOLoop.instance().add_callback(self.init_host)
 
     def __del__(self):
@@ -3940,6 +3945,14 @@ class Host(object):
         self.msg_callback("loading_start %i 0" % int(isDefault))
         self.msg_callback("size %d %d" % (pb['width'],pb['height']))
 
+        # Whatever the panel was watching is about to be replaced wholesale, so the watch
+        # stops here rather than on the panel's word: it leaves the builder when told a load
+        # is starting, and it cannot send anything from inside that callback.
+        if self.plugin_map_watch is not None:
+            self.plugin_map_watch.stop()
+            self.plugin_map_watch = None
+            self.plugin_map_seen = None
+
         # The panel is told a load is running, and told again when it is over. Whatever it
         # does with that is its own business -- today it leaves the builder, which is a view
         # onto the board being replaced. Fire and forget either way: a slow panel is not a
@@ -5862,68 +5875,7 @@ _:b%i
         callback(True, snapshotData)
 
     # -----------------------------------------------------------------------------------------------------------------
-
-    def hmi_list_pedalboard_plugins(self, props, plugin_id, callback):
-        logging.debug("hmi list pedalboards plugin %d %d", props, plugin_id)
-
-        dir_up  = props & FLAG_PAGINATION_PAGE_UP
-        wrap    = props & FLAG_PAGINATION_WRAP_AROUND
-        initial = props & FLAG_PAGINATION_INITIAL_REQ
-
-        if not initial:
-            plugin_id += 1 if dir_up else -1
-            logging.warning("hmi pagination is not supported yes, please use FLAG_PAGINATION_INITIAL_REQ, returning all plugins")
-
-        # this code is currently bugged and not supported
-        # if plugin_id < 0 or plugin_id >= numPlugins:
-        #     if not wrap and plugin_id > 0:
-        #         logging.error("hmi wants out of bounds pedalboard plugins data (%d %d)", props, plugin_id)
-        #         callback(True)
-        #         return
-
-        #     # wrap around mode, neat
-        #     if plugin_id < 0 and wrap:
-        #         plugin_id = numPlugins - 1
-        #     else:
-        #         plugin_id = 0
-
-        # if numPlugins <= 9 or plugin_id < 4:
-        #     startIndex = 0
-        # elif plugin_id + 4 >= numPlugins:
-        #     startIndex = numPlugins - 9
-        # else:
-        #     startIndex = plugin_id - 4
-
-        # endIndex = min(startIndex + 9, numPlugins)
-
-        # filter and order plugins
-        def _keySelect(item):
-            k, v = item
-            return v['label'] if v['label'] != "" and v['label'] is not None else v['name'] if v['name'] is not None else ''
-
-        keys = [item[0] for item in sorted({k: v for k,v in self.plugins.items() if v['uri'] != 'urn:mod:pedalboard'}.items(), key=_keySelect)]
-
-        numPlugins = len(keys)
-        startIndex = 0
-        endIndex = numPlugins # return always all plugins
-        if numPlugins > 0:
-            responseData = '%d %d %d' % (numPlugins, startIndex, endIndex)
-            for i in range(startIndex, endIndex):
-                key = keys[i]
-                plugin = self.plugins[key]
-                info = get_plugin_info_mini(plugin["uri"])
-                name = plugin["label"]
-                if name == "" or name is None:
-                    name = info["label"] # for now i prefer a shorter label + " (" + info["brand"] + ")"
-
-                name = name.replace("_", " ")
-                responseData += ' %s %s' % (normalize_for_hw(name), key)
-
-        logging.debug("hmi list pedalboards plugins %d %d -> data is '%s'", props, plugin_id, responseData)
-        callback(True, responseData)
-
-    # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_minimap(self, props, node_id, callback):
+    def hmi_builder_plugin_map(self, props, node_id, callback):
         """Display list for the pedalboard graph, for the HMI to draw itself.
 
         No pixels go over the wire: the answer describes boxes, port stubs and
@@ -5932,31 +5884,31 @@ _:b%i
         window around <node_id>, which is also how the HMI pans -- it asks
         again naming a node the current window only referenced.
         """
-        scene = MINIMAP.scene(self)
+        scene = PLUGIN_MAP.scene(self)
 
         if props & FLAG_PAGINATION_INITIAL_REQ:
-            focus = MINIMAP.default_focus(scene)
+            focus = PLUGIN_MAP.default_focus(scene)
         else:
-            focus = MINIMAP.key_for_id(scene, node_id)
+            focus = PLUGIN_MAP.key_for_id(scene, node_id)
             if focus is None:
-                logging.warning("hmi wants the minimap around unknown node %d, using the default",
+                logging.warning("hmi wants the plugin_map around unknown node %d, using the default",
                                 node_id)
-                focus = MINIMAP.default_focus(scene)
+                focus = PLUGIN_MAP.default_focus(scene)
 
-        responseData, version = MINIMAP.render(self, focus=focus)
+        responseData, version = PLUGIN_MAP.render(self, focus=focus)
 
-        logging.debug("hmi builder minimap %d %d -> v%d, %d bytes",
+        logging.debug("hmi builder plugin_map %d %d -> v%d, %d bytes",
                       props, node_id, version, len(responseData))
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_connections(self, node_id, bits, callback):
+    def hmi_builder_connection_list(self, node_id, bits, callback):
         """The cables in and out of one box, for the connection menu.
 
         One entry per box at the far end and per signal type, not per pair of ports: the
         picture draws a stereo pair as one line and the menu lists it as one line.
         """
-        entries = MINIMAP.connections(self, node_id, bits)
+        entries = PLUGIN_MAP.connections(self, node_id, bits)
 
         # Each line ends with the cables it stands for, as pairs of port names, output
         # end first. The target list has the same shape with a count of zero, so one
@@ -5973,13 +5925,13 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_targets(self, node_id, bits, want_outputs, callback):
+    def hmi_builder_connection_targets(self, node_id, bits, want_outputs, callback):
         """The boxes one of our ports could meet.
 
-        Same wire format as hmi_builder_connections so the firmware reads both with one
+        Same wire format as hmi_builder_connection_list so the firmware reads both with one
         parser, and the `>` on the label means the same thing in both lists.
         """
-        entries = MINIMAP.candidates(self, node_id, bits, want_outputs != 0)
+        entries = PLUGIN_MAP.candidates(self, node_id, bits, want_outputs != 0)
 
         responseData = str(len(entries))
         for entry in entries:
@@ -5992,7 +5944,7 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_categories(self, bits, callback):
+    def hmi_builder_catalog_categories(self, bits, callback):
         """The left column of the Add screen."""
         entries = CATALOG.categories(bits)
 
@@ -6004,9 +5956,9 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_catalog(self, category, bits, first, callback):
+    def hmi_builder_catalog_list(self, category, bits, first, callback):
         """The right column: a window into the category the device is looking at."""
-        total, first, entries = CATALOG.window(category, bits, first, MINIMAP_MAX_MENU)
+        total, first, entries = CATALOG.window(category, bits, first, PLUGIN_MAP_MAX_MENU)
 
         responseData = '%d %d %d' % (total, first, len(entries))
         for entry in entries:
@@ -6017,7 +5969,7 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_initials(self, category, bits, callback):
+    def hmi_builder_catalog_initials(self, category, bits, callback):
         """Where each first letter starts, for scrubbing a long category."""
         entries = CATALOG.initials(category, bits)
 
@@ -6029,7 +5981,7 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_add(self, category, plugin, bits, node_id, callback):
+    def hmi_builder_plugin_add(self, category, plugin, bits, node_id, callback):
         """Instantiate the plugin the device picked, and hand back the box it became.
 
         The device names it by two positions rather than by URI -- sixty characters of no
@@ -6038,7 +5990,7 @@ _:b%i
         `node_id` is the box the cursor was on, or -1. Where that box feeds exactly one
         other and the channels line up, the new plugin goes in between them and takes the
         cable over -- adding a tremolo with a gain selected puts it between the gain and
-        whatever the gain was feeding. Minimap.splice_plan() is what decides that the case
+        whatever the gain was feeding. PluginMap.splice_plan() is what decides that the case
         is plain enough to do unasked; anything less plain and the plugin is added
         unconnected, which is where it landed before this existed.
         """
@@ -6055,7 +6007,14 @@ _:b%i
         inputs, outputs = CATALOG.audio_ports(chosen['uri'])
         plan = None
         if inputs and len(inputs) == len(outputs):
-            plan = MINIMAP.splice_plan(self, node_id, len(inputs))
+            plan = PLUGIN_MAP.splice_plan(self, node_id, len(inputs))
+
+        # Said out loud because there are three ways to end up unconnected and the panel
+        # cannot tell them apart: no box was selected, the plugin does not pass straight
+        # through, or the wiring around the box was not plain enough to guess at.
+        if plan is None:
+            logging.info("hmi builder add %s: no splice -- anchor %d, audio %d in %d out",
+                         chosen['uri'], node_id, len(inputs), len(outputs))
 
         instance = CATALOG.instance_name(self, chosen['name'])
         instance_id = self.mapper.get_id(instance)
@@ -6068,7 +6027,7 @@ _:b%i
 
             logging.debug("hmi builder add %s as %s (id %d)%s",
                           chosen['uri'], instance, instance_id,
-                          plan and ", spliced into %d cables" % len(plan['links']) or "")
+                          plan and ", spliced into %d cables" % len(plan['cut']) or "")
 
             if plan is None:
                 callback(True, str(instance_id))
@@ -6088,22 +6047,24 @@ _:b%i
         new one share a port at each end, and dropping the old first keeps a box from
         being briefly fed twice, which on a stereo pair is audible.
 
-        Two lists, not one: a stereo box spliced into a single cable has two channels to
-        wire but only that one cable to drop, and dropping it twice would be a second
-        disconnect of something already gone.
+        Three lists, not one: what to drop, what to feed the new box, and what to take out
+        of it. They differ in length -- a box that fanned out has one cable in and several
+        out, and a stereo box in a mono run has two of each off a single cable -- so none
+        of the three can be worked out from either of the others.
         """
         dropping = plan['cut']
-        links = plan['links']
+        feed = plan['feed']
+        drain = plan['drain']
 
-        # a list rather than a plain int, the way hmi_builder_disconnect counts its own
+        # a list rather than a plain int, the way hmi_builder_connection_delete counts its own
         cut = [len(dropping)]
-        laid = [2 * len(links)]
+        laid = [len(feed) + len(drain)]
 
         def wired(_ok):
             laid[0] -= 1
             if laid[0] == 0:
                 logging.debug("hmi builder add spliced %s into %d cables",
-                              instance, len(links))
+                              instance, len(dropping))
                 callback(True, str(instance_id))
 
         def dropped(_ok):
@@ -6111,16 +6072,16 @@ _:b%i
             if cut[0] > 0:
                 return
 
-            for index, link in enumerate(links):
-                source, target = link
-                self.connect(source, instance + '/' + inputs[index], wired)
-                self.connect(instance + '/' + outputs[index], target, wired)
+            for source, channel in feed:
+                self.connect(source, instance + '/' + inputs[channel], wired)
+            for channel, target in drain:
+                self.connect(instance + '/' + outputs[channel], target, wired)
 
         for source, target in dropping:
             self.disconnect(source, target, dropped)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_info(self, category, plugin, bits, callback):
+    def hmi_builder_catalog_info(self, category, plugin, bits, callback):
         """What the Add screen's info overlay shows about the row under the cursor.
 
         The description comes over one word to a token, counted like the cable pairs are:
@@ -6149,7 +6110,93 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_remove(self, node_id, callback):
+    def hmi_builder_plugin_bypass(self, node_id, callback):
+        """Turn one box on the board off, or back on.
+
+        Answered before it is done, and with the state it is about to land in: a :bypass
+        that happens to be addressed to the panel sends the panel commands of its own, and
+        the panel is spinning on this reply while it waits. It also means the device can
+        redraw its own box from the answer rather than fetching the graph again.
+
+        The browser is told as well. It updates its own state when the toggle comes from
+        there, so nothing normally broadcasts one -- a bypass done on the panel reaches it
+        no other way.
+        """
+        instance = self.mapper.id_map.get(node_id) if node_id >= 0 else None
+        pluginData = self.plugins.get(node_id) if instance else None
+
+        if pluginData is None:
+            logging.warning("hmi wants to bypass node %d, which is not a plugin", node_id)
+            callback(True, '-1')
+            return
+
+        bypassed = not pluginData['bypassed']
+
+        callback(True, '1' if bypassed else '0')
+
+        def done(ok):
+            logging.debug("hmi builder bypass %s -> %s: %s",
+                          instance, bypassed, ok and "done" or "failed")
+
+        self.bypass(instance, bypassed, done)
+        self.msg_callback("param_set %s :bypass %f" % (instance, 1.0 if bypassed else 0.0))
+
+    # -----------------------------------------------------------------------------------------------------------------
+    # Watching the board for the panel
+
+    PLUGIN_MAP_WATCH_INTERVAL = 500
+
+    def hmi_builder_plugin_notify(self, enabled, callback):
+        """The panel says whether it is looking at the graph.
+
+        Nothing watches the board unless somebody is there to be told, which is what makes
+        this cheap: the check below costs a few microseconds and runs twice a second, but
+        only while the builder is open. Outside it there is no timer at all.
+
+        Turning it on takes note of the board as it stands without saying anything: the
+        panel has just fetched the graph, so the first check must not send it back for it.
+        """
+        callback(True, '0')
+
+        if self.plugin_map_watch is not None:
+            self.plugin_map_watch.stop()
+            self.plugin_map_watch = None
+
+        if not enabled:
+            self.plugin_map_seen = None
+            logging.debug("hmi builder plugin notify off")
+            return
+
+        self.plugin_map_seen = PLUGIN_MAP.fingerprint(self)
+        self.plugin_map_watch = PeriodicCallback(self.plugin_map_watch_callback,
+                                                 self.PLUGIN_MAP_WATCH_INTERVAL)
+        self.plugin_map_watch.start()
+        logging.debug("hmi builder plugin notify on")
+
+    def plugin_map_watch_callback(self):
+        """Tell the panel when the board it is looking at has changed under it.
+
+        The fingerprint is what the renderer itself uses to decide whether the picture has
+        to be rebuilt, so watching it catches every change by construction rather than by
+        remembering to call something from each place that edits the board.
+
+        Skipped while the link is busy: this arrives from a timer, so it can land while the
+        panel is waiting on a request of its own, and a command sent into that gap is how
+        every deadlock in this protocol has started. Nothing here is urgent -- the next
+        check is half a second away.
+        """
+        if not self.hmi.initialized or not self.hmi.queue_idle:
+            return
+
+        seen = PLUGIN_MAP.fingerprint(self)
+        if seen == self.plugin_map_seen:
+            return
+
+        self.plugin_map_seen = seen
+        self.hmi.plugin_map_updated(None)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_plugin_delete(self, node_id, callback):
         """Take one box off the board, cables and all.
 
         Only a plugin: the capture and playback boxes are part of the picture and not part
@@ -6167,7 +6214,7 @@ _:b%i
         it answers nothing. Held back here and sent once the reply has gone out, so the
         device gets a complete answer rather than a fast one.
         """
-        instance = MINIMAP.key_for_id(MINIMAP.scene(self), node_id)
+        instance = PLUGIN_MAP.key_for_id(PLUGIN_MAP.scene(self), node_id)
 
         if instance is None or node_id < 0:
             logging.warning("hmi wants to remove node %d, which is not a plugin", node_id)
@@ -6175,7 +6222,7 @@ _:b%i
             return
 
         # worked out while the box is still there to be measured, laid once it is gone
-        plan = MINIMAP.unsplice_plan(self, node_id)
+        plan = PLUGIN_MAP.unsplice_plan(self, node_id)
 
         @gen.engine
         def caught_up():
@@ -6238,7 +6285,7 @@ _:b%i
         self.remove_plugin(instance, removed, send_hmi=False)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_actuators(self, callback):
+    def hmi_builder_binding_actuators(self, callback):
         """The second column of the binding manager: every slot on the panel.
 
         A knob is three of them, one per sub-page, so the list is longer than the panel
@@ -6255,7 +6302,7 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_params(self, node_id, first, count, callback):
+    def hmi_builder_binding_params(self, node_id, first, count, callback):
         """The first column: one box's control ports, a screenful at a time."""
         entries = BINDINGS.parameters(self, node_id)
 
@@ -6272,7 +6319,7 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_bindings(self, page, callback):
+    def hmi_builder_binding_list(self, page, callback):
         """Which actuators are spoken for on one page, so the device can mark them."""
         logging.debug("hmi builder bindings page %d", page)
         callback(True, self._binding_marks(page))
@@ -6288,7 +6335,7 @@ _:b%i
         return out
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_bind(self, node_id, param_index, page, actuator_index, callback):
+    def hmi_builder_binding_add(self, node_id, param_index, page, actuator_index, callback):
         """Put one parameter on one slot of one page.
 
         The slot takes one addressing, so anything already there is replaced -- which is
@@ -6342,7 +6389,7 @@ _:b%i
                           actuator['subpage'], ok and "done" or "failed")
 
             if ok:
-                self.hmi_builder_broadcast_bind(instance, param, actuator, page,
+                self.hmi_builder_binding_broadcast(instance, param, actuator, page,
                                                 previous is not None)
 
         self.address(instance, param['symbol'], actuator['uri'], param['name'],
@@ -6350,11 +6397,11 @@ _:b%i
                      {'page': page, 'subpage': actuator['subpage']}, bound)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_unbind(self, page, actuator_index, callback):
+    def hmi_builder_binding_delete(self, page, actuator_index, callback):
         """Take whatever holds one slot off it.
 
         Host.unaddress() is the same thing the web UI does, and the reply goes out before
-        it starts for the same reason it does in hmi_builder_bind: the device is spinning
+        it starts for the same reason it does in hmi_builder_binding_add: the device is spinning
         on this reply and answers nothing while it waits.
         """
         held = BINDINGS.slot(self, page, actuator_index)
@@ -6378,7 +6425,7 @@ _:b%i
         self.unaddress(held['instance'], held['portsymbol'], True, dropped)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_broadcast_bind(self, instance, param, actuator, page, replaced):
+    def hmi_builder_binding_broadcast(self, instance, param, actuator, page, replaced):
         """Tell the browser about an addressing it did not make itself.
 
         The web UI updates its own state when it is the one addressing, so nothing here
@@ -6419,14 +6466,14 @@ _:b%i
             int(addressing.get('momentary', 0))))
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_ports(self, node_id, bits, side, callback):
+    def hmi_builder_connection_ports(self, node_id, bits, side, callback):
         """One side of a box's ports, for the last step of "New connection...".
 
         Same wire format as the two menus before it, so the firmware reads all three
         with one parser and the arrow keeps meaning the same thing.
         """
         # side 2 asks for both, inputs first: our own ports, where the side is the choice
-        entries = MINIMAP.ports(self, node_id, bits, None if side == 2 else side != 0)
+        entries = PLUGIN_MAP.ports(self, node_id, bits, None if side == 2 else side != 0)
 
         responseData = str(len(entries))
         for entry in entries:
@@ -6439,9 +6486,9 @@ _:b%i
         callback(True, responseData)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_connect(self, from_id, from_port, to_id, to_port, bits, callback):
+    def hmi_builder_connection_add(self, from_id, from_port, to_id, to_port, bits, callback):
         """Lay the one cable the user picked. A port index of -1 is the host's to choose."""
-        links = MINIMAP.connect_port(self, from_id, from_port, to_id, to_port, bits)
+        links = PLUGIN_MAP.connect_port(self, from_id, from_port, to_id, to_port, bits)
 
         if not links:
             logging.warning("hmi wants to connect %d:%d -> %d:%d, which is not possible",
@@ -6462,14 +6509,14 @@ _:b%i
             self.connect(port_from, port_to, done)
 
     # -----------------------------------------------------------------------------------------------------------------
-    def hmi_builder_disconnect(self, from_id, to_id, bits, callback):
+    def hmi_builder_connection_delete(self, from_id, to_id, bits, callback):
         """Drop every cable behind one line of the picture.
 
         A line can stand for several: a stereo pair is two cables and one line, and the
         user asked to remove the line. Host.disconnect() tells the web UI as it goes, so
         the browser follows along without being asked.
         """
-        links = MINIMAP.links_between(self, from_id, to_id, bits)
+        links = PLUGIN_MAP.links_between(self, from_id, to_id, bits)
 
         if not links:
             logging.warning("hmi wants to disconnect %d -> %d, which is not connected",
@@ -7427,13 +7474,8 @@ _:b%i
                   ))
 
 
-    def hmi_log_message(self, message, callback):
-        logging.info("-"*40)
-        logging.info("HMI LOG: '%s'", message)
-        logging.info("-"*40)
-        callback(True, "log")
 
-    def hmi_builder_controls(self, instance_id, start_index, control_count, callback):
+    def hmi_builder_control_list(self, instance_id, start_index, control_count, callback):
 
         plugin = self.plugins.get(int(instance_id), None)
         logging.debug("hmi builder controls - instance id: %s, start index: %d, count: %d, uri: %s", instance_id, start_index, control_count, "invalid id" if plugin == None else plugin['uri'])

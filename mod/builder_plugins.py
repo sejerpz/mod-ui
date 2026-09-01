@@ -18,7 +18,7 @@ import os
 import re
 
 from mod.settings import FAVORITES_JSON_FILE
-from mod.minimap import sanitize_label
+from mod.plugin_map import sanitize_label
 
 # One column of the Add screen, in pixels: the panel is 128 wide and holds two of them,
 # and a label longer than its column would be drawn straight over the other one.
@@ -228,7 +228,7 @@ def initials(category_index, bits=0):
 
     For scrubbing: holding the encoder down turns a list of hundreds into a list of
     twenty-odd, and letting go lands on the first plugin of the letter. The index is
-    absolute, the same one CMD_DWARF_BUILDER_CATALOG hands out.
+    absolute, the same one CMD_BUILDER_CATALOG_LIST hands out.
     """
     out = []
     seen = set()
