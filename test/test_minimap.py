@@ -24,7 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mod import minimap
 from mod import minimap_font as font
-from mod.settings import MINIMAP_MAX_MSG, MINIMAP_WIN_PLUGINS
+from mod.settings import (MINIMAP_MAX_MSG, MINIMAP_WIN_PLUGINS, MINIMAP_MAX_MENU,
+                          MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT,
+                          MINIMAP_HMI_VIEW_WIDTH, MINIMAP_HMI_VIEW_HEIGHT)
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +265,8 @@ def parse_displaylist(text):
                 'w': int(parts[5]), 'h': int(parts[6]),
                 'byp': int(parts[7]), 'layer': int(parts[8]),
                 'row': int(parts[9]), 'label': parts[10],
+                # '=' means the title bar shows the same string as the box
+                'title': parts[10] if len(parts) < 12 or parts[11] == '=' else parts[11],
             })
         elif kind == 'P':
             out['P'].append({
@@ -283,8 +287,7 @@ def parse_displaylist(text):
             })
         elif kind == 'A':
             out['A'].append({
-                'nid': int(parts[1]), 'up': int(parts[2]), 'down': int(parts[3]),
-                'left': int(parts[4]), 'right': int(parts[5]),
+                'nid': int(parts[1]), 'prev': int(parts[2]), 'next': int(parts[3]),
             })
     return out
 
@@ -365,9 +368,20 @@ def check_scenario(r, name, host, out_dir):
            if n['x'] < 0 or n['y'] < 0 or n['x'] + n['w'] > m['w'] or n['y'] + n['h'] > m['h']]
     r.check(not bad, '%s: every node rect is inside the scene bounds' % prefix, bad[:3])
 
-    r.check(m['w'] >= 128 and m['h'] >= 64,
-            '%s: scene is never smaller than the 128x64 viewport' % prefix,
-            '%dx%d' % (m['w'], m['h']))
+    # The scene is the drawing and nothing more -- no padding up to the panel size.
+    # A board smaller than the viewport is centred by the firmware, which is the only
+    # side that knows how much of the panel the builder's chrome has taken.
+    tight = [n for n in dl['N']]
+    if tight:
+        r.check(min(n['x'] for n in tight) == 3
+                and min(n['y'] for n in tight) == 3,
+                '%s: the drawing starts at the margin' % prefix,
+                (min(n['x'] for n in tight), min(n['y'] for n in tight)))
+        r.check(m['w'] - max(n['x'] + n['w'] for n in tight) == 3
+                and m['h'] - max(n['y'] + n['h'] for n in tight) == 3,
+                '%s: the scene ends at the margin' % prefix,
+                (m['w'] - max(n['x'] + n['w'] for n in tight),
+                 m['h'] - max(n['y'] + n['h'] for n in tight)))
     r.check(m['w'] <= 1024 and m['h'] <= 512,
             '%s: scene respects the size cap' % prefix, '%dx%d' % (m['w'], m['h']))
 
@@ -390,17 +404,34 @@ def check_scenario(r, name, host, out_dir):
                 or len(e['points']) < 2]
     r.check(not dangling, '%s: every edge resolves and has a polyline' % prefix, dangling[:3])
 
-    # adjacency: only known ids, no self references
+    # walk order: this list is unwindowed, so every step lands on a drawn node
     ids = set(nodes_by_id)
     bad_adj = []
     for a in dl['A']:
-        for direction in ('up', 'down', 'left', 'right'):
+        for direction in ('prev', 'next'):
             target = a[direction]
             if target != -1 and (target not in ids or target == a['nid']):
                 bad_adj.append((a['nid'], direction, target))
-    r.check(not bad_adj, '%s: adjacency points only at drawn nodes' % prefix, bad_adj[:3])
+    r.check(not bad_adj, '%s: walk order points only at real nodes' % prefix, bad_adj[:3])
     r.check(len(dl['A']) == len(dl['N']),
-            '%s: every node has an adjacency record' % prefix)
+            '%s: every node has a walk-order record' % prefix)
+
+    # and the steps form one chain through every box, exactly once
+    step = dict((a['nid'], a['next']) for a in dl['A'])
+    back = dict((a['nid'], a['prev']) for a in dl['A'])
+    heads = [a['nid'] for a in dl['A'] if a['prev'] == -1]
+    r.check(len(heads) == 1, '%s: the walk has one beginning' % prefix, heads)
+    if len(heads) == 1:
+        seen = []
+        cursor = heads[0]
+        while cursor != -1 and len(seen) <= len(ids):
+            seen.append(cursor)
+            cursor = step[cursor]
+        r.check(sorted(seen) == sorted(ids),
+                '%s: the walk visits every box exactly once' % prefix,
+                (len(seen), len(ids)))
+        r.check(all(back[seen[i + 1]] == seen[i] for i in range(len(seen) - 1)),
+                '%s: prev and next agree' % prefix)
 
     # labels are wire-safe: the format is space delimited
     spacey = [n['label'] for n in dl['N'] if ' ' in n['label']]
@@ -569,43 +600,40 @@ def check_windowing(r):
                 r.check(e['dst_out'] == 1,
                         'window %s: outside target is flagged' % name)
 
-        # coverage: walk adjacency and outgoing cables, fetching a new window
-        # whenever we reach something outside, and expect to see every plugin
-        all_plugin_ids = set(n.nid for n in plugins)
-        # ids are the mapper's instance_id, not array indices, so resolve them explicitly
+        # Coverage, simulating the firmware exactly: hold one window, step to the
+        # next id, and refetch centred on it whenever it is not in the window we
+        # have. Every box must be reachable this way, in one pass, without looping.
         node_by_id = dict((n.nid, n) for n in scene.nodes)
-        reached = set()
-        frontier = [focus]
-        visited_focus = set()
+        all_ids = set(node_by_id)
 
-        while frontier:
-            key = frontier.pop(0)
-            if key in visited_focus:
-                continue
-            visited_focus.add(key)
-            wtext, _ = mm.render(host, focus=key)
-            wdl = parse_displaylist(wtext)
-            local = set()
-            for n in wdl['N']:
-                if n['kind'] == minimap.KIND_PLUGIN:
-                    reached.add(n['nid'])
-                    local.add(n['nid'])
-            for e in wdl['E']:
-                for nid in (e['src'], e['dst']):
-                    if nid in all_plugin_ids and nid not in reached:
-                        frontier.append(node_by_id[nid].key)
-            for a in wdl['A']:
-                for direction in ('up', 'down', 'left', 'right'):
-                    nid = a[direction]
-                    if nid in all_plugin_ids and nid not in reached:
-                        frontier.append(node_by_id[nid].key)
-            for nid in sorted(local):
-                if nid in all_plugin_ids and node_by_id[nid].key not in visited_focus:
-                    frontier.append(node_by_id[nid].key)
+        wtext, _ = mm.render(host, focus=focus)
+        wdl = parse_displaylist(wtext)
+        cursor = scene.by_key[focus].nid
+        # rewind to the first box, the way the device does when it opens on IN1
+        walked = []
+        fetches = 0
 
-        r.check(reached == all_plugin_ids,
-                'window %s: every plugin reachable by navigation' % name,
-                'unreached: %s' % sorted(all_plugin_ids - reached)[:5])
+        while cursor != -1 and len(walked) <= len(all_ids):
+            walked.append(cursor)
+            step = dict((a['nid'], a['next']) for a in wdl['A'])
+            nxt = step.get(cursor, -1)
+            if nxt == -1:
+                break
+            if nxt not in set(n['nid'] for n in wdl['N']):
+                wtext, _ = mm.render(host, focus=node_by_id[nxt].key)
+                wdl = parse_displaylist(wtext)
+                fetches += 1
+                r.check(nxt in set(n['nid'] for n in wdl['N']),
+                        'window %s: a refetch really brings in the next box' % name)
+            cursor = nxt
+
+        start = scene.by_key[focus].nid
+        expected = sorted(all_ids, key=lambda i: (node_by_id[i].layer, node_by_id[i].row,
+                                                  node_by_id[i].key))
+        tail = expected[expected.index(start):]
+        r.check(walked == tail,
+                'window %s: one encoder walks every box from here to the end' % name,
+                (len(walked), len(tail)))
 
         # global coordinates: the same plugin seen from different windows
         # must never move
@@ -636,7 +664,7 @@ def check_caching(r):
 
     host.plugins[1]['x'] = 999
     _, v4 = mm.render(host)
-    r.check(v4 > v3, 'cache: a move bumps the version (it emits no message at all)')
+    r.check(v4 == v3, 'cache: dragging a plugin on the canvas changes nothing here')
 
     node = host.add('extra', 'urn:test:mono', 900, 100)
     host.connect(node + '/out', '/graph/playback_2')
@@ -646,6 +674,1112 @@ def check_caching(r):
     host.connections.pop()
     _, v6 = mm.render(host)
     r.check(v6 > v5, 'cache: a silent connection removal is still noticed')
+
+
+def check_hmi_request(r):
+    """The CMD_DWARF_BUILDER_MINIMAP round trip, without importing mod.host.
+
+    Mirrors what Host.hmi_builder_minimap does: pick a focus, render, hand the
+    text back as the command response. What matters here is that the answer is
+    something one HMI message can carry, and that every node the firmware
+    could name back resolves to a focus -- that pair is what makes panning
+    from the device work.
+    """
+    for name, factory in SCENARIOS:
+        host = factory()
+        mm = minimap.Minimap()
+        scene = mm.scene(host)
+
+        # FLAG_PAGINATION_INITIAL_REQ: no node named yet, the server picks one
+        focus = mm.default_focus(scene)
+        r.check(focus is not None or scene.plugin_count == 0,
+                'hmi %s: initial request has a focus' % name)
+
+        text, version = mm.render(host, focus=focus)
+        r.check(len(text) <= MINIMAP_MAX_MSG,
+                'hmi %s: initial window fits one message' % name, len(text))
+        r.check(version > 0, 'hmi %s: response carries a version' % name, version)
+
+        # every id in the answer is a focus the HMI can ask for next
+        records = parse_displaylist(text)
+        unresolved = [n['nid'] for n in records['N']
+                      if mm.key_for_id(scene, n['nid']) is None]
+        r.check(not unresolved, 'hmi %s: every drawn node id resolves' % name,
+                unresolved[:5])
+
+        # ... including the far ends of cables leaving the window, which is
+        # exactly what the user pans towards
+        outside = set()
+        for edge in records['E']:
+            for nid in (edge['src'], edge['dst']):
+                if mm.key_for_id(scene, nid) is None:
+                    outside.add(nid)
+        r.check(not outside, 'hmi %s: every referenced node id resolves' % name,
+                sorted(outside)[:5])
+
+        for node in records['N']:
+            follow, _ = mm.render(host, focus=mm.key_for_id(scene, node['nid']))
+            if len(follow) > MINIMAP_MAX_MSG:
+                r.check(False, 'hmi %s: window around node %d fits one message'
+                        % (name, node['nid']), len(follow))
+                break
+        else:
+            r.check(True, 'hmi %s: every follow-up window fits one message' % name)
+
+        # an id the firmware made up must not take the server down
+        r.check(mm.key_for_id(scene, 31337) is None,
+                'hmi %s: unknown node id resolves to nothing' % name)
+
+        # The sign of an id is what tells a plugin from a piece of hardware, and
+        # hmi_builder_remove leans on it: capture and playback are drawn like everything
+        # else but are not on the board, and a delete must never reach them.
+        wrong = [n.key for n in scene.nodes
+                 if (n.nid < 0) != (n.kind != minimap.KIND_PLUGIN)]
+        r.check(not wrong,
+                'hmi %s: only hardware takes a negative id' % name, wrong[:3])
+
+
+def check_splice(r):
+    """Where an added plugin lands when the server is allowed to guess.
+
+    Adding a tremolo with a gain selected should put the tremolo between the gain and
+    whatever the gain fed. The whole value of that is in never being wrong: a guess that
+    rearranges a board the user did not want rearranged costs far more than the wiring it
+    saved, so everything below the first two cases has to come back with nothing.
+    """
+    mm = minimap.instance_for(minimap.MODE_COMPACT)
+
+    # -- mono, the plain case: one cable, taken over ---------------------------------
+    host = FakeHost()
+    gain = host.add('gain', 'urn:test:mono', 100, 40)
+    amp = host.add('amp', 'urn:test:mono', 500, 40)
+    host.connect(gain + '/out', amp + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    plan = mm.splice_plan(host, ids[gain], 1)
+
+    r.check(plan is not None, 'splice: a lone cable is spliceable')
+    r.check(plan and plan['links'] == [(gain + '/out', amp + '/in')],
+            'splice: the cable to take over is the one between the two', plan)
+    r.check(plan and (plan['x'], plan['y']) == (300, 40),
+            'splice: the new box lands between the two it comes between', plan)
+    r.check(plan and plan['cut'] == plan['links'],
+            'splice: with a channel per cable there is nothing to double', plan)
+
+    # -- a stereo box between two mono ends: split in, sum out ------------------------
+    plan = mm.splice_plan(host, ids[gain], 2)
+
+    r.check(plan and plan['cut'] == [(gain + '/out', amp + '/in')],
+            'splice: the one cable is dropped once, not once per channel', plan)
+    r.check(plan and plan['links'] == [(gain + '/out', amp + '/in')] * 2,
+            'splice: and both channels of the new box come off it', plan)
+
+    # what the far box hears has to be what it heard: the cable feeds both inputs and
+    # both outputs meet the one input again, so the split and the sum cancel
+    wired = []
+    for index, link in enumerate(plan['links']):
+        source, target = link
+        wired.append((source, 'IN%d' % index))
+        wired.append(('OUT%d' % index, target))
+
+    r.check(wired == [(gain + '/out', 'IN0'), ('OUT0', amp + '/in'),
+                      (gain + '/out', 'IN1'), ('OUT1', amp + '/in')],
+            'splice: which is one cable into each input and each output into the far one',
+            wired)
+
+    # four channels off one cable is not a split anyone asked for
+    r.check(mm.splice_plan(host, ids[gain], 4) is None,
+            'splice: only stereo splits a single cable')
+
+    # -- stereo, where the pairing has to come out straight ---------------------------
+    host = FakeHost()
+    left = host.add('left', 'urn:test:stereo', 0, 10)
+    right = host.add('right', 'urn:test:stereo', 200, 30)
+    # deliberately back to front: the plan must sort them, not trust the order it got
+    host.connect(left + '/out_r', right + '/in_r')
+    host.connect(left + '/out_l', right + '/in_l')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    plan = mm.splice_plan(host, ids[left], 2)
+
+    r.check(plan and plan['links'] == [(left + '/out_l', right + '/in_l'),
+                                       (left + '/out_r', right + '/in_r')],
+            'splice: a stereo pair is taken over left to left', plan)
+    r.check(plan and plan['cut'] == plan['links'],
+            'splice: two cables, two channels, nothing doubled', plan)
+    r.check(plan and (plan['x'], plan['y']) == (100, 20),
+            'splice: stereo lands halfway too', plan)
+
+    # a mono plugin has no shape to take a stereo cable over with, and the other way round
+    # folding two signals into one throws the difference away: a decision, not a default
+    r.check(mm.splice_plan(host, ids[left], 1) is None,
+            'splice: a mono plugin is not spliced into a stereo cable')
+    r.check(mm.splice_plan(host, ids[left], 4) is None,
+            'splice: nor a four channel one')
+
+    # -- a mono box feeding a stereo one over two cables ------------------------------
+    # Two cables leaving one output: the run is stereo even though the near end is not,
+    # so a stereo plugin belongs in it -- the mono output goes on feeding both inputs,
+    # and the new box meets the far one port for port.
+    host = FakeHost()
+    drive = host.add('drive', 'urn:test:mono', 0, 0)
+    verb = host.add('verb', 'urn:test:stereo', 400, 100)
+    host.connect(drive + '/out', verb + '/in_r')
+    host.connect(drive + '/out', verb + '/in_l')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    plan = mm.splice_plan(host, ids[drive], 2)
+
+    r.check(plan and plan['links'] == [(drive + '/out', verb + '/in_l'),
+                                       (drive + '/out', verb + '/in_r')],
+            'splice: a mono output feeding a stereo box is a two channel run', plan)
+
+    # ... and a mono plugin still has no business in a two cable run
+    r.check(mm.splice_plan(host, ids[drive], 1) is None,
+            'splice: one channel does not fit two cables')
+
+    # the other way round: a stereo box summed into a mono one
+    host = FakeHost()
+    wide = host.add('wide', 'urn:test:stereo', 0, 0)
+    sum_in = host.add('sum', 'urn:test:mono', 200, 0)
+    host.connect(wide + '/out_r', sum_in + '/in')
+    host.connect(wide + '/out_l', sum_in + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    plan = mm.splice_plan(host, ids[wide], 2)
+    r.check(plan and plan['links'] == [(wide + '/out_l', sum_in + '/in'),
+                                       (wide + '/out_r', sum_in + '/in')],
+            'splice: and a stereo box summed into a mono one is one as well', plan)
+
+    # a run that repeats ports at both ends has nothing left to name its channels with
+    host = FakeHost()
+    fat = host.add('fat', 'urn:test:fat', 0, 0)
+    pair = host.add('pair', 'urn:test:stereo', 200, 0)
+    host.connect(fat + '/o1', pair + '/in_l')
+    host.connect(fat + '/o1', pair + '/in_r')
+    host.connect(fat + '/o2', pair + '/in_r')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    r.check(mm.splice_plan(host, ids[fat], 3) is None,
+            'splice: a run that repeats ports at both ends names no channels')
+
+    # -- hardware at either end still has a spot to aim at ----------------------------
+    host = FakeHost()
+    only = host.add('only', 'urn:test:mono', 400, 60)
+    host.connect('/graph/capture_1', only + '/in')
+    host.connect(only + '/out', '/graph/playback_1')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    plan = mm.splice_plan(host, ids[only], 1)
+    r.check(plan and plan['x'] > 400 and plan['y'] == 60,
+            'splice: a chain ending at hardware is measured from the plugin', plan)
+
+    plan = mm.splice_plan(host, ids['/graph/capture_1'], 1)
+    r.check(plan and plan['x'] < 400 and plan['y'] == 60,
+            'splice: and so is one starting at it', plan)
+
+    # -- everything that has to come back with nothing --------------------------------
+    host = FakeHost()
+    head = host.add('head', 'urn:test:mono')
+    one = host.add('one', 'urn:test:mono')
+    two = host.add('two', 'urn:test:mono')
+    host.connect(head + '/out', one + '/in')
+    host.connect(head + '/out', two + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    r.check(mm.splice_plan(host, ids[head], 1) is None,
+            'splice: a box that fans out is left alone')
+    r.check(mm.splice_plan(host, ids[one], 1) is None,
+            'splice: a box wired to nothing has no cable to be spliced into')
+
+    host = FakeHost()
+    a = host.add('a', 'urn:test:mono')
+    b = host.add('b', 'urn:test:mono')
+    summed = host.add('summed', 'urn:test:mono')
+    host.connect(a + '/out', summed + '/in')
+    host.connect(b + '/out', summed + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    r.check(mm.splice_plan(host, ids[a], 1) is None,
+            'splice: a far end that sums two sources is a mixing point, not a chain')
+
+    host = FakeHost()
+    host.midiports = [('/graph/serial_midi_in', 'MIDI', '')]
+    src = host.add('src', 'urn:test:cv')
+    dst = host.add('dst', 'urn:test:cv')
+    host.connect(src + '/out', dst + '/in')
+    host.connect(src + '/cv_out', dst + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    r.check(mm.splice_plan(host, ids[src], 1) is None,
+            'splice: a chain carrying more than audio is not rearranged unasked')
+
+    r.check(mm.splice_plan(host, -1, 1) is None,
+            'splice: nothing selected means nothing to splice into')
+    r.check(mm.splice_plan(host, 31337, 1) is None,
+            'splice: an id that is not there resolves to no plan')
+
+    # the endpoints have to be exactly what Host.disconnect() takes, or the splice cuts
+    # nothing and the new box is wired in alongside the cable it was meant to replace
+    host = FakeHost()
+    gain = host.add('gain', 'urn:test:mono')
+    amp = host.add('amp', 'urn:test:mono')
+    host.connect(gain + '/out', amp + '/in')
+
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    plan = mm.splice_plan(host, ids[gain], 1)
+    r.check(plan and all(link in host.connections for link in plan['links']),
+            'splice: the cables named are cables the host actually holds', plan)
+
+
+def check_unsplice(r):
+    """Closing the chain back over a box that has been removed.
+
+    The inverse of check_splice, and the interesting part is that it really is the
+    inverse: splicing a box into a chain and then removing it again has to leave the
+    board exactly as it started, whichever of the three shapes the splice took.
+    """
+    mm = minimap.instance_for(minimap.MODE_COMPACT)
+
+    def board(kinds, cables):
+        host = FakeHost()
+        names = {}
+        for name, uri in kinds:
+            names[name] = host.add(name, uri)
+        for a, b in cables:
+            host.connect(names[a[0]] + '/' + a[1], names[b[0]] + '/' + b[1])
+        ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+        return host, names, ids
+
+    # -- the plain case: one cable in, one out, one cable back ------------------------
+    host, names, ids = board(
+        [('gain', 'urn:test:mono'), ('trem', 'urn:test:mono'), ('amp', 'urn:test:mono')],
+        [(('gain', 'out'), ('trem', 'in')), (('trem', 'out'), ('amp', 'in'))])
+
+    plan = mm.unsplice_plan(host, ids[names['trem']])
+    r.check(plan and plan['links'] == [(names['gain'] + '/out', names['amp'] + '/in')],
+            'unsplice: a box in a mono chain is closed over', plan)
+
+    # -- stereo, paired by the removed box's own ports so nothing crosses --------------
+    host, names, ids = board(
+        [('a', 'urn:test:stereo'), ('mid', 'urn:test:stereo'), ('b', 'urn:test:stereo')],
+        [(('a', 'out_r'), ('mid', 'in_r')), (('a', 'out_l'), ('mid', 'in_l')),
+         (('mid', 'out_l'), ('b', 'in_l')), (('mid', 'out_r'), ('b', 'in_r'))])
+
+    plan = mm.unsplice_plan(host, ids[names['mid']])
+    r.check(plan and plan['links'] == [(names['a'] + '/out_l', names['b'] + '/in_l'),
+                                       (names['a'] + '/out_r', names['b'] + '/in_r')],
+            'unsplice: a stereo pair comes back left to left', plan)
+
+    # -- a stereo box between two mono ends: both channels, one cable back -------------
+    host, names, ids = board(
+        [('gain', 'urn:test:mono'), ('wide', 'urn:test:stereo'), ('amp', 'urn:test:mono')],
+        [(('gain', 'out'), ('wide', 'in_l')), (('gain', 'out'), ('wide', 'in_r')),
+         (('wide', 'out_l'), ('amp', 'in')), (('wide', 'out_r'), ('amp', 'in'))])
+
+    plan = mm.unsplice_plan(host, ids[names['wide']])
+    r.check(plan and plan['links'] == [(names['gain'] + '/out', names['amp'] + '/in')],
+            'unsplice: the split and the sum collapse back to the one cable', plan)
+
+    # -- and the round trip, which is the whole point ----------------------------------
+    for label, uri, wiring in (
+            ('mono', 'urn:test:mono',
+             [(('gain', 'out'), ('amp', 'in'))]),
+            ('stereo', 'urn:test:stereo',
+             [(('gain', 'out_l'), ('amp', 'in_l')), (('gain', 'out_r'), ('amp', 'in_r'))]),
+            ('split', 'urn:test:stereo',
+             [(('gain', 'out'), ('amp', 'in'))])):
+
+        ends = 'urn:test:stereo' if label == 'stereo' else 'urn:test:mono'
+        host, names, ids = board([('gain', ends), ('amp', ends)], wiring)
+        before = sorted(host.connections)
+
+        channels = 2 if uri == 'urn:test:stereo' else 1
+        plan = mm.splice_plan(host, ids[names['gain']], channels)
+        r.check(plan is not None, 'unsplice: the %s board splices at all' % label)
+        if plan is None:
+            continue
+
+        # play the splice out on the fake board, the way Host._splice_plugin does
+        mid = host.add('mid', uri)
+        ins, outs = (['in_l', 'in_r'], ['out_l', 'out_r']) if channels == 2 \
+                    else (['in'], ['out'])
+
+        for link in plan['cut']:
+            host.connections.remove(link)
+        for index, link in enumerate(plan['links']):
+            host.connect(link[0], mid + '/' + ins[index])
+            host.connect(mid + '/' + outs[index], link[1])
+
+        ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+        undo = mm.unsplice_plan(host, ids[mid])
+        r.check(undo is not None, 'unsplice: the %s board closes again' % label)
+        if undo is None:
+            continue
+
+        # remove the box the way Host.remove_plugin does, then lay what the plan named
+        host.connections = [c for c in host.connections if not c[0].startswith(mid)
+                            and not c[1].startswith(mid)]
+        for link in undo['links']:
+            host.connect(link[0], link[1])
+
+        r.check(sorted(host.connections) == before,
+                'unsplice: %s splices and closes back to the board it started from'
+                % label, (sorted(host.connections), before))
+
+    # -- what has to be left open ------------------------------------------------------
+    host, names, ids = board(
+        [('head', 'urn:test:mono'), ('one', 'urn:test:mono'), ('two', 'urn:test:mono')],
+        [(('head', 'out'), ('one', 'in')), (('head', 'out'), ('two', 'in'))])
+    r.check(mm.unsplice_plan(host, ids[names['head']]) is None,
+            'unsplice: an end of the chain has nothing to join')
+    r.check(mm.unsplice_plan(host, ids[names['one']]) is None,
+            'unsplice: and neither has the other end')
+
+    host, names, ids = board(
+        [('a', 'urn:test:mono'), ('fan', 'urn:test:mono'),
+         ('x', 'urn:test:mono'), ('y', 'urn:test:mono')],
+        [(('a', 'out'), ('fan', 'in')),
+         (('fan', 'out'), ('x', 'in')), (('fan', 'out'), ('y', 'in'))])
+    r.check(mm.unsplice_plan(host, ids[names['fan']]) is None,
+            'unsplice: a box that fanned out was carrying a decision')
+
+    host, names, ids = board(
+        [('src', 'urn:test:cv'), ('mid', 'urn:test:cv'), ('dst', 'urn:test:cv')],
+        [(('src', 'out'), ('mid', 'in')), (('src', 'cv_out'), ('mid', 'in')),
+         (('mid', 'out'), ('dst', 'in')), (('mid', 'cv_out'), ('dst', 'in'))])
+    r.check(mm.unsplice_plan(host, ids[names['mid']]) is None,
+            'unsplice: a chain carrying more than audio is left alone')
+
+    r.check(mm.unsplice_plan(host, -1) is None,
+            'unsplice: nothing selected closes nothing')
+
+
+def check_bindings(r):
+    """The binding manager's two columns, and what DEL is offered on.
+
+    Everything crosses the wire as a position, so what matters is that both sides derive
+    the same order from the same data. The awkward part is that a knob is not one slot: the
+    panel turns its knobs over in sub-pages, an addressing records which one it was made
+    on, and the list has to say so without the device ever hearing the word.
+    """
+    from mod import builder_bindings as bindings
+
+    class FakeAddressings(object):
+        addressing_pages = 8
+        has_hmi_subpages = True
+
+        def __init__(self):
+            # deliberately out of order, and with a Control Chain pedal in the middle
+            self.hw_actuators = [
+                {'uri': '/hmi/footswitch2', 'name': 'FSW C'},
+                {'uri': '/hmi/knob2', 'name': 'Knob 2'},
+                {'uri': '/cc/1/2', 'name': 'Some Pedal'},
+                {'uri': '/hmi/knob1', 'name': 'Knob 1'},
+                {'uri': '/hmi/footswitch1,2', 'name': 'FSW BC',
+                 'actuator_group': ['/hmi/footswitch1', '/hmi/footswitch2']},
+                {'uri': '/hmi/knob3', 'name': 'Knob 3'},
+                {'uri': '/hmi/footswitch1', 'name': 'FSW B'},
+            ]
+            self.hmi_addressings = dict((a['uri'], {'addrs': [], 'idx': -1})
+                                        for a in self.hw_actuators)
+
+        def get_actuators(self):
+            return list(self.hw_actuators)
+
+    class FakeMapper(object):
+        def __init__(self):
+            self.id_map = {}
+
+    class Board(object):
+        def __init__(self):
+            self.addressings = FakeAddressings()
+            self.mapper = FakeMapper()
+            self.plugins = {}
+
+        def add(self, instance_id, instance, uri, bypassed=False):
+            self.plugins[instance_id] = {
+                'instance': instance, 'uri': uri, 'bypassed': bypassed,
+                'ports': {'gain': 0.5}, 'ranges': {'gain': (-20.0, 20.0)},
+                'addressings': {},
+            }
+            self.mapper.id_map[instance_id] = instance
+
+    def essentials(uri):
+        return {'controlInputs': [
+            {'symbol': 'gain', 'name': 'Input Gain',
+             'ranges': {'minimum': -30.0, 'maximum': 30.0, 'default': 0.0}},
+            {'symbol': 'tone', 'name': 'Tone',
+             'ranges': {'minimum': 0.0, 'maximum': 1.0, 'default': 0.5}},
+        ]}
+
+    bindings.set_info_provider(essentials)
+
+    host = Board()
+    host.add(1, '/graph/drive', 'urn:test:mono')
+
+    # -- column two: every slot, not every actuator -------------------------------------
+    listed = bindings.actuators(host)
+
+    r.check([(a['uri'], a['subpage']) for a in listed] == [
+                ('/hmi/knob1', 0), ('/hmi/knob2', 0), ('/hmi/knob3', 0),
+                ('/hmi/knob1', 1), ('/hmi/knob2', 1), ('/hmi/knob3', 1),
+                ('/hmi/knob1', 2), ('/hmi/knob2', 2), ('/hmi/knob3', 2),
+                ('/hmi/footswitch1', 0), ('/hmi/footswitch2', 0),
+                ('/hmi/footswitch1,2', 0)],
+            'bindings: three knobs over three sub-pages, then the footswitches once each',
+            [(a['uri'], a['subpage']) for a in listed])
+
+    r.check([a['label'] for a in listed[:4]] ==
+            ['KNOB_1_I', 'KNOB_2_I', 'KNOB_3_I', 'KNOB_1_II'],
+            'bindings: and the sub-page is on the label, since the panel shows nine knobs',
+            [a['label'] for a in listed[:4]])
+
+    r.check(all(' ' not in a['label'] for a in listed),
+            'bindings: actuator labels are wire safe', [a['label'] for a in listed])
+    r.check([a['index'] for a in listed] == list(range(12)),
+            'bindings: the index is the position the device is shown')
+
+    # a Control Chain pedal is not something the panel can put a finger on
+    r.check(not [a for a in listed if not a['uri'].startswith('/hmi/')],
+            'bindings: only the panel is listed')
+
+    # a panel without sub-pages lists each knob once, and records no sub-page at all
+    host.addressings.has_hmi_subpages = False
+    plain = bindings.actuators(host)
+    r.check(len(plain) == 6 and all(a['subpage'] is None for a in plain),
+            'bindings: a panel that does not turn over lists each actuator once',
+            [(a['uri'], a['subpage']) for a in plain])
+    r.check(plain[0]['label'] == 'KNOB_1',
+            'bindings: and its labels carry no numeral', plain[0]['label'])
+    host.addressings.has_hmi_subpages = True
+
+    # -- column one ---------------------------------------------------------------------
+    params = bindings.parameters(host, 1)
+    r.check([p['symbol'] for p in params] == [':bypass', 'gain', 'tone'],
+            'bindings: bypass first, then the ports the plugin declares',
+            [p['symbol'] for p in params])
+
+    r.check(params[1]['minimum'] == -20.0 and params[1]['maximum'] == 20.0,
+            'bindings: a port that has been ranged keeps the range it was given', params[1])
+    r.check(params[1]['value'] == 0.5,
+            'bindings: and the value it is actually at', params[1])
+    r.check(params[2]['value'] == 0.5 and params[2]['maximum'] == 1.0,
+            'bindings: one never touched falls back to what the plugin declares', params[2])
+
+    r.check(bindings.parameters(host, 31337) == [],
+            'bindings: a box that is not there offers nothing')
+    r.check(bindings.parameter_at(host, 1, 99) is None,
+            'bindings: a position that is not there resolves to nothing')
+
+    # -- what is spoken for, by page and by sub-page -------------------------------------
+    r.check(bindings.taken(host, 0) == {},
+            'bindings: an untouched board holds no slots')
+
+    host.addressings.hmi_addressings['/hmi/knob2']['addrs'].append(
+        {'instance_id': 1, 'port': 'gain', 'label': 'Input Gain', 'page': 3, 'subpage': 2})
+
+    # knob 2 of sub-page III is row 7, and none of the other eight knob slots
+    r.check(bindings.taken(host, 3) == {7: 'INPUT_GAIN'},
+            'bindings: the slot marked is the one sub-page it was made on',
+            bindings.taken(host, 3))
+    r.check(bindings.taken(host, 0) == {},
+            'bindings: and it is on no other page', bindings.taken(host, 0))
+
+    held = bindings.slot(host, 3, 7)
+    r.check(held and held['instance'] == '/graph/drive' and held['portsymbol'] == 'gain',
+            'bindings: DEL resolves the slot back to the port holding it', held)
+    r.check(held and held['subpage'] == 2,
+            'bindings: carrying the sub-page it has to unaddress on', held)
+    r.check(bindings.slot(host, 3, 1) is None,
+            'bindings: the same knob on another sub-page is a different slot')
+    r.check(bindings.slot(host, 3, 99) is None,
+            'bindings: and a row that is not there resolves to nothing')
+
+    # A parameter holds one addressing, so binding it elsewhere frees the slot it was on
+    # and the device has to be told which mark to drop -- by row, not by actuator, since
+    # the same knob is a different row on each sub-page.
+    listed = bindings.actuators(host)
+    r.check(bindings.index_of(listed, '/hmi/knob2', 2) == 7,
+            'bindings: a slot is found by its actuator and its sub-page together',
+            bindings.index_of(listed, '/hmi/knob2', 2))
+    r.check(bindings.index_of(listed, '/hmi/knob2', 0) == 1,
+            'bindings: the same knob on another sub-page is another row')
+    r.check(bindings.index_of(listed, '/hmi/knob9', 0) == -1,
+            'bindings: an actuator that is not there is no row at all')
+
+    r.check(bindings.pages(host) == 8, 'bindings: the board has its pages')
+    r.check(bindings.subpages(host) == 3, 'bindings: and its knobs turn over three times')
+
+    bindings.set_info_provider(None)
+
+
+def check_cable_clearance(r):
+    """No cable may run through a box that is not one of its own ends.
+
+    A cable skipping columns would otherwise be drawn straight from stub to stub,
+    ploughing through everything in between. The renderer clears the inside of a
+    box before drawing its border, so the cable disappears into one box and comes
+    out of another -- which reads as a chain of connections that do not exist.
+    """
+    for name, factory in SCENARIOS:
+        host = factory()
+        mm = minimap.Minimap()
+        scene = mm.scene(host)
+
+        through = []
+        for edge in scene.edges:
+            for node in scene.nodes:
+                if node is edge.src or node is edge.dst:
+                    continue
+                x0, y0 = node.x, node.y
+                x1, y1 = node.x + node.w - 1, node.y + node.h - 1
+                for (ax, ay), (bx, by) in zip(edge.points, edge.points[1:]):
+                    if ay == by and y0 <= ay <= y1 and min(ax, bx) < x1 and max(ax, bx) > x0:
+                        through.append((edge.src.label, edge.dst.label, node.label))
+                        break
+                    if ax == bx and x0 <= ax <= x1 and min(ay, by) < y1 and max(ay, by) > y0:
+                        through.append((edge.src.label, edge.dst.label, node.label))
+                        break
+
+        r.check(not through, 'clearance %s: no cable runs through a box' % name,
+                through[:5])
+
+
+def check_viewport_coverage(r):
+    """Nothing drawn on the panel may be missing from the message.
+
+    The device pans a viewport over the scene and draws whatever the display list
+    holds. If a box falls inside the viewport but outside the window, the panel
+    shows a gap where a plugin is -- which is what happened when the window was
+    picked by graph distance: stepping to the box next door swapped the picture
+    for a different neighbourhood and boxes on screen disappeared.
+
+    Modelled on the firmware: minimap_select() centres the selection horizontally
+    and clamps, but scrolls vertically only when the box would not fit whole on the
+    panel. Where it is looking vertically therefore depends on how the user got
+    there, so the check is made against every position that keeps the focus fully
+    visible -- if any of them would draw a box the message does not carry, that is
+    a gap waiting to happen.
+    """
+    view_w, view_h = MINIMAP_HMI_VIEW_WIDTH, MINIMAP_HMI_VIEW_HEIGHT
+
+    for name, factory in SCENARIOS:
+        host = factory()
+        mm = minimap.Minimap()
+        scene = mm.scene(host)
+
+        missing = []
+        for node in scene.nodes:
+            ids = set(n['nid'] for n in
+                      parse_displaylist(mm.render(host, focus=node.key)[0])['N'])
+
+            limit = max(0, scene.width - view_w)
+            ox = max(0, min(node.x + node.w // 2 - view_w // 2, limit))
+
+            # any vertical position that keeps this box whole on the panel
+            top = node.y + node.h - view_h
+            bottom = node.y + view_h
+
+            for other in scene.nodes:
+                on_screen = (other.x < ox + view_w and other.x + other.w > ox and
+                             other.y < bottom and other.y + other.h > top)
+                if on_screen and other.nid not in ids:
+                    missing.append((node.label, other.label))
+
+        r.check(not missing,
+                'viewport %s: every box on screen is in the message' % name,
+                missing[:5])
+
+
+def check_connections(r):
+    """The connection menu's two lookups: what to list, and what to drop for it.
+
+    Listing groups by the box at the far end and the signal type, so a stereo pair
+    is one entry. Deleting that entry has to find both cables behind it, which is
+    what links_between() is for -- and its endpoints have to come back in the exact
+    form Host.disconnect() takes, or the delete silently does nothing.
+    """
+    host = FakeHost()
+    host.midiports = [('/graph/serial_midi_in', 'MIDI', '')]
+    left = host.add('left', 'urn:test:stereo', 100, 100)
+    right = host.add('right', 'urn:test:stereo', 300, 100)
+    host.connect(left + '/out_l', right + '/in_l')
+    host.connect(left + '/out_r', right + '/in_r')
+    host.connect('/graph/capture_1', left + '/in_l')
+    host.connect(right + '/out_l', '/graph/playback_1')
+
+    mm = minimap.instance_for(minimap.MODE_COMPACT)
+    scene = mm.scene(host)
+    ids = dict((n.key, n.nid) for n in scene.nodes)
+
+    entries = mm.connections(host, ids[right])
+    kinds = [(e['direction'], e['label']) for e in entries]
+    r.check(kinds == [('i', 'LEFT'), ('o', 'OUT1')],
+            'connections: one entry per far box, sources first', kinds)
+
+    r.check(all(' ' not in e['label'] and ';' not in e['label'] and '"' not in e['label']
+                for e in entries),
+            'connections: labels are wire safe', [e['label'] for e in entries])
+
+    # the stereo pair is one entry and two cables
+    links = mm.links_between(host, ids[left], ids[right])
+    r.check(sorted(links) == sorted([(left + '/out_l', right + '/in_l'),
+                                     (left + '/out_r', right + '/in_r')]),
+            'connections: a stereo line stands for both its cables', links)
+
+    r.check(all(link in host.connections for link in links),
+            'connections: endpoints match what the host actually holds', links)
+
+    # The strip under the menu names the cables behind one line, and it is the compact
+    # scene that collapsed them, so the names have to be dug back out of the detail one.
+    incoming = entries[0]
+    r.check(sorted(incoming['pairs']) == [('OUT_L', 'IN_L'), ('OUT_R', 'IN_R')],
+            'connections: a collapsed line still carries both its cables', incoming['pairs'])
+
+    r.check(all(pair[0].startswith('OUT') for pair in incoming['pairs']),
+            'connections: the feeding end comes first however we face the cable',
+            incoming['pairs'])
+
+    outgoing = entries[1]
+    r.check(outgoing['pairs'] == [('OUT_L', 'PLAYBACK_1')],
+            'connections: hardware ends are named too', outgoing['pairs'])
+
+    r.check(all(' ' not in name and ';' not in name and '"' not in name
+                for e in entries for pair in e['pairs'] for name in pair),
+            'connections: port names are wire safe')
+
+    # the budget is what keeps the whole menu inside the device's receive buffer
+    saved = minimap.MINIMAP_MAX_PAIRS
+    try:
+        minimap.MINIMAP_MAX_PAIRS = 1
+        starved = mm.connections(host, ids[right])
+        r.check([len(e['pairs']) for e in starved] == [1, 0],
+                'connections: the pair budget runs out on the later lines, not the first',
+                [len(e['pairs']) for e in starved])
+    finally:
+        minimap.MINIMAP_MAX_PAIRS = saved
+
+    # asking for a type nothing uses must come back empty, not with everything
+    midi_only = mm.connections(host, ids[right], 2)
+    r.check(not midi_only, 'connections: the type filter really filters', midi_only)
+
+    audio_only = mm.connections(host, ids[right], 1)
+    r.check(len(audio_only) == len(entries),
+            'connections: filtering on the only type present changes nothing')
+
+    r.check(not mm.links_between(host, ids[right], ids[left]),
+            'connections: direction is not symmetric')
+
+    check_menu_wire_format(r)
+
+
+def check_menu_wire_format(r):
+    """The menu response as parse_connections() in the firmware reads it.
+
+    Five tokens an entry and then two more per cable, so the stride is no longer
+    fixed and the parser walks it with a cursor. Anything that puts a space in a
+    name, or miscounts the pairs, slides every later entry along by one field --
+    which shows up on the device as garbled rows rather than as an error. The
+    whole thing also has to fit WEBGUI_COMM_RX_BUFF_SIZE, since a longer answer is
+    truncated on arrival with nothing to say so.
+    """
+    WEBGUI_COMM_RX_BUFF_SIZE = 4096
+
+    for name, factory in SCENARIOS:
+        host = factory()
+        mm = minimap.instance_for(minimap.MODE_COMPACT)
+        scene = mm.scene(host)
+
+        worst = 0
+        for node in scene.nodes:
+            entries = mm.connections(host, node.nid)
+
+            # exactly what Host.hmi_builder_connections builds
+            fields = [str(len(entries))]
+            for entry in entries:
+                pairs = entry['pairs']
+                fields += [entry['direction'], str(entry['nid']), str(entry['bits']),
+                           entry['label'], str(len(pairs))]
+                for source, sink in pairs:
+                    fields += [source, sink]
+
+            response = ' '.join(fields)
+            worst = max(worst, len(response))
+
+            # ... and now the firmware's side of it
+            tokens = response.split(' ')
+            at, read = 1, []
+            for _ in range(int(tokens[0])):
+                pairs = int(tokens[at + 4])
+                read.append((tokens[at], int(tokens[at + 1]), tokens[at + 3],
+                             [(tokens[at + 5 + 2 * p], tokens[at + 6 + 2 * p])
+                              for p in range(pairs)]))
+                at += 5 + 2 * pairs
+
+            r.check(at == len(tokens),
+                    'wire %s: the menu parses with nothing left over' % name,
+                    (at, len(tokens)))
+            r.check(read == [(e['direction'], e['nid'], e['label'], list(e['pairs']))
+                             for e in entries],
+                    'wire %s: every entry survives the round trip' % name)
+
+        r.check(worst < WEBGUI_COMM_RX_BUFF_SIZE,
+                'wire %s: the longest menu fits the receive buffer' % name, worst)
+
+    # The wire format the firmware reads back: three tokens of header and then four per
+    # entry, split on spaces like every other HMI message. A label with a space in it
+    # would shift every field after it and the menu would fill with rubbish.
+    response = str(len(entries))
+    for entry in entries:
+        response += ' %s %d %d %s' % (entry['direction'], entry['nid'],
+                                      entry['bits'], entry['label'])
+    tokens = ('r 1 ' + response).split(' ')
+    r.check(len(tokens) == 3 + 4 * len(entries),
+            'connections: the response splits into four tokens an entry',
+            (len(tokens), 3 + 4 * len(entries)))
+    r.check(int(tokens[2]) == len(entries),
+            'connections: the count matches what follows it')
+    for index, entry in enumerate(entries):
+        field = tokens[3 + index * 4:7 + index * 4]
+        r.check(field[0] in ('i', 'o') and int(field[1]) == entry['nid']
+                and int(field[2]) == entry['bits'] and field[3] == entry['label'],
+                'connections: entry %d survives the split' % index, field)
+
+
+def check_new_connection(r):
+    """Making a connection from the device, the way the four menus walk it.
+
+    Our own port first, and it settles everything after: an input of ours wants somebody's
+    output, an output wants somebody's input, and the type has to match too. The device
+    names ports by position, so both sides have to derive the same ordering from the same
+    data -- that, and the whole thing undoing cleanly, is what these check.
+    """
+    host = FakeHost()
+    mono = host.add('mono', 'urn:test:mono', 100, 100)
+    wide = host.add('wide', 'urn:test:stereo', 300, 100)
+    host.connect('/graph/capture_1', mono + '/in')
+
+    mm = minimap.instance_for(minimap.MODE_COMPACT)
+    ids = dict((n.key, n.nid) for n in mm.scene(host).nodes)
+    before = sorted(host.connections)
+
+    # step one: our own ports, both sides, inputs first
+    ours = mm.ports(host, ids[wide], 1, None)
+    r.check([p['label'] for p in ours] == ['IN_L', 'IN_R', 'OUT_L', 'OUT_R'],
+            'new connection: our own ports come inputs first',
+            [p['label'] for p in ours])
+    r.check([p['direction'] for p in ours] == ['o', 'o', 'i', 'i'],
+            'new connection: and the letter says which side each one is',
+            [p['direction'] for p in ours])
+    r.check([p['index'] for p in ours] == [0, 1, 0, 1],
+            'new connection: and the index counts within its own side, not across both',
+            [p['index'] for p in ours])
+
+    # step two: what a port of ours could meet is the other kind, never the same
+    outgoing = mm.candidates(host, ids[wide], 1, False)
+    incoming = mm.candidates(host, ids[wide], 1, True)
+    r.check(all(c['direction'] == 'o' for c in outgoing) and outgoing,
+            'new connection: our output is offered boxes to feed',
+            [c['direction'] for c in outgoing])
+    r.check(all(c['direction'] == 'i' for c in incoming) and incoming,
+            'new connection: our input is offered boxes that feed it',
+            [c['direction'] for c in incoming])
+    r.check(ids[wide] not in [c['nid'] for c in outgoing + incoming],
+            'new connection: a box is never offered itself')
+
+    # a box wired to nothing is still reachable both ways: the side is ours to choose
+    lonely = FakeHost()
+    alone = lonely.add('alone', 'urn:test:mono', 100, 100)
+    lonely.add('other', 'urn:test:mono', 300, 100)
+    lonely_ids = dict((n.key, n.nid) for n in mm.scene(lonely).nodes)
+    r.check(mm.candidates(lonely, lonely_ids[alone], 1, True)
+            and mm.candidates(lonely, lonely_ids[alone], 1, False),
+            'new connection: a box wired to nothing can be wired either way')
+
+    # both lists read alphabetically: ordering by where a box sits in the picture puts
+    # the likely one on top, but twenty rows arranged by graph distance read as no order
+    labels = [c['label'] for c in outgoing]
+    r.check(labels == sorted(labels), 'new connection: the targets are alphabetical', labels)
+
+    # step three: their compatible ports, which are the mirror of ours and always asked
+    # about -- a target with one port is still a choice the user gets to see
+    theirs = mm.ports(host, ids[mono], 1, False)
+    r.check([p['label'] for p in theirs] == ['IN'],
+            'new connection: the far box offers the side that can meet ours',
+            [p['label'] for p in theirs])
+    r.check(all(p['direction'] == 'o' for p in theirs),
+            'new connection: and marks them as the side that is fed',
+            [p['direction'] for p in theirs])
+
+    laid = mm.connect_port(host, ids[wide], 0, ids[mono], 0, 1)
+    r.check(laid == [(wide + '/out_l', mono + '/in')],
+            'new connection: the picked indexes are the ports that get wired', laid)
+
+    host.connections.extend(laid)
+    r.check(not mm.connect_port(host, ids[wide], 0, ids[mono], 0, 1),
+            'new connection: the same cable is refused the second time')
+
+    second = mm.connect_port(host, ids[wide], 1, ids[mono], 0, 1)
+    r.check(second == [(wide + '/out_r', mono + '/in')],
+            'new connection: the other port of the pair wires too', second)
+    host.connections.extend(second)
+
+    for source, target in laid + second:
+        r.check('/out' in source, 'new connection: the cable leaves an output', source)
+        r.check('/in' in target, 'new connection: and arrives at an input', target)
+
+    for link in mm.links_between(host, ids[wide], ids[mono], 1):
+        host.connections.remove(link)
+    r.check(sorted(host.connections) == before,
+            'new connection: the board comes back as it was', host.connections)
+
+    # neither menu may outrun the rows the device has to put them in
+    big = sc_stress()
+    node = [n for n in mm.scene(big).nodes if n.kind == minimap.KIND_PLUGIN][0]
+    for name, entries in (('connections', mm.connections(big, node.nid, 1)),
+                          ('targets', mm.candidates(big, node.nid, 1, True)),
+                          ('ports', mm.ports(big, node.nid, 1, None))):
+        r.check(len(entries) <= MINIMAP_MAX_MENU,
+                'new connection: the %s menu fits the device' % name, len(entries))
+
+
+def check_plugin_catalog(r):
+    """The Add screen's catalogue: categories, windowing, and what a pick resolves to.
+
+    The device carries no URIs -- it names a plugin by its position in the two lists it
+    was shown -- so the whole thing rests on both sides deriving the same ordering from
+    the same data. That is what these check, along with the window sliding correctly
+    over a category too long for one screenful.
+    """
+    from mod import builder_plugins as catalog
+
+    made = []
+    for index in range(120):
+        made.append({'uri': 'urn:test:p%03d' % index,
+                     'name': 'Plug %03d' % index,
+                     'label': 'Plug %03d' % index,
+                     'category': ['Delay' if index % 2 else 'Reverb']})
+    made.append({'uri': 'urn:test:midi', 'name': 'Midi Thing', 'label': 'Midi Thing',
+                 'category': ['MIDI']})
+
+    # the index answers with a hierarchy: the family first, the LV2 class after it
+    made.append({'uri': 'urn:test:low', 'name': 'Low Thing', 'label': 'Low Thing',
+                 'category': ['Filter', 'Lowpass']})
+    made.append({'uri': 'urn:test:comp', 'name': 'Comp Thing', 'label': 'Comp Thing',
+                 'category': ['Dynamics', 'Compressor']})
+    made.append({'uri': 'urn:test:bare', 'name': 'Bare Thing', 'label': 'Bare Thing',
+                 'category': []})
+
+    def info(uri):
+        midi = uri.endswith('midi')
+        return {
+            'brand': 'Test Brand',
+            'comment': 'A plugin that does a thing, and does it well enough.',
+            'category': ['Delay'],
+            'ports': {
+                'audio': {'input': [] if midi else [1], 'output': [] if midi else [1]},
+                'midi': {'input': [1] if midi else [], 'output': []},
+                'cv': {'input': [], 'output': []},
+            }}
+
+    catalog.set_catalog_provider(lambda: made)
+    catalog.set_info_provider(info)
+
+    names = [c['name'] for c in catalog.categories()]
+    r.check(names[:2] == ['All', 'Favorites'] or names[0] in ('All', 'Favorites'),
+            'catalog: the made-up categories come before the LV2 ones', names)
+    r.check('Delay' in names and 'Reverb' in names and 'MIDI' in names,
+            'catalog: every category with something in it is listed', names)
+
+    counts = dict((c['name'], c['count']) for c in catalog.categories())
+    r.check(counts['All'] == 124, 'catalog: All holds everything', counts.get('All'))
+
+    # Only the head of the hierarchy, the way the browser reads it. A sub-class listed as
+    # a category of its own would be a tab the user has never seen in the web UI, and the
+    # plugin under it would also be counted a second time under its family.
+    r.check('Lowpass' not in counts and 'Compressor' not in counts,
+            'catalog: an LV2 sub-class is not a category of its own', sorted(counts))
+    r.check(counts.get('Filter') == 1 and counts.get('Dynamics') == 1,
+            'catalog: and its plugin is counted once, under its family',
+            (counts.get('Filter'), counts.get('Dynamics')))
+
+    filtered = [p['name'] for p in catalog.plugins(
+        [c['index'] for c in catalog.categories() if c['name'] == 'Filter'][0])]
+    r.check(filtered == ['Low Thing'],
+            'catalog: and it is still reachable under that family', filtered)
+
+    r.check(not [c for c in catalog.categories() if c['count'] == 0],
+            'catalog: a plugin with no category of its own lands in All alone')
+
+    audio = dict((c['name'], c['count']) for c in catalog.categories(1))
+    r.check('MIDI' not in audio,
+            'catalog: a category left empty by the filter drops out', sorted(audio))
+    r.check(audio['All'] == 123, 'catalog: and the counts follow the filter', audio.get('All'))
+
+    # the window slides, and the indexes stay absolute so a pick means the same entry
+    all_index = [c['index'] for c in catalog.categories() if c['name'] == 'All'][0]
+    total, first, page = catalog.window(all_index, 0, 0, 48)
+    r.check(total == 124 and first == 0 and len(page) == 48,
+            'catalog: the first window is a screenful of a long category',
+            (total, first, len(page)))
+
+    total, first, tail = catalog.window(all_index, 0, 96, 48)
+    r.check(first == 96 and len(tail) == 28 and tail[0]['index'] == 96,
+            'catalog: the last window is short and still absolutely indexed',
+            (first, len(tail), tail[0]['index'] if tail else None))
+
+    picked = catalog.plugin_at(all_index, 96, 0)
+    r.check(picked is not None and picked['uri'] == tail[0]['uri'],
+            'catalog: a pick resolves to the entry at that position', picked)
+
+    r.check(catalog.plugin_at(all_index, 999, 0) is None,
+            'catalog: a position that is not there resolves to nothing')
+
+    # labels have to survive the space-delimited protocol like every other menu
+    r.check(all(' ' not in p['label'] and ';' not in p['label'] and '"' not in p['label']
+                for p in page),
+            'catalog: labels are wire safe')
+
+    # the info overlay, addressed by the same two positions as the pick itself
+    details = catalog.details(all_index, 96, 0)
+    r.check(details and details['name'] == minimap.sanitize_label(picked['name'], 120),
+            'catalog: info resolves the same entry a pick would',
+            (details or {}).get('name'))
+    r.check(details and details['audio'] == (1, 1) and details['midi'] == (0, 0),
+            'catalog: info counts the ports by kind', details)
+    r.check(catalog.details(all_index, 999, 0) is None,
+            'catalog: info about a position that is not there is nothing')
+
+    # every word its own token, so the description needs no escaping to cross a
+    # space-delimited protocol and the device is free to wrap it where it likes
+    r.check(details['comment'] and all(' ' not in word for word in details['comment']),
+            'catalog: the description crosses the wire one word to a token',
+            details['comment'][:4])
+    r.check(len(details['comment']) == 11,
+            'catalog: and every word of it arrives', details['comment'])
+
+    # a new instance never collides with one already on the board
+    class Board(object):
+        plugins = {1: {'instance': '/graph/plug_000'}, 2: {'instance': '/graph/plug_000_2'}}
+
+    r.check(catalog.instance_name(Board(), 'Plug 000') == '/graph/plug_000_3',
+            'catalog: a third copy gets the next free name',
+            catalog.instance_name(Board(), 'Plug 000'))
+    r.check(catalog.instance_name(Board(), 'Brand New') == '/graph/brand_new',
+            'catalog: a first copy keeps the plain name')
+
+    # scrubbing: the letters of a category, and where each one starts
+    letters = catalog.initials(all_index, 0)
+    r.check(len(letters) < 121,
+            'catalog: scrubbing turns a long list into a short one', len(letters))
+    r.check([l['letter'] for l in letters] == sorted(set(l['letter'] for l in letters)),
+            'catalog: the letters come in order and only once each',
+            [l['letter'] for l in letters])
+
+    listed = catalog.plugins(all_index, 0)
+    for entry in letters:
+        first = listed[entry['index']]
+        r.check(first['label'][0].upper() == entry['letter'],
+                'catalog: a letter lands on the first plugin that starts with it',
+                (entry['letter'], first['label']))
+        r.check(entry['index'] == 0
+                or listed[entry['index'] - 1]['label'][0].upper() != entry['letter'],
+                'catalog: and on the first, not the middle of the run', entry)
+
+    catalog.set_catalog_provider(None)
+    catalog.set_info_provider(None)
+
+
+def check_compact(r):
+    """The compact picture must actually collapse, and stay uniform.
+
+    Built with a stereo pair and a four-into-one mixer, which is exactly what
+    the detail picture draws as a bundle of parallel cables.
+    """
+    host = FakeHost()
+    split = host.add('split', 'urn:test:stereo', 100, 100)
+    # two names that a five-character box cannot tell apart, which is the whole
+    # reason the title bar gets a label of its own
+    a = host.add('chan_a', 'urn:test:mono', 300, 40, label='Compressor Stereo')
+    b = host.add('chan_b', 'urn:test:mono', 300, 90, label='Compressor Mono')
+    c = host.add('chan_c', 'urn:test:mono', 300, 140)
+    mix = host.add('mixer', 'urn:test:stereo', 500, 100)
+    host.connect('/graph/capture_1', split + '/in_l')
+    host.connect('/graph/capture_2', split + '/in_r')
+    for target in (a, b, c):
+        host.connect(split + '/out_l', target + '/in')
+        host.connect(split + '/out_r', target + '/in')
+    for source in (a, b, c):
+        host.connect(source + '/out', mix + '/in_l')
+        host.connect(source + '/out', mix + '/in_r')
+    host.connect(mix + '/out_l', '/graph/playback_1')
+    host.connect(mix + '/out_r', '/graph/playback_2')
+
+    compact = parse_displaylist(minimap.Minimap(minimap.MODE_COMPACT).render(host)[0])
+    detail = parse_displaylist(minimap.Minimap(minimap.MODE_DETAIL).render(host)[0])
+
+    pairs = [(e['src'], e['dst'], e['type']) for e in compact['E']]
+    r.check(len(pairs) == len(set(pairs)),
+            'compact: one cable per pair of boxes and signal type', pairs)
+    r.check(len(compact['E']) < len(detail['E']),
+            'compact: fewer cables than the detail picture',
+            (len(compact['E']), len(detail['E'])))
+
+    sizes = set((n['w'], n['h']) for n in compact['N'])
+    r.check(len(sizes) == 1, 'compact: every box the same size', sizes)
+    r.check(len(set((n['w'], n['h']) for n in detail['N'])) > 1,
+            'compact: the detail picture still sizes boxes to their stubs')
+
+    # one stub per side per signal type, never one per port
+    per_side = {}
+    for port in compact['P']:
+        per_side.setdefault((port['nid'], port['dir'], port['type']), 0)
+        per_side[(port['nid'], port['dir'], port['type'])] += 1
+    r.check(all(v == 1 for v in per_side.values()),
+            'compact: one stub per side and signal type',
+            [k for k, v in per_side.items() if v != 1])
+
+    r.check(len(compact['N']) == len(detail['N']),
+            'compact: no box goes missing',
+            (len(compact['N']), len(detail['N'])))
+
+    # the box is too narrow to tell two similarly named plugins apart, so the title
+    # bar gets a label cut to the width of the panel instead
+    by_title = dict((n['title'], n['label']) for n in compact['N'])
+    r.check(len(by_title) == len(compact['N']),
+            'compact: titles tell the boxes apart', sorted(by_title))
+    longer = [n for n in compact['N'] if len(n['title']) > len(n['label'])]
+    r.check(longer, 'compact: at least one title outgrows its box label')
+
+
+def check_wire_safe_labels(r):
+    """No label may carry a character the protocol tokenizer would choke on.
+
+    The firmware rebuilds the display list in place over the tokens protocol.c
+    split it into, so a space, a record separator or a quotation mark inside a
+    label does not merely look wrong -- it makes that rebuild lossy.
+    """
+    host = FakeHost()
+    host.add('quoted', label='say "hi" there')
+    host.add('spaced', label='two words')
+    host.add('semi', label='a;b')
+    host.add('mixed', label='"; ok')
+
+    mm = minimap.Minimap()
+    text, _ = mm.render(host)
+
+    # every record must split into the field count its reader expects: one stray
+    # delimiter inside a label shifts every field after it
+    for record in text.split(minimap.RECORD_SEP):
+        parts = record.strip().split(' ')
+        if parts[0] == 'N':
+            r.check(len(parts) == 12, 'wire-safe: N record has 12 fields', record)
+
+    labels = [n['label'] for n in parse_displaylist(text)['N']]
+    r.check(labels, 'wire-safe: labels came through', labels)
+    r.check(all(' ' not in l and ';' not in l and '"' not in l for l in labels),
+            'wire-safe: labels carry no delimiter', labels)
 
 
 def check_compat(r):
@@ -796,6 +1930,17 @@ def main():
     check_layers(r)
     check_windowing(r)
     check_caching(r)
+    check_hmi_request(r)
+    check_cable_clearance(r)
+    check_viewport_coverage(r)
+    check_connections(r)
+    check_splice(r)
+    check_unsplice(r)
+    check_bindings(r)
+    check_plugin_catalog(r)
+    check_new_connection(r)
+    check_compact(r)
+    check_wire_safe_labels(r)
     check_compat(r)
 
     print('')

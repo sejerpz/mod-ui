@@ -112,11 +112,50 @@ MINIMAP_MAX_WIDTH = int(os.environ.get('MOD_MINIMAP_MAX_WIDTH', 1024))
 MINIMAP_MAX_HEIGHT = int(os.environ.get('MOD_MINIMAP_MAX_HEIGHT', 512))
 MINIMAP_VIEW_WIDTH = int(os.environ.get('MOD_MINIMAP_VIEW_WIDTH', 128))
 MINIMAP_VIEW_HEIGHT = int(os.environ.get('MOD_MINIMAP_VIEW_HEIGHT', 64))
+
+# The rectangle the builder screen actually gives the graph, once its title bar and
+# footer have taken their share -- mirrors MINIMAP_VIEW_* in app/src/mode_builder.c.
+# Distinct from the panel above, which is what the reference renderer draws: the window
+# is chosen for what the device will really show, and modelling it as the whole panel
+# makes the window twice as tall as it needs to be.
+MINIMAP_HMI_VIEW_WIDTH = int(os.environ.get('MOD_MINIMAP_HMI_VIEW_WIDTH', 124))
+MINIMAP_HMI_VIEW_HEIGHT = int(os.environ.get('MOD_MINIMAP_HMI_VIEW_HEIGHT', 43))
 MINIMAP_LAYERS = os.environ.get('MOD_MINIMAP_LAYERS', 'audio,midi,cv')
+
+# How the graph is drawn. 'detail' is port accurate: every cable and every stub, with
+# boxes tall enough to hold them. 'compact' answers the smaller question of what is
+# wired to what -- one line per pair of boxes, every box the same size -- which fits
+# far more of a pedalboard on a 128px panel.
+MINIMAP_MODE = os.environ.get('MOD_MINIMAP_MODE', 'compact')
 # must stay under the firmware's WEBGUI_COMM_RX_BUFF_SIZE (4096)
-MINIMAP_MAX_MSG = int(os.environ.get('MOD_MINIMAP_MAX_MSG', 3584))
+MINIMAP_MAX_MSG = int(os.environ.get('MOD_MINIMAP_MAX_MSG', 3900))
 # plugins per window; connections are never windowed, they follow the plugins
-MINIMAP_WIN_PLUGINS = int(os.environ.get('MOD_MINIMAP_WIN_PLUGINS', 12))
+MINIMAP_WIN_PLUGINS = int(os.environ.get('MOD_MINIMAP_WIN_PLUGINS', 28))
+
+# Mirror the fixed arrays in the firmware's app/inc/minimap.h. A display list with more
+# records than these holds is silently truncated on the device -- boxes and cables simply
+# go missing -- so the window shrinks until it fits, exactly as it does for MINIMAP_MAX_MSG.
+MINIMAP_MAX_NODES = int(os.environ.get('MOD_MINIMAP_MAX_NODES', 28))
+MINIMAP_MAX_PORTS = int(os.environ.get('MOD_MINIMAP_MAX_PORTS', 72))
+MINIMAP_MAX_EDGES = int(os.environ.get('MOD_MINIMAP_MAX_EDGES', 48))
+
+# Mirrors BM_MAX_CONNECTIONS in the firmware's app/src/mode_builder.c. The connection and
+# target menus are capped there, and a longer list would be truncated on arrival with
+# nothing to say so -- the last few boxes would simply be unreachable.
+MINIMAP_MAX_MENU = int(os.environ.get('MOD_MINIMAP_MAX_MENU', 48))
+
+# Mirrors BM_MAX_PAIRS / BM_MAX_ROW_PAIRS in mode_builder_connmanager.c. A menu row stands
+# for every cable between the same two boxes, and these bound the port names sent along
+# with it for the strip at the foot of the list. The whole menu shares the first budget,
+# so a box with an improbable number of cables loses the names off its last rows rather
+# than overrunning the device's 4kB receive buffer.
+MINIMAP_MAX_PAIRS = int(os.environ.get('MOD_MINIMAP_MAX_PAIRS', 48))
+MINIMAP_MAX_ROW_PAIRS = int(os.environ.get('MOD_MINIMAP_MAX_ROW_PAIRS', 4))
+
+# How many sub-pages the panel's knobs come round in. The hardware descriptor only says
+# whether there are any (`hmi_subpages`), not how many, and the firmware knows the number
+# without being told -- so it is written down here too, and the two have to agree.
+MINIMAP_HMI_SUBPAGES = int(os.environ.get('MOD_MINIMAP_HMI_SUBPAGES', 3))
 
 CAPTURE_PATH='/tmp/capture.ogg'
 PLAYBACK_PATH='/tmp/playback.ogg'

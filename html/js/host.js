@@ -289,6 +289,20 @@ $('document').ready(function() {
             return
         }
 
+        if (cmd == "hw_unmap") {
+            // an addressing removed somewhere other than here -- from the device's own
+            // binding screen. There is no such thing when the browser does it: it takes
+            // its own mapping out as it sends the request.
+            data = data.split(" ", 2)
+            var instance = data[0]
+            var symbol   = data[1]
+
+            if (desktop.hardwareManager.removeHardwareMappingFromDevice(instance, symbol)) {
+                desktop.setPedalboardAsModified(true)
+            }
+            return
+        }
+
         if (cmd == "cv_map") {
           data         = data.split(" ", 12)
           var instance = data[0]

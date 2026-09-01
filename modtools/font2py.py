@@ -181,8 +181,9 @@ def text_width(text):
 def truncate(text, max_width):
     """Longest prefix of `text` fitting `max_width` pixels.
 
-    The firmware font has no ellipsis glyph, so an over-long label is cut and
-    marked with a trailing '.' when there is room for one.
+    Cut, not marked. A trailing '.' costs a whole character, and on a label
+    24 pixels wide that is a fifth of everything there is to read; the box
+    being full to its edge is signal enough that the name goes on.
     """
     if text_width(text) <= max_width:
         return text
@@ -196,13 +197,7 @@ def truncate(text, max_width):
         out.append(ch)
         used += step
 
-    while out:
-        marked = ''.join(out[:-1]) + '.'
-        if text_width(marked) <= max_width:
-            return marked
-        out.pop()
-
-    return ''
+    return ''.join(out)
 
 
 def text_points(text, ox, oy):

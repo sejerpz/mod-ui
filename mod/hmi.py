@@ -30,6 +30,8 @@ from mod.mod_protocol import (
     CMD_DUO_CONTROL_INDEX_SET,
     CMD_DUO_BANK_CONFIG,
     CMD_DUOX_PAGES_AVAILABLE,
+    CMD_PEDALBOARD_LOAD_BEGIN,
+    CMD_PEDALBOARD_LOAD_END,
     CMD_DUOX_EXP_OVERCURRENT,
     CMD_RESPONSE,
     CMD_RESTORE,
@@ -534,6 +536,18 @@ class HMI(object):
         for page_enabled in pages:
             msg += " %i" % int(page_enabled)
         self.send(msg, callback, 'boolean')
+
+    def pedalboard_load_begin(self, callback):
+        """A pedalboard is about to be loaded, whoever asked for it.
+
+        Everything until the matching end is a board in pieces, so whatever on the panel is
+        a view onto the board stands down -- and whatever wants to tell the user a load is
+        running has its two edges here.
+        """
+        self.send(CMD_PEDALBOARD_LOAD_BEGIN, callback, 'boolean')
+
+    def pedalboard_load_end(self, callback):
+        self.send(CMD_PEDALBOARD_LOAD_END, callback, 'boolean')
 
     # even newer messages. really need to clean this up later..
 

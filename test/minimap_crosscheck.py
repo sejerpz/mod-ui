@@ -204,15 +204,31 @@ class Runner(object):
 # cases
 # ---------------------------------------------------------------------------
 
+def scroll_range(span, extent):
+    """What minimap_scroll() will clamp an offset to, on this axis.
+
+    A scene smaller than the viewport is centred rather than pinned to zero, so the
+    range collapses onto a single negative offset. C truncates towards zero on the
+    division and so does Python for a negative numerator only with int(), hence the
+    explicit truncation here.
+    """
+    limit = span - extent
+    if limit < 0:
+        centre = int(limit / 2)
+        return (centre, centre)
+    return (0, limit)
+
+
 def pan_offsets(width, height):
     """Every corner of the pannable area plus its middle, deduplicated.
 
     Clipping only misbehaves at the edges, so the corners are where the two
     renderers are most likely to disagree.
     """
-    max_x = max(0, width - MINIMAP_VIEW_WIDTH)
-    max_y = max(0, height - MINIMAP_VIEW_HEIGHT)
-    candidates = [(0, 0), (max_x, 0), (0, max_y), (max_x, max_y), (max_x // 2, max_y // 2)]
+    min_x, max_x = scroll_range(width, MINIMAP_VIEW_WIDTH)
+    min_y, max_y = scroll_range(height, MINIMAP_VIEW_HEIGHT)
+    candidates = [(min_x, min_y), (max_x, min_y), (min_x, max_y), (max_x, max_y),
+                  ((min_x + max_x) // 2, (min_y + max_y) // 2)]
     out = []
     for offset in candidates:
         if offset not in out:
@@ -370,9 +386,9 @@ def main():
             continue
 
         # the harness zeroes the offset and scrolls by exactly what we asked;
-        # minimap_scroll() clamps to [0, scene - view] and pan_offsets() never
-        # leaves that range, so the pan it lands on is the pan we requested.
-        # (The offset the harness prints on stderr is the pre-scroll one.)
+        # minimap_scroll() clamps to the range scroll_range() mirrors and
+        # pan_offsets() never leaves it, so the pan it lands on is the pan we
+        # requested. (The offset the harness prints on stderr is the pre-scroll one.)
         crop = (argv[5], argv[6], MINIMAP_VIEW_WIDTH, MINIMAP_VIEW_HEIGHT)
         reference = minimap_render.to_ascii(scene, crop=crop, layers='all').split('\n')
         actual = [line for line in got['out'] if line]

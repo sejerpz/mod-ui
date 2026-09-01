@@ -52,7 +52,7 @@ from mod import (
     get_hardware_descriptor, get_unique_name, os_sync, symbolify,
 )
 from mod.bank import list_banks, save_banks, remove_pedalboard_from_banks
-from mod.minimap import INSTANCE as MINIMAP
+from mod.minimap import INSTANCE as MINIMAP, instance_for as minimap_for
 from mod.session import SESSION
 from mod.licensing import check_missing_licenses, save_license, get_new_licenses_and_flush
 from modtools.utils import (
@@ -1716,8 +1716,9 @@ class PedalboardMinimap(TimelessRequestHandler):
     def get(self):
         focus = self.get_argument('focus', None)
         layers = self.get_argument('layers', None)
+        minimap = minimap_for(self.get_argument('mode', None))
 
-        text, version = MINIMAP.render(SESSION.host, focus=focus, layers=layers)
+        text, version = minimap.render(SESSION.host, focus=focus, layers=layers)
 
         self.set_header("Content-Type", "text/plain; charset=UTF-8")
         # TimelessRequestHandler deliberately disables etag/304, so the version
@@ -1729,7 +1730,7 @@ class PedalboardMinimap(TimelessRequestHandler):
 
 class PedalboardMinimapInfo(JsonRequestHandler):
     def get(self):
-        self.write(MINIMAP.info(SESSION.host))
+        self.write(minimap_for(self.get_argument('mode', None)).info(SESSION.host))
 
 class PedalboardMinimapPreview(TimelessRequestHandler):
     """Reference rasterisation of the same scene -- a debug view, not the product.
@@ -1752,7 +1753,8 @@ class PedalboardMinimapPreview(TimelessRequestHandler):
         invert = self.get_argument('invert', None) in ('1', 'true', 'yes')
         selected = self.get_argument('selected', None)
 
-        scene = MINIMAP.scene(SESSION.host)
+        minimap = minimap_for(self.get_argument('mode', None))
+        scene = minimap.scene(SESSION.host)
 
         crop = None
         if self.get_argument('view', None) in ('1', 'true', 'yes'):
@@ -1768,7 +1770,7 @@ class PedalboardMinimapPreview(TimelessRequestHandler):
 
         self.set_header("Content-Type", "image/png")
         self.set_header("Cache-Control", "no-cache")
-        self.set_header("X-Minimap-Version", str(MINIMAP.version))
+        self.set_header("X-Minimap-Version", str(minimap.version))
         self.write(buf.getvalue())
         self.finish()
 

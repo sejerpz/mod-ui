@@ -118,6 +118,23 @@ CMD_ARGS = {
         'bcl': [int,int,int],
         'bcs': [int, float],
         'bncp': [int,int,int],
+        'bm': [int,int],
+        'bcn': [int,int],
+        'bdx': [int,int,int],
+        'bct': [int,int,int],
+        'bpt': [int,int,int],
+        'bcx': [int,int,int,int,int],
+        'bpg': [int],
+        'bpl': [int,int,int],
+        'bpa': [int,int,int,int],
+        'bpn': [int,int],
+        'bpi': [int,int,int],
+        'bpx': [int],
+        'bba': [],
+        'bbp': [int,int,int],
+        'bbg': [int],
+        'bbs': [int,int,int,int],
+        'bbd': [int,int],
         'log': [str]
     },
 }
@@ -150,6 +167,9 @@ CMD_PEDALBOARD_RESET              = 'pr'
 CMD_PEDALBOARD_SAVE               = 'ps'
 CMD_PEDALBOARD_SAVE_AS            = 'psa'
 CMD_PEDALBOARD_CLEAR              = 'pcl'
+# host to device only: the two edges of a pedalboard being loaded, whoever asked for it
+CMD_PEDALBOARD_LOAD_BEGIN         = 'plb'
+CMD_PEDALBOARD_LOAD_END           = 'ple'
 CMD_PEDALBOARD_DELETE             = 'pbd'
 CMD_BUILDER_PEDALBOARD            = 'bpd'
 CMD_REORDER_SSS_IN_PB             = 'sr'
@@ -229,6 +249,23 @@ CMD_DWARF_BUILDER_PLUGINS         = 'bp'
 CMD_DWARF_BUILDER_CONTROLS        = 'bcl'
 CMD_DWARF_BUILDER_CONTROL_SET     = 'bcs'
 CMD_DWARF_BUILDER_CONTROL_PAGE    = 'bncp'
+CMD_DWARF_BUILDER_MINIMAP         = 'bm'
+CMD_DWARF_BUILDER_CONNECTIONS     = 'bcn'
+CMD_DWARF_BUILDER_DISCONNECT      = 'bdx'
+CMD_DWARF_BUILDER_TARGETS         = 'bct'
+CMD_DWARF_BUILDER_PORTS           = 'bpt'
+CMD_DWARF_BUILDER_CONNECT         = 'bcx'
+CMD_DWARF_BUILDER_CATEGORIES      = 'bpg'
+CMD_DWARF_BUILDER_CATALOG         = 'bpl'
+CMD_DWARF_BUILDER_ADD             = 'bpa'
+CMD_DWARF_BUILDER_INITIALS        = 'bpn'
+CMD_DWARF_BUILDER_INFO            = 'bpi'
+CMD_DWARF_BUILDER_REMOVE          = 'bpx'
+CMD_DWARF_BUILDER_ACTUATORS       = 'bba'
+CMD_DWARF_BUILDER_PARAMS          = 'bbp'
+CMD_DWARF_BUILDER_BINDINGS        = 'bbg'
+CMD_DWARF_BUILDER_BIND            = 'bbs'
+CMD_DWARF_BUILDER_UNBIND          = 'bbd'
 CMD_DWARF_LOG                     = 'log'
 
 BANK_FUNC_NONE            = 0
@@ -502,6 +539,40 @@ def cmd_to_str(cmd):
         return "CMD_DWARF_BUILDER_CONTROL_SET"
     if cmd == 'bncp':
         return "CMD_DWARF_BUILDER_CONTROL_PAGE"
+    if cmd == "bm":
+        return "CMD_DWARF_BUILDER_MINIMAP"
+    if cmd == "bcn":
+        return "CMD_DWARF_BUILDER_CONNECTIONS"
+    if cmd == "bdx":
+        return "CMD_DWARF_BUILDER_DISCONNECT"
+    if cmd == "bct":
+        return "CMD_DWARF_BUILDER_TARGETS"
+    if cmd == "bpt":
+        return "CMD_DWARF_BUILDER_PORTS"
+    if cmd == "bcx":
+        return "CMD_DWARF_BUILDER_CONNECT"
+    if cmd == "bpg":
+        return "CMD_DWARF_BUILDER_CATEGORIES"
+    if cmd == "bpl":
+        return "CMD_DWARF_BUILDER_CATALOG"
+    if cmd == "bpa":
+        return "CMD_DWARF_BUILDER_ADD"
+    if cmd == "bpn":
+        return "CMD_DWARF_BUILDER_INITIALS"
+    if cmd == "bpi":
+        return "CMD_DWARF_BUILDER_INFO"
+    if cmd == "bpx":
+        return "CMD_DWARF_BUILDER_REMOVE"
+    if cmd == "bba":
+        return "CMD_DWARF_BUILDER_ACTUATORS"
+    if cmd == "bbp":
+        return "CMD_DWARF_BUILDER_PARAMS"
+    if cmd == "bbg":
+        return "CMD_DWARF_BUILDER_BINDINGS"
+    if cmd == "bbs":
+        return "CMD_DWARF_BUILDER_BIND"
+    if cmd == "bbd":
+        return "CMD_DWARF_BUILDER_UNBIND"
     if cmd == "log":
         return "CMD_DWARF_LOG"
     return "unknown"

@@ -42,6 +42,9 @@ from mod import (
 )
 from mod.presets_metadata import PresetsMetadata
 from mod.addressings import Addressings
+from mod.minimap import INSTANCE as MINIMAP
+from mod import builder_plugins as CATALOG
+from mod import builder_bindings as BINDINGS
 from mod.bank import (
     list_banks, save_banks, get_last_bank_and_pedalboard, save_last_bank_and_pedalboard,
 )
@@ -90,6 +93,23 @@ from mod.mod_protocol import (
     CMD_DWARF_BUILDER_CONTROLS,
     CMD_DWARF_BUILDER_CONTROL_SET,
     CMD_DWARF_BUILDER_CONTROL_PAGE,
+    CMD_DWARF_BUILDER_MINIMAP,
+    CMD_DWARF_BUILDER_CONNECTIONS,
+    CMD_DWARF_BUILDER_DISCONNECT,
+    CMD_DWARF_BUILDER_TARGETS,
+    CMD_DWARF_BUILDER_PORTS,
+    CMD_DWARF_BUILDER_CONNECT,
+    CMD_DWARF_BUILDER_CATEGORIES,
+    CMD_DWARF_BUILDER_CATALOG,
+    CMD_DWARF_BUILDER_ADD,
+    CMD_DWARF_BUILDER_INFO,
+    CMD_DWARF_BUILDER_REMOVE,
+    CMD_DWARF_BUILDER_ACTUATORS,
+    CMD_DWARF_BUILDER_PARAMS,
+    CMD_DWARF_BUILDER_BINDINGS,
+    CMD_DWARF_BUILDER_BIND,
+    CMD_DWARF_BUILDER_UNBIND,
+    CMD_DWARF_BUILDER_INITIALS,
     CMD_DWARF_LOG,
     BANK_FUNC_NONE,
     BANK_FUNC_PEDALBOARD_NEXT,
@@ -147,6 +167,7 @@ from mod.protocol import (
     Protocol, ProtocolError, process_resp,
 )
 from mod.settings import (
+    MINIMAP_MAX_MENU,
     LOG, DEFAULT_PEDALBOARD, DEVICE_HOST_PORT,
     DATA_DIR, LV2_PEDALBOARDS_DIR, LV2_PLUGIN_DIR, LV2_FACTORY_PEDALBOARDS_DIR, USER_FILES_DIR,
     PEDALBOARD_INSTANCE, PEDALBOARD_INSTANCE_ID, PEDALBOARD_URI, PEDALBOARD_TMP_DIR,
@@ -395,6 +416,8 @@ class Host(object):
         self.first_pedalboard    = True
         self.pedalboard_empty    = True
         self.pedalboard_modified = False
+        # what a removal asked for by the panel held back; see hmi_builder_remove
+        self.deferred_hmi_removal = None
         self.pedalboard_name     = ""
         self.pedalboard_path     = ""
         self.pedalboard_size     = [0,0]
@@ -574,6 +597,23 @@ class Host(object):
         Protocol.register_cmd_callback('DWARF', CMD_DWARF_LOG, self.hmi_log_message)
         Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROL_SET, self.hmi_builder_control_set)
         Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONTROL_PAGE, self.hmi_builder_control_page)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_MINIMAP, self.hmi_builder_minimap)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONNECTIONS, self.hmi_builder_connections)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_DISCONNECT, self.hmi_builder_disconnect)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_TARGETS, self.hmi_builder_targets)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_PORTS, self.hmi_builder_ports)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CONNECT, self.hmi_builder_connect)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CATEGORIES, self.hmi_builder_categories)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_CATALOG, self.hmi_builder_catalog)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_ADD, self.hmi_builder_add)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_INFO, self.hmi_builder_info)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_REMOVE, self.hmi_builder_remove)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_ACTUATORS, self.hmi_builder_actuators)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_PARAMS, self.hmi_builder_params)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_BINDINGS, self.hmi_builder_bindings)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_BIND, self.hmi_builder_bind)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_UNBIND, self.hmi_builder_unbind)
+        Protocol.register_cmd_callback('DWARF', CMD_DWARF_BUILDER_INITIALS, self.hmi_builder_initials)
         IOLoop.instance().add_callback(self.init_host)
 
     def __del__(self):
@@ -2777,7 +2817,14 @@ class Host(object):
         used_hw_ids.append(hw_id)
 
     @gen.coroutine
-    def remove_plugin(self, instance, callback):
+    def remove_plugin(self, instance, callback, send_hmi=True):
+        """Take a plugin off the board, with its addressings and its cables.
+
+        `send_hmi` off holds back everything this would otherwise tell the panel, and is
+        for a removal the panel itself asked for: it is sitting in a blocking wait for the
+        answer, where it serves no commands, and each of the sends below waits for it to
+        answer one. The caller catches the panel up afterwards, once it is listening.
+        """
         instance_id = self.mapper.get_id_without_creating(instance)
 
         try:
@@ -2829,7 +2876,8 @@ class Host(object):
                 try:
                     yield gen.Task(self.addr_task_unaddressing, actuator_type,
                                                                 addressing['instance_id'],
-                                                                addressing['port'])
+                                                                addressing['port'],
+                                                                send_hmi=send_hmi)
                 except Exception as e:
                     logging.exception(e)
 
@@ -2839,8 +2887,14 @@ class Host(object):
             for page in range(self.addressings.addressing_pages):
                 send_hmi_available_pages |= self.check_available_pages(page)
 
+        # Held back for the caller to send once the panel is listening again. Not dropped:
+        # the encoders would go on showing controls of a plugin that is no longer there.
+        if not send_hmi:
+            self.deferred_hmi_removal = (send_hmi_available_pages, list(used_hw_ids),
+                                         list(used_hmi_actuators))
+
         # Send everything that HMI needs
-        if self.hmi.initialized:
+        if self.hmi.initialized and send_hmi:
             if send_hmi_available_pages:
                 try:
                     yield gen.Task(self.hmi.set_available_pages, self.addressings.get_available_pages())
@@ -3886,6 +3940,13 @@ class Host(object):
         self.msg_callback("loading_start %i 0" % int(isDefault))
         self.msg_callback("size %d %d" % (pb['width'],pb['height']))
 
+        # The panel is told a load is running, and told again when it is over. Whatever it
+        # does with that is its own business -- today it leaves the builder, which is a view
+        # onto the board being replaced. Fire and forget either way: a slow panel is not a
+        # reason to hold up a pedalboard.
+        if self.hmi.initialized:
+            self.hmi.pedalboard_load_begin(lambda _ok: None)
+
         midi_aggregated_mode = not pb.get('midi_separated_mode', True)
         midi_loopback = pb.get('midi_loopback', False)
 
@@ -4083,6 +4144,9 @@ class Host(object):
         self.addressings.registerMappings(self.msg_callback, rinstances)
 
         self.msg_callback("loading_end %d" % self.current_pedalboard_snapshot_id)
+
+        if self.hmi.initialized:
+            self.hmi.pedalboard_load_end(lambda _ok: None)
 
         if isDefault:
             self.pedalboard_empty    = True
@@ -5857,6 +5921,574 @@ _:b%i
 
         logging.debug("hmi list pedalboards plugins %d %d -> data is '%s'", props, plugin_id, responseData)
         callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_minimap(self, props, node_id, callback):
+        """Display list for the pedalboard graph, for the HMI to draw itself.
+
+        No pixels go over the wire: the answer describes boxes, port stubs and
+        cables in scene coordinates and the firmware rasterises it. A full
+        pedalboard does not fit in one message, so what comes back is the
+        window around <node_id>, which is also how the HMI pans -- it asks
+        again naming a node the current window only referenced.
+        """
+        scene = MINIMAP.scene(self)
+
+        if props & FLAG_PAGINATION_INITIAL_REQ:
+            focus = MINIMAP.default_focus(scene)
+        else:
+            focus = MINIMAP.key_for_id(scene, node_id)
+            if focus is None:
+                logging.warning("hmi wants the minimap around unknown node %d, using the default",
+                                node_id)
+                focus = MINIMAP.default_focus(scene)
+
+        responseData, version = MINIMAP.render(self, focus=focus)
+
+        logging.debug("hmi builder minimap %d %d -> v%d, %d bytes",
+                      props, node_id, version, len(responseData))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_connections(self, node_id, bits, callback):
+        """The cables in and out of one box, for the connection menu.
+
+        One entry per box at the far end and per signal type, not per pair of ports: the
+        picture draws a stereo pair as one line and the menu lists it as one line.
+        """
+        entries = MINIMAP.connections(self, node_id, bits)
+
+        # Each line ends with the cables it stands for, as pairs of port names, output
+        # end first. The target list has the same shape with a count of zero, so one
+        # parser on the device reads both.
+        responseData = str(len(entries))
+        for entry in entries:
+            pairs = entry.get('pairs') or []
+            responseData += ' %s %d %d %s %d' % (entry['direction'], entry['nid'],
+                                                 entry['bits'], entry['label'], len(pairs))
+            for source, sink in pairs:
+                responseData += ' %s %s' % (source, sink)
+
+        logging.debug("hmi builder connections %d %d -> %d entries", node_id, bits, len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_targets(self, node_id, bits, want_outputs, callback):
+        """The boxes one of our ports could meet.
+
+        Same wire format as hmi_builder_connections so the firmware reads both with one
+        parser, and the `>` on the label means the same thing in both lists.
+        """
+        entries = MINIMAP.candidates(self, node_id, bits, want_outputs != 0)
+
+        responseData = str(len(entries))
+        for entry in entries:
+            # no cables yet, hence no port names: the trailing count keeps the shape
+            responseData += ' %s %d %d %s 0' % (entry['direction'], entry['nid'],
+                                                entry['bits'], entry['label'])
+
+        logging.debug("hmi builder targets %d %d %d -> %d entries",
+                      node_id, bits, want_outputs, len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_categories(self, bits, callback):
+        """The left column of the Add screen."""
+        entries = CATALOG.categories(bits)
+
+        responseData = str(len(entries))
+        for entry in entries:
+            responseData += ' %d %s' % (entry['index'], entry['label'])
+
+        logging.debug("hmi builder categories %d -> %d entries", bits, len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_catalog(self, category, bits, first, callback):
+        """The right column: a window into the category the device is looking at."""
+        total, first, entries = CATALOG.window(category, bits, first, MINIMAP_MAX_MENU)
+
+        responseData = '%d %d %d' % (total, first, len(entries))
+        for entry in entries:
+            responseData += ' %d %s' % (entry['index'], entry['label'])
+
+        logging.debug("hmi builder catalog %d %d from %d -> %d of %d",
+                      category, bits, first, len(entries), total)
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_initials(self, category, bits, callback):
+        """Where each first letter starts, for scrubbing a long category."""
+        entries = CATALOG.initials(category, bits)
+
+        responseData = str(len(entries))
+        for entry in entries:
+            responseData += ' %d %s' % (entry['index'], entry['letter'])
+
+        logging.debug("hmi builder initials %d %d -> %d letters", category, bits, len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_add(self, category, plugin, bits, node_id, callback):
+        """Instantiate the plugin the device picked, and hand back the box it became.
+
+        The device names it by two positions rather than by URI -- sixty characters of no
+        use to it -- so the pick is resolved against the same listing it was shown.
+
+        `node_id` is the box the cursor was on, or -1. Where that box feeds exactly one
+        other and the channels line up, the new plugin goes in between them and takes the
+        cable over -- adding a tremolo with a gain selected puts it between the gain and
+        whatever the gain was feeding. Minimap.splice_plan() is what decides that the case
+        is plain enough to do unasked; anything less plain and the plugin is added
+        unconnected, which is where it landed before this existed.
+        """
+        chosen = CATALOG.plugin_at(category, plugin, bits)
+
+        if chosen is None:
+            logging.error("hmi wants to add plugin %d of category %d, which is not there",
+                          plugin, category)
+            callback(True, '-1')
+            return
+
+        # the new box has to pass straight through: as many audio outputs as inputs, or
+        # there is no cable shape for it to take over
+        inputs, outputs = CATALOG.audio_ports(chosen['uri'])
+        plan = None
+        if inputs and len(inputs) == len(outputs):
+            plan = MINIMAP.splice_plan(self, node_id, len(inputs))
+
+        instance = CATALOG.instance_name(self, chosen['name'])
+        instance_id = self.mapper.get_id(instance)
+
+        def added(ok):
+            if not ok:
+                logging.error("hmi could not add %s", chosen['uri'])
+                callback(True, '-1')
+                return
+
+            logging.debug("hmi builder add %s as %s (id %d)%s",
+                          chosen['uri'], instance, instance_id,
+                          plan and ", spliced into %d cables" % len(plan['links']) or "")
+
+            if plan is None:
+                callback(True, str(instance_id))
+                return
+
+            self._splice_plugin(instance, plan, inputs, outputs, instance_id, callback)
+
+        # a spliced box lands between the two it came between; an unconnected one lands
+        # where the web UI has always put a new plugin
+        self.add_plugin(instance, chosen['uri'],
+                        plan['x'] if plan else 0, plan['y'] if plan else 0, added)
+
+    def _splice_plugin(self, instance, plan, inputs, outputs, instance_id, callback):
+        """Take over the cables the plan named, one channel at a time.
+
+        Cut first and lay afterwards, in two waves rather than one: the old cable and the
+        new one share a port at each end, and dropping the old first keeps a box from
+        being briefly fed twice, which on a stereo pair is audible.
+
+        Two lists, not one: a stereo box spliced into a single cable has two channels to
+        wire but only that one cable to drop, and dropping it twice would be a second
+        disconnect of something already gone.
+        """
+        dropping = plan['cut']
+        links = plan['links']
+
+        # a list rather than a plain int, the way hmi_builder_disconnect counts its own
+        cut = [len(dropping)]
+        laid = [2 * len(links)]
+
+        def wired(_ok):
+            laid[0] -= 1
+            if laid[0] == 0:
+                logging.debug("hmi builder add spliced %s into %d cables",
+                              instance, len(links))
+                callback(True, str(instance_id))
+
+        def dropped(_ok):
+            cut[0] -= 1
+            if cut[0] > 0:
+                return
+
+            for index, link in enumerate(links):
+                source, target = link
+                self.connect(source, instance + '/' + inputs[index], wired)
+                self.connect(instance + '/' + outputs[index], target, wired)
+
+        for source, target in dropping:
+            self.disconnect(source, target, dropped)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_info(self, category, plugin, bits, callback):
+        """What the Add screen's info overlay shows about the row under the cursor.
+
+        The description comes over one word to a token, counted like the cable pairs are:
+        a word holds no space, so nothing has to be escaped and the device is free to wrap
+        it to whatever width the panel has left.
+        """
+        details = CATALOG.details(category, plugin, bits)
+
+        if details is None:
+            logging.error("hmi wants plugin %d of category %d, which is not there",
+                          plugin, category)
+            callback(True, '-1')
+            return
+
+        responseData = '%s %s %s %d %d %d %d %d %d %d' % (
+            details['name'], details['brand'], details['category'],
+            details['audio'][0], details['audio'][1],
+            details['midi'][0], details['midi'][1],
+            details['cv'][0], details['cv'][1],
+            len(details['comment']))
+
+        for word in details['comment']:
+            responseData += ' ' + word
+
+        logging.debug("hmi builder info %d %d -> %s", category, plugin, details['name'])
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_remove(self, node_id, callback):
+        """Take one box off the board, cables and all.
+
+        Only a plugin: the capture and playback boxes are part of the picture and not part
+        of the pedalboard, and removing one would mean removing an audio interface.
+        Host.remove_plugin() drops the instance's connections with it and tells the web UI
+        as it goes, so the browser follows along without being asked.
+
+        A box taken out of the middle of a chain leaves its neighbours facing each other,
+        so the chain is closed back over it -- the inverse of the splice that adding one
+        does, refused on the same terms and doing nothing at all when they are not met.
+
+        Removed with send_hmi off. Taking a plugin off the board unaddresses whatever was
+        on it, which normally means several commands to the panel, each waiting for the
+        panel to answer -- and the panel asked for this and is spinning on the reply, where
+        it answers nothing. Held back here and sent once the reply has gone out, so the
+        device gets a complete answer rather than a fast one.
+        """
+        instance = MINIMAP.key_for_id(MINIMAP.scene(self), node_id)
+
+        if instance is None or node_id < 0:
+            logging.warning("hmi wants to remove node %d, which is not a plugin", node_id)
+            callback(True, '0')
+            return
+
+        # worked out while the box is still there to be measured, laid once it is gone
+        plan = MINIMAP.unsplice_plan(self, node_id)
+
+        @gen.engine
+        def caught_up():
+            """What remove_plugin held back, now that the panel is listening again."""
+            held = self.deferred_hmi_removal
+            self.deferred_hmi_removal = None
+
+            if held is None or not self.hmi.initialized:
+                return
+
+            pages, hw_ids, actuator_uris = held
+
+            try:
+                if pages:
+                    yield gen.Task(self.hmi.set_available_pages,
+                                   self.addressings.get_available_pages())
+
+                # the encoders would otherwise go on showing a plugin that is not there
+                if hw_ids:
+                    yield gen.Task(self.hmi.control_rm, hw_ids)
+
+                for actuator_uri in actuator_uris:
+                    yield gen.Task(self.addressings.hmi_load_current, actuator_uri)
+            except Exception:
+                logging.exception("[host] cannot catch the panel up after a removal")
+
+        def finished():
+            logging.debug("hmi builder remove %s -> gone", instance)
+            callback(True, '1')
+
+            # Not the next turn of the loop: the device asks for the graph the moment it
+            # reads this reply, and spends that request in the same blocking wait. A second
+            # is long enough for it to be back in its own loop, and nothing here is urgent
+            # -- the panel only needs it before the user returns to control mode.
+            IOLoop.instance().call_later(1.0, caught_up)
+
+        def removed(ok):
+            if not ok:
+                logging.debug("hmi builder remove %s -> failed", instance)
+                callback(True, '0')
+                return
+
+            if plan is None:
+                finished()
+                return
+
+            links = plan['links']
+            pending = [len(links)]
+
+            def wired(_ok):
+                pending[0] -= 1
+                if pending[0] == 0:
+                    logging.debug("hmi builder remove %s closed %d cables over it",
+                                  instance, len(links))
+                    finished()
+
+            for source, target in links:
+                self.connect(source, target, wired)
+
+        self.remove_plugin(instance, removed, send_hmi=False)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_actuators(self, callback):
+        """The second column of the binding manager: every slot on the panel.
+
+        A knob is three of them, one per sub-page, so the list is longer than the panel
+        has knobs -- and the device does not need to know why. It picks a position; which
+        actuator and which sub-page that is, is worked out back here.
+        """
+        entries = BINDINGS.actuators(self)
+
+        responseData = str(len(entries))
+        for entry in entries:
+            responseData += ' ' + entry['label']
+
+        logging.debug("hmi builder actuators -> %d entries", len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_params(self, node_id, first, count, callback):
+        """The first column: one box's control ports, a screenful at a time."""
+        entries = BINDINGS.parameters(self, node_id)
+
+        if first < 0:
+            first = 0
+        window = entries[first:first + count] if count > 0 else []
+
+        responseData = '%d %d %d' % (len(entries), first, len(window))
+        for entry in window:
+            responseData += ' ' + entry['label']
+
+        logging.debug("hmi builder params %d %d %d -> %d of %d",
+                      node_id, first, count, len(window), len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_bindings(self, page, callback):
+        """Which actuators are spoken for on one page, so the device can mark them."""
+        logging.debug("hmi builder bindings page %d", page)
+        callback(True, self._binding_marks(page))
+
+    def _binding_marks(self, page):
+        """The occupied slots of one page, in the shape the device marks its column with."""
+        held = BINDINGS.taken(self, page)
+
+        out = str(len(held))
+        for index in sorted(held):
+            out += ' %d %s' % (index, held[index])
+
+        return out
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_bind(self, node_id, param_index, page, actuator_index, callback):
+        """Put one parameter on one slot of one page.
+
+        The slot takes one addressing, so anything already there is replaced -- which is
+        what Host.address() does anyway when the port it is given is already addressed.
+
+        The device is answered before the addressing is even started, and that ordering is
+        the whole point. Making an addressing sends the panel several commands of its own --
+        control_add, and set_available_pages, which does not go through send_hmi at all --
+        and each waits for the device to answer it. The device asked for this and is sitting
+        in a blocking spin waiting for the reply, where it answers nothing: the two would
+        wait for each other until one was reset. The link is a queue, so putting the reply
+        in it first is what gets the device out of the spin and back to serving commands.
+
+        The cost is that the answer cannot say whether it worked. The device does not need
+        telling: it knows which slot it just filled, and marks it. Should the addressing
+        have failed, the next time the page is read the marks come back right.
+
+        What it cannot know is which slot the parameter is coming off. A parameter holds one
+        addressing, so binding it somewhere else takes it off wherever it was, and the mark
+        there has to go with it -- hence the second number in the reply.
+        """
+        listed = BINDINGS.actuators(self)
+        param = BINDINGS.parameter_at(self, node_id, param_index)
+
+        instance = self.mapper.id_map.get(node_id) if node_id >= 0 else None
+
+        if param is None or instance is None or \
+           actuator_index < 0 or actuator_index >= len(listed):
+            logging.warning("hmi wants to bind %d:%d to slot %d of page %d, which is "
+                            "not there", node_id, param_index, actuator_index, page)
+            callback(True, '0 -1')
+            return
+
+        actuator = listed[actuator_index]
+
+        # Where this parameter is now, if anywhere. Read before addressing, because
+        # Host.address() is what takes it off, and afterwards there is nothing left to read.
+        previous = (self.plugins[node_id]['addressings'] or {}).get(param['symbol'])
+        freed = -1
+
+        if previous is not None and previous.get('page') == page:
+            freed = BINDINGS.index_of(listed, previous.get('actuator_uri'),
+                                      previous.get('subpage'))
+
+        # out of the way first; see the docstring
+        callback(True, '1 %d' % freed)
+
+        def bound(ok):
+            logging.debug("hmi builder bind %s/%s -> %s page %d subpage %s: %s",
+                          instance, param['symbol'], actuator['uri'], page,
+                          actuator['subpage'], ok and "done" or "failed")
+
+            if ok:
+                self.hmi_builder_broadcast_bind(instance, param, actuator, page,
+                                                previous is not None)
+
+        self.address(instance, param['symbol'], actuator['uri'], param['name'],
+                     param['minimum'], param['maximum'], param['value'], param['steps'],
+                     {'page': page, 'subpage': actuator['subpage']}, bound)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_unbind(self, page, actuator_index, callback):
+        """Take whatever holds one slot off it.
+
+        Host.unaddress() is the same thing the web UI does, and the reply goes out before
+        it starts for the same reason it does in hmi_builder_bind: the device is spinning
+        on this reply and answers nothing while it waits.
+        """
+        held = BINDINGS.slot(self, page, actuator_index)
+
+        if held is None or not held['instance'] or not held['portsymbol']:
+            logging.warning("hmi wants to unbind slot %d of page %d, which holds nothing",
+                            actuator_index, page)
+            callback(True, '0')
+            return
+
+        callback(True, '1')
+
+        def dropped(ok):
+            logging.debug("hmi builder unbind %s/%s: %s",
+                          held['instance'], held['portsymbol'], ok and "done" or "failed")
+
+            if ok:
+                self.msg_callback("hw_unmap %s %s" % (held['instance'],
+                                                      held['portsymbol']))
+
+        self.unaddress(held['instance'], held['portsymbol'], True, dropped)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_broadcast_bind(self, instance, param, actuator, page, replaced):
+        """Tell the browser about an addressing it did not make itself.
+
+        The web UI updates its own state when it is the one addressing, so nothing here
+        normally broadcasts a single mapping -- hw_map is otherwise only sent in the full
+        dump a browser gets when it connects. An addressing made on the panel reaches it no
+        other way, so the same line the dump would have carried is sent on its own.
+        """
+        try:
+            addressing = self.plugins[self.mapper.get_id(instance)]['addressings'][param['symbol']]
+        except KeyError:
+            logging.warning("[host] bound %s/%s but cannot find it to broadcast",
+                            instance, param['symbol'])
+            return
+
+        # The browser files a mapping under its actuator as well as under its port, and
+        # adding one does not take the old entry out of the actuator it was under. So the
+        # parameter is dropped first and put back on its new actuator second.
+        if replaced:
+            self.msg_callback("hw_unmap %s %s" % (instance, param['symbol']))
+
+        def word(value):
+            return "{0}".format(value).replace(" ", "").replace("None", "null")
+
+        self.msg_callback("hw_map %s %s %s %f %f %d %s %s %s %s %s %s 1 %d %d" % (
+            instance,
+            param['symbol'],
+            actuator['uri'],
+            addressing['minimum'],
+            addressing['maximum'],
+            addressing['steps'],
+            addressing['label'].replace(" ", "_"),
+            addressing.get('tempo', False),
+            word(addressing.get('dividers', None)),
+            word(page),
+            word(actuator['subpage']),
+            word(addressing.get('group', None)),
+            int(addressing.get('coloured', False)),
+            int(addressing.get('momentary', 0))))
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_ports(self, node_id, bits, side, callback):
+        """One side of a box's ports, for the last step of "New connection...".
+
+        Same wire format as the two menus before it, so the firmware reads all three
+        with one parser and the arrow keeps meaning the same thing.
+        """
+        # side 2 asks for both, inputs first: our own ports, where the side is the choice
+        entries = MINIMAP.ports(self, node_id, bits, None if side == 2 else side != 0)
+
+        responseData = str(len(entries))
+        for entry in entries:
+            # a port is one end, not a cable, so it carries no pairs of its own
+            responseData += ' %s %d %d %s 0' % (entry['direction'], entry['index'],
+                                                entry['bits'], entry['label'])
+
+        logging.debug("hmi builder ports %d %d %d -> %d entries",
+                      node_id, bits, side, len(entries))
+        callback(True, responseData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_connect(self, from_id, from_port, to_id, to_port, bits, callback):
+        """Lay the one cable the user picked. A port index of -1 is the host's to choose."""
+        links = MINIMAP.connect_port(self, from_id, from_port, to_id, to_port, bits)
+
+        if not links:
+            logging.warning("hmi wants to connect %d:%d -> %d:%d, which is not possible",
+                            from_id, from_port, to_id, to_port)
+            callback(True, '0')
+            return
+
+        pending = [len(links)]
+
+        def done(_ok):
+            pending[0] -= 1
+            if pending[0] == 0:
+                logging.debug("hmi builder connect %d:%d -> %d:%d -> %d cables laid",
+                              from_id, from_port, to_id, to_port, len(links))
+                callback(True, str(len(links)))
+
+        for port_from, port_to in links:
+            self.connect(port_from, port_to, done)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    def hmi_builder_disconnect(self, from_id, to_id, bits, callback):
+        """Drop every cable behind one line of the picture.
+
+        A line can stand for several: a stereo pair is two cables and one line, and the
+        user asked to remove the line. Host.disconnect() tells the web UI as it goes, so
+        the browser follows along without being asked.
+        """
+        links = MINIMAP.links_between(self, from_id, to_id, bits)
+
+        if not links:
+            logging.warning("hmi wants to disconnect %d -> %d, which is not connected",
+                            from_id, to_id)
+            callback(True, '0')
+            return
+
+        # a list rather than a plain int: 3.4 has no nonlocal-free way to rebind one
+        pending = [len(links)]
+
+        def done(_ok):
+            pending[0] -= 1
+            if pending[0] == 0:
+                logging.debug("hmi builder disconnect %d %d -> %d cables dropped",
+                              from_id, to_id, len(links))
+                callback(True, str(len(links)))
+
+        for port_from, port_to in links:
+            self.disconnect(port_from, port_to, done)
 
     # -----------------------------------------------------------------------------------------------------------------
     def hmi_bank_new(self, title, callback):

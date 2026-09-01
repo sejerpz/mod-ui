@@ -2271,6 +2271,21 @@ function HardwareManager(options) {
 
     // used only for global pedalboard addressings
     // don't use it for normal operations, as it skips setEnabled()
+    /*
+     * An addressing removed somewhere other than here -- on the device's own binding
+     * screen. The places that unaddress from the browser take the mapping out and re-enable
+     * the control in two steps of their own; nobody does the second half for us, so this
+     * does both.
+     */
+    this.removeHardwareMappingFromDevice = function (instance, portSymbol) {
+        if (!self.removeHardwareMappping(instance + "/" + portSymbol)) {
+            return false
+        }
+
+        options.setEnabled(instance, portSymbol, true)
+        return true
+    }
+
     this.removeHardwareMappping = function (instanceAndSymbol) {
         var actuator_uri = self.addressingsByPortSymbol[instanceAndSymbol]
 
