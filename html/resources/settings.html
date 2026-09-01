@@ -13,7 +13,7 @@
                 <div class="mod-light on" mod-role="bypass-light"></div>
                 <div class="mod-switch-background"></div>
                 <div class="mod-switch-image" mod-role="bypass"></div>
-                <div class="mod-address" mod-role="bypass-address"></div>
+                <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="bypass-address"></div>
             </div>
 
             <!-- PRESET LIST -->
@@ -40,7 +40,7 @@
                     <div mod-role="enumeration-option" mod-uri="{{uri}}" mod-path="{{path}}">{{label}}</div>
                     {{/presets.user}}
                 </div>
-                <footer>
+                <footer class="{{#isPerformanceView}}mod-hidden{{/isPerformanceView}}">
                     <button class="btn btn-xs btn-primary preset-btn-save disabled" title="Save"></button>
                     <button class="btn btn-xs btn-primary preset-btn-save-as" title="Save as"></button>
                     <button class="btn btn-xs btn-primary preset-btn-rename disabled" title="Rename"></button>
@@ -100,7 +100,7 @@
             {{#enumeration}}
             <div class="mod-enumerated{{#group}} mod-group{{#groupStart}} mod-group-start{{/groupStart}} mod-group-{{groupCssIndex}}{{#groupEnd}} mod-group-end{{/groupEnd}}{{/group}}">
                 <span class="mod-enumerated-title{{#group}} mod-group-item-title{{/group}}">{{shortName}}</span>
-                <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
                 <div class="mod-enumerated-list" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="custom-select">
                     {{#scalePoints}}
                     <div mod-role="enumeration-option" mod-port-value="{{value}}">{{label}}</div>
@@ -128,7 +128,8 @@
                         {{^integer}}
                         <div class="mod-knob-image" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
                         {{/integer}}
-                        <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
                     </div>
                     {{/toggled}}
                     {{#toggled}}
@@ -141,7 +142,8 @@
                         <div class="mod-switch-background"></div>
                         {{/group}}
                         <div class="mod-switch-image" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
-                        <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                        <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
                     </div>
                     {{/toggled}}
                 {{/trigger}}
@@ -149,7 +151,8 @@
                 <div class="mod-switch" title="{{comment}}">
                     <span class="mod-switch-title">{{shortName}}</span>
                     <div class="mod-footswitch-image" mod-role="input-control-port" mod-port-symbol="{{symbol}}" mod-widget="film"></div>
-                    <div class="mod-address" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                    <div class="mod-address {{#isPerformanceView}}mod-hidden{{/isPerformanceView}}" mod-role="input-control-address" mod-port-symbol="{{symbol}}"></div>
+                    <span class="mod-knob-snapshot-status icon-camera" mod-role="input-control-snapshotable" mod-port-symbol="{{symbol}}"></span>
                 </div>
                 {{/trigger}}
             {{/enumeration}}

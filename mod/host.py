@@ -156,7 +156,8 @@ from modtools.utils import (
     connect_jack_ports, connect_jack_midi_output_ports, disconnect_jack_ports, disconnect_all_jack_ports,
     set_truebypass_value, get_master_volume,
     set_util_callbacks, set_extra_util_callbacks, kPedalboardTimeAvailableBPB,
-    kPedalboardTimeAvailableBPM, kPedalboardTimeAvailableRolling
+    kPedalboardTimeAvailableBPM, kPedalboardTimeAvailableRolling,
+    PerformancePluginInfo
 )
 from modtools.tempo import (
     convert_port_value_to_seconds_equivalent,
@@ -2576,10 +2577,14 @@ class Host(object):
                                                  extinfo['microVersion'],
                                                  extinfo['minorVersion'],
                                                  extinfo['release']))
-            label = extinfo["label"]
-            slabel = label.replace(" ","_")
 
-            print("loaded uri %s" % uri)
+            # initial performance values
+            self.maxPerformanceIndex += 1
+            performanceInfo = PerformancePluginInfo()
+            performanceInfo.visible = True
+            performanceInfo.index = self.maxPerformanceIndex
+
+            print(performanceInfo)
             self.plugins[instance_id] = {
                 "instance"    : instance,
                 "uri"         : uri,
@@ -2600,9 +2605,9 @@ class Host(object):
                 "nextPreset"  : "",
                 "buildEnv"    : extinfo['buildEnvironment'],
                 "sversion"    : sversion,
-                "label"       : label,
-                "slabel"       : slabel,
-                "performance" :  extinfo['performance']
+                "label"       : "", #initial label value
+                "slabel"       : "",
+                "performance" : dict(visible=performanceInfo.visible, index=performanceInfo.index) #  extinfo['performance']
             }
 
             for output in extinfo['monitoredOutputs']:
@@ -2621,9 +2626,9 @@ class Host(object):
                                                                 int(bypassed),
                                                                 sversion,
                                                                 int(bool(extinfo['buildEnvironment'])),
-                                                                slabel,
-                                                                int(extinfo['performance'].index),
-                                                                int(bool(extinfo['performance'].visible))))
+                                                                "",
+                                                                performanceInfo.index,
+                                                                performanceInfo.visible))
 
         self.send_modified("add %s %d" % (uri, instance_id), host_callback, datatype='int')
 
@@ -3717,6 +3722,7 @@ class Host(object):
         else:
             motos = {}
 
+        self.maxPerformanceIndex = max(p['performance']['index'] for p in pb['plugins'])
         self.load_pb_plugins(pb['plugins'], instances, rinstances, motos)
         self.load_pb_connections(pb['connections'], mappedOldMidiIns, mappedOldMidiOuts,
                                                     mappedNewMidiIns, mappedNewMidiOuts)
@@ -3881,6 +3887,12 @@ class Host(object):
             if p['preset'] and not is_plugin_preset_valid(p['uri'], p['preset']):
                 logging.warning("[host] preset '%s' was not valid" % p['preset'])
                 p['preset'] = ""
+
+            # fix performance id for pedalboards created before its introduction
+            if p['performance']['index'] < 0:
+                self.maxPerformanceIndex += 1
+                p['performance']['index'] = self.maxPerformanceIndex
+                logging.info("[host] plugin %s added performance view index: %d" % (instance, self.maxPerformanceIndex))
 
             self.plugins[instance_id] = pluginData = {
                 "instance"    : instance,
@@ -4190,9 +4202,9 @@ _:b%i
     mod:label '%s' ;
     lv2:port <%s> ;
     lv2:prototype <%s> ;
+    perf:visible %s ;
+    perf:index %i ;
     pedal:instanceNumber %i ;
-    pedal:favorite %s ;
-    pedal:index %i ;
     pedal:preset <%s> ;
     a ingen:Block .
 """ % (instance, pluginData['x'], pluginData['y'], "false" if pluginData['bypassed'] else "true",
@@ -4207,9 +4219,9 @@ _:b%i
                                                                                           info['ports']['midi']['output']+
                                                                                           [{'symbol': ":bypass"}]))),
        pluginData['uri'],
-       instance_id,
        "true" if pluginData['performance']['visible'] else "false",
        pluginData['performance']['index'],
+       instance_id,
        pluginData['preset'])
 
             # audio input
@@ -4526,6 +4538,7 @@ _:b%i
 @prefix midi:  <http://lv2plug.in/ns/ext/midi#> .
 @prefix mod:   <http://moddevices.com/ns/mod#> .
 @prefix pedal: <http://moddevices.com/ns/modpedal#> .
+@prefix perf:  <http://moddevices.com/ns/modperformance#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 %s%s%s
 <>

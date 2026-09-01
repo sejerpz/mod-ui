@@ -888,7 +888,11 @@ function GUI(effect, options) {
             var totalPresetCount = self.effect.presets.length
 
             self.settings.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            // add to template data that this is the performaceView so the UI can adapt
+            templateData['isPerformanceView'] = true;
             self.settingsPerformance.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            // remove to mantain the templateData as clean as possible
+            delete templateData['isPerformanceView'];
 
             self.assignControlFunctionality(self.settings, false)
             self.assignControlFunctionality(self.settingsPerformance, false)
