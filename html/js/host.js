@@ -161,6 +161,24 @@ $('document').ready(function() {
             return
         }
 
+        if (cmd == "plugin_label") {
+            data = data.split(" ", 2)
+            var instance = data[0]
+            var label = data[1].replace(/_/g," ")
+            
+            desktop.pedalboard.pedalboard("setPluginLabel", instance, label)
+            return
+        }
+
+        if (cmd == "plugin_performance_visiblity") {
+            data = data.split(" ", 2)
+            var instance = data[0]
+            var visible = (data[1] === "1" ? true : false)
+
+            desktop.pedalboard.pedalboard("setPluginPerformanceIsFavorite", instance, visible)
+            return
+        }
+
         if (cmd == "transport") {
             data         = data.split(" ",4)
             var rolling  = parseInt(data[0]) != 0
@@ -189,7 +207,9 @@ $('document').ready(function() {
 
             desktop.pedalboardPresetId = index
             desktop.pedalboardPresetName = name
-            desktop.titleBox.text((desktop.title || 'Untitled') + " - " + name)
+            const newTitle = (desktop.title || 'Untitled') + " - " + name
+            desktop.titleBox.text(newTitle)
+            desktop.performanceTitleBox.text(newTitle)
             return
         }
 
@@ -347,7 +367,7 @@ $('document').ready(function() {
         }
 
         if (cmd == "add") {
-            data         = data.split(" ",7)
+            data         = data.split(" ",10)
             var instance = data[0]
             var uri      = data[1]
             var x        = parseFloat(data[2])
@@ -357,6 +377,9 @@ $('document').ready(function() {
             var offBuild = parseInt(data[6]) != 0 // official MOD build coming from store, can be cached
             var plugins  = desktop.pedalboard.data('plugins')
             var skipModified = pb_loading
+            var label = data[7].replace(/_/g," ") // replace underscores with spaces
+            var perfview_index = parseInt(data[8])
+            var perfview_visible = parseInt(data[9]) != 0
 
             if (plugins[instance] == null) {
                 plugins[instance] = {} // register plugin
@@ -371,6 +394,62 @@ $('document').ready(function() {
                     success: function (pluginData) {
                         var instancekey = '[mod-instance="' + instance + '"]'
 
+                        // resolve groups
+                        pluginData.ports.control.input.forEach(function (port, index) {
+                            port.group = undefined;
+                            port.groupIndex = undefined;
+                            port.groupCssIndex = undefined; // index used for css coloring
+
+                            if (pluginData.portGroups && port.groupSymbol) {
+                                port.group = pluginData.portGroups.find(function (group) {
+                                    return group.symbol === port.groupSymbol;
+                                });
+
+                                if (port.group) {
+                                    port.groupStart = false;
+                                    port.groupEnd = false;
+                                    port.groupIndex = pluginData.portGroups.indexOf(port.group);
+                                    port.groupCssIndex =  port.groupIndex % 32;  // 32 = max supported groups by css
+                                }
+                            }
+                        });
+
+                        // sort port with groups
+                        pluginData.ports.control.input.sort(function (a, b) {
+                            if (a.groupIndex < b.groupIndex) {
+                                return -1;
+                            } else if (a.groupIndex > b.groupIndex) {
+                                return 1;
+                            } else {
+                                return a.index - b.index;
+                            }
+                        });
+
+                        // add start or end group flags
+                        let prevPort = undefined;
+                        pluginData.ports.control.input.forEach(function (port, index) {
+                            if (port.group)
+                            {
+                                if (prevPort === undefined || prevPort.group === undefined) {
+                                    port.groupStart = true;
+                                } else {
+                                    if (prevPort.groupIndex != port.groupIndex) {
+                                        port.groupStart = true;
+
+                                        if (prevPort.group) {
+                                            prevPort.groupEnd = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            prevPort = port;
+                        });
+
+                        if (prevPort.group) {
+                            prevPort.groupEnd = true;
+                        }
+
                         if (!$(instancekey).length) {
                             var cb = function () {
                                 desktop.pedalboard.pedalboard('scheduleAdapt', false)
@@ -380,7 +459,11 @@ $('document').ready(function() {
                             $('#pedalboard-dashboard').arrive(instancekey, cb)
                         }
 
-                        desktop.pedalboard.pedalboard("addPlugin", pluginData, instance, bypassed, x, y, {}, null, skipModified)
+                        var guiOptions = {
+                            "label" : label,
+                            "performance": {"index": perfview_index, "visible": perfview_visible}
+                        }
+                        desktop.pedalboard.pedalboard("addPlugin", pluginData, instance, label, bypassed, x, y, guiOptions, null, skipModified)
                     },
                     cache: offBuild,
                     dataType: 'json'
