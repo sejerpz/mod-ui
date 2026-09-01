@@ -841,6 +841,7 @@ function GUI(effect, options) {
 
             if (instance) {
                 self.settings = $('<div class="mod-settings" mod-instance="' + instance + '">')
+                self.settingsPerformance = $('<div class="mod-settings" mod-instance="' + instance + '">')
             } else {
                 self.settings = $('<div class="mod-settings">')
             }
@@ -862,8 +863,10 @@ function GUI(effect, options) {
             var totalPresetCount = self.effect.presets.length
 
             self.settings.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            self.settingsPerformance.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
 
             self.assignControlFunctionality(self.settings, false)
+            self.assignControlFunctionality(self.settingsPerformance, false)
 
             var presetElem = self.settings.find('.mod-presets')
 
