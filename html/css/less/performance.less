@@ -9,6 +9,10 @@
   top: 0;
   z-index: 2;
 
+  .actions {
+    display: flex;
+  }
+
   h1 {
     color: #fff;
     display: inline-block;
@@ -76,22 +80,27 @@
     }
 
     span {
-      display: block;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .icon-favorite {
-      position: relative;
-      top: 0px;
-      right: 0px;
-      display: inline;
-      font-size: 16px;
+    .icon-visible {
+      display: block;
+      position: absolute;
+      top: 16px;
+      right: 16px;
       z-index: 1;
     }
 
-    .is-favorite {
+    .icon {
+      position: relative;
+      top: 0px;
+      right: 0px;
+      z-index: 1;
+    }
+
+    .is-visible {
       color: gold;
     }
 
@@ -150,12 +159,15 @@
   }
 
   #performance-filter-favorites {
-        font-size: 18px;
-        color: gold;
-        float: right;
-        position: fixed;
-        z-index: 1;
-        cursor: pointer;
+    font-size: 18px;
+    cursor: pointer;
+    width: 45px;
+    text-align: center;
+    color: lightgray;
+  }
+
+  .active {
+    color: gold !important;
   }
 
   /* desktop and large tablets */
@@ -197,9 +209,8 @@
         right: 0px;
       }
 
-      #performance-filter-favorites {
-        bottom: 200px;
-        left: 4px;
+      .icon-visible {
+        font-size: 16px;
       }
     }
   }
@@ -238,9 +249,8 @@
         right: 0px;
       }
 
-      #performance-filter-favorites {
-        top: 48px;
-        left: 4px;
+      .icon-visible {
+        font-size: 20px;
       }
     }
   }

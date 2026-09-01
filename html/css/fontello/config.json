@@ -89,6 +89,12 @@
       "css": "eye-off",
       "code": 59405,
       "src": "fontawesome"
+    },
+    {
+      "uid": "0cd2582b8c93719d066ee0affd02ac78",
+      "css": "sort-alt-up",
+      "code": 61792,
+      "src": "fontawesome"
     }
   ]
 }

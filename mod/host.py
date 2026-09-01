@@ -2798,6 +2798,13 @@ class Host(object):
 
         pluginData['performance']['visible'] = visible
 
+    def set_performance_plugin_index(self, instance, index):
+        instance_id = self.mapper.get_id_without_creating(instance)
+        pluginData  = self.plugins[instance_id]
+
+        pluginData['performance']['index'] = index
+
+
     # check if addressing is momentary or trigger, in which case we do not want to save current/changed value
     def should_save_addressing_value(self, addressing, value):
         if addressing is None:

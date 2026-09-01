@@ -1235,6 +1235,12 @@ class ServerWebSocket(websocket.WebSocketHandler):
             visible = True if data[1] == "1" else False
             SESSION.ws_performance_plugin_visibility(inst, visible, self)
 
+        elif cmd == "performance_plugin_index":
+            data = data[1].split(" ",2)
+            inst = data[0]
+            index = int(data[1])
+            SESSION.ws_performance_plugin_index(inst, index, self)
+
         elif cmd == "pb_size":
             data   = data[1].split(" ",2)
             width  = int(float(data[0]))

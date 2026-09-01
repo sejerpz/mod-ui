@@ -1583,6 +1583,15 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
             ws.send(sprintf("performance_plugin_visibility %s %s", instance, (visible ? "1" : "0")))
         },
 
+        /*
+         * Set if the order of the plugin instance in the performance view
+         * index: order
+         */
+        performancePluginIndexSet: function (instance, index) {
+            self.setPedalboardAsModified(true)
+            ws.send(sprintf("performance_plugin_index %s %d", instance, index))
+        },
+
         windowSize: function (width, height) {
             // FIXME
             if (ws && width > 0 && height > 0) {

@@ -356,9 +356,15 @@ class Session(object):
     # Set a plugin visibility on the performance view
     def ws_performance_plugin_visibility(self, instance, visible, ws):
         print(f"Setting performance visibility of {instance} to '{visible}'")
-        self.screenshot_needed = True
+        #self.screenshot_needed = True
         self.host.set_performance_plugin_visibility(instance, visible)
         self.msg_callback_broadcast("performance_plugin_visibility %s %s" % (instance, visible), ws)
+
+    def ws_performance_plugin_index(self, instance, index, ws):
+        print(f"Setting performance index of {instance} to '{index}'")
+        #self.screenshot_needed = True
+        self.host.set_performance_plugin_index(instance, index)
+        self.msg_callback_broadcast("performance_plugin_index %s %d" % (instance, index), ws)
 
     # set the size of the pedalboard (in 1:1 view, aka "full zoom")
     def ws_pedalboard_size(self, width, height):
