@@ -493,7 +493,7 @@ $('document').ready(function() {
                             prevPort = port;
                         });
 
-                        if (prevPort && prevPort.group) {
+                        if (prevPort !== undefined && prevPort.group) {
                             prevPort.groupEnd = true;
                         }
 
