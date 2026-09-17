@@ -28,6 +28,7 @@ ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/share/mod/html/js
 ssh ${SSH_OPTIONS} ${TARGET} rm -rf /usr/share/mod/html/help
 ssh ${SSH_OPTIONS} ${TARGET} mkdir -p /usr/share/mod/html/help/img
 ssh ${SSH_OPTIONS} ${TARGET} mkdir -p /usr/share/mod/html/css/fontello/{css,font} /usr/share/mod/html/js/{lib/slick/fonts,utils}
+ssh ${SSH_OPTIONS} ${TARGET} mkdir -p /usr/share/mod/html/js/lib/t3k/logo
 
 ssh ${SSH_OPTIONS} ${TARGET} rm -f  /usr/lib/python3.*/site-packages/mod/*.py*
 ssh ${SSH_OPTIONS} ${TARGET} rm -f  /usr/lib/python3.*/site-packages/mod/communication/*.py*
@@ -46,8 +47,11 @@ scp ${SCP_OPTIONS} html/js/lib/*.js              ${TARGET}:/usr/share/mod/html/j
 scp ${SCP_OPTIONS} html/js/lib/slick/*.{css,gif} ${TARGET}:/usr/share/mod/html/js/lib/slick/
 scp ${SCP_OPTIONS} html/js/lib/slick/*min.js     ${TARGET}:/usr/share/mod/html/js/lib/slick/
 scp ${SCP_OPTIONS} html/js/lib/slick/fonts/*.*   ${TARGET}:/usr/share/mod/html/js/lib/slick/fonts/
+scp ${SCP_OPTIONS} html/js/lib/t3k/*.js   	 ${TARGET}:/usr/share/mod/html/js/lib/t3k/
+scp ${SCP_OPTIONS} html/js/lib/t3k/logo/*.*   	 ${TARGET}:/usr/share/mod/html/js/lib/t3k/logo/
 scp ${SCP_OPTIONS} html/js/utils/*.js            ${TARGET}:/usr/share/mod/html/js/utils/
 scp ${SCP_OPTIONS} html/img/*.png                ${TARGET}:/usr/share/mod/html/img/
+scp ${SCP_OPTIONS} html/js/lib/*.js              ${TARGET}:/usr/share/mod/html/js/lib/
 scp ${SCP_OPTIONS} html/img/*.svg                ${TARGET}:/usr/share/mod/html/img/
 scp ${SCP_OPTIONS} mod/*.py                      ${TARGET}:/usr/lib/python3.*/site-packages/mod/
 scp ${SCP_OPTIONS} mod/communication/*.py        ${TARGET}:/usr/lib/python3.*/site-packages/mod/communication/
