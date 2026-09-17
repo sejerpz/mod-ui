@@ -727,22 +727,6 @@ $('document').ready(function() {
             return
         }
 
-        if (cmd == "cpu_load") {
-            // per-plugin worst cycle, pushed by mod-host while the CPU panel is open
-            data = data.split(" ",2)
-            desktop.cpuLoadPanel.setLoad(data[0], parseFloat(data[1]))
-            return
-        }
-
-        if (cmd == "pmdb") {
-            // port monitor in db
-            data      = data.split(" ",2)
-            const port  = data[0]
-            const db = parseFloat(data[1])
-
-            desktop.setPortVUMeterValue(port, db)
-            return
-        }
 
         if (cmd == "t3k-tone-selected") {
             // tone selected from the t3k integration
@@ -807,6 +791,23 @@ $('document').ready(function() {
             const msg = data[1].replace('\_', ' ')
             const progress = parseInt(data[2])
 
+            return
+        }
+
+        if (cmd == "cpu_load") {
+            // per-plugin worst cycle, pushed by mod-host while the CPU panel is open
+            data = data.split(" ",2)
+            desktop.cpuLoadPanel.setLoad(data[0], parseFloat(data[1]))
+            return
+        }
+
+        if (cmd == "pmdb") {
+            // port monitor in db
+            data      = data.split(" ",2)
+            const port  = data[0]
+            const db = parseFloat(data[1])
+
+            desktop.setPortVUMeterValue(port, db)
             return
         }
     }

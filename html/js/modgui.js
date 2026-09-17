@@ -1687,114 +1687,35 @@ function GUI(effect, options) {
                     presetElemPerfView.hide()
                 }
 
-                if (self.effect.parameters.length)
-                {
-                    self.settings.find('.mod-file-list').each(function () {
-                        var elem = $(this)
-                        var list = elem.find('.mod-enumerated-list')
-                        if (list.length == 1 && list[0].childElementCount > 5) {
-                            elem.find('.file-list-btn-expand').click(function () {
-                                if (elem.hasClass('expanded')) {
-                                    elem.removeClass('expanded')
-                                } else {
-                                    elem.addClass('expanded')
-                                }
-                            })
-                        } else {
-                            elem.find('.file-list-btn-expand').hide()
-                        }
-
-                        elem.find('.file-list-btn-t3k').click(function () {
-                            const uri = $(this).attr('mod-parameter-uri')
-                            const parameter = self.effect.parameters.find((p) => p.uri == uri)
-
-                            if (parameter) {
-                                // TODO T3K: check if file type can be downloaded from tone3000
-                                const t3k = desktop.pedalboard.data('T3KIntegration')
-                                t3k.startSelectFlow(instance, parameter)
+            if (instance && self.effect.parameters.length)
+            {
+                self.settings.find('.mod-file-list').each(function () {
+                    var elem = $(this)
+                    var list = elem.find('.mod-enumerated-list')
+                    if (list.length == 1 && list[0].childElementCount > 5) {
+                        elem.find('.file-list-btn-expand').click(function () {
+                            if (elem.hasClass('expanded')) {
+                                elem.removeClass('expanded')
+                            } else {
+                                elem.addClass('expanded')
                             }
                         })
-                    })
-                }
+                    } else {
+                        elem.find('.file-list-btn-expand').hide()
+                    }
 
-            }
+                    elem.find('.file-list-btn-t3k').click(function () {
+                        const uri = $(this).attr('mod-parameter-uri')
+                        const parameter = self.effect.parameters.find((p) => p.uri == uri)
 
-            var editButton = self.settings.find('.mod-pedal-settings .mod-edit')
-            if (instance && editButton.length == 1) {
-                editButton.click(function () {
-                    console.log("Edit clicked")
-                    desktop.openInputBoxWindow("Rename", self.label || self.effect.name, function(newName, cancelled) {
-                        if (cancelled)
-                            return
-
-                        self.setLabel(newName)
-                    },
-                    "Rename", 
-                    function(value) {
-                        return true; // always valid
+                        if (parameter) {
+                            // TODO T3K: check if file type can be downloaded from tone3000
+                            const t3k = desktop.pedalboard.data('T3KIntegration')
+                            t3k.startSelectFlow(instance, parameter)
+                        }
                     })
                 })
             }
-
-            // global plugin snapshot icon
-            self.settings.find('.plugin-global-snapshot').each(function () {
-                var control = $(this)
-
-                control.click(function () {
-                    let newSnapshotable = false;
-
-                    if (control.hasClass("active") || control.hasClass("mixed")) {
-                        // all snapshotable on or mixed -> turn all off
-                        newSnapshotable = false;
-                    } else {
-                        // all snapshotable off -> turn all on
-                        newSnapshotable = true;
-                    }
-
-                    desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, ":bypass", newSnapshotable)
-                    desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, ":presets", newSnapshotable)
-                    for(let key in templateData.effect.ports.control.input) {
-                        const port = templateData.effect.ports.control.input[key];
-                        const symbol = port.symbol;
-
-                        console.log("Toggling global snapshotable for", self.instance, " new:", newSnapshotable ? "ON" : "OFF")
-                        desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, newSnapshotable)
-                    }
-
-                    //TODO: update the parameters
-                })
-            })
-
-            // snapshot icon click
-            self.settings.find('[mod-role=bypass-snapshotable],[mod-role=presets-snapshotable],[mod-role=input-control-snapshotable],[mod-role=parameter-snapshotable]').each(function () {
-                var control = $(this)
-
-                control.click(function () {
-                    const hasSnapshotable = control.hasClass("active")
-
-                    if (control.attr('mod-role') == 'parameter-snapshotable') {
-                        const uri = control.attr('mod-parameter-uri')
-                        if (!uri) {
-                            return
-                        }
-                        desktop.pedalboard.data('pluginParameterSnapshotableSet')(self.instance, uri, hasSnapshotable ? false : true)
-                    } else {
-                        let symbol;
-                        if (control.attr('mod-role') == 'bypass-snapshotable') {
-                            symbol = ":bypass"
-                        } else if (control.attr('mod-role') == 'presets-snapshotable') {
-                            symbol = ":presets"
-                        } else {
-                            symbol = control.attr('mod-port-symbol')
-                        }
-
-                        if (!symbol) {
-                            return
-                        }
-                        desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, hasSnapshotable ? false : true)
-                    }
-                })
-            })
 
             if (! instance) {
                 self.settings.find(".js-close").hide()
@@ -1892,6 +1813,9 @@ function GUI(effect, options) {
                 self.changePortsMonitoring(val != 'off')
             })
             //TODO do the same for performance settings
+
+            // T3K Integration
+
             // ready!
             self.jsStarted = true
             self.triggerJS({ type: 'start', parameters: jsParameters, ports: jsPorts })

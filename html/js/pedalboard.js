@@ -339,7 +339,7 @@ JqueryClass('pedalboard', {
         self.pedalboard('applyTeleportScale')
 
         // t3k integration
-        self.data('T3KIntegration', new T3KIntegration(self, T3K_API_KEY)) //'t3k_pub_7uGZokPvXdxakAUSGVxh_5HXH5PjIdoY'))
+        self.data('T3KIntegration', new T3KIntegration(self, T3K_API_KEY))
 
         // Pedalboard itself will get big dimensions and will have it's scale and position changed dinamically
         // often. So, let's wrap it inside an element with same original dimensions and positioning, with overflow
@@ -4843,13 +4843,16 @@ function T3KIntegration(pedalboard, pubKey) {
                 const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
                 let url = "/t3ksplash.html?v=" + VERSION
                 const t3kwelcome = window.open(url, 't3k_select', `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
-
-                t3kwelcome.onSplashContinue = function() {
+                // Register the continuation on the opener (us), where the splash can
+                // reach it via window.opener. Setting it on the popup directly loses the
+                // race with the popup's document load on first open.
+                window.onT3KSplashContinue = function() {
                     // continue with the select workflow skipAuthCheck = true
                     if (hasApiKey) {
                         self.startSelectFlow(effect, parameter, true)
                     }
                 }
+                try { t3kwelcome.onSplashContinue = window.onT3KSplashContinue } catch (e) {}
 
                 return // stop now because we have shown the splash window
             }
@@ -4904,8 +4907,7 @@ function T3KIntegration(pedalboard, pubKey) {
 
     this.refreshPluginsFilelist = function(senderEffect, senderParameter, senderSetValue) {
         const plugins = self.pedalboard.data('plugins')
-        const sender = plugins[senderEffect] // the effect who completed the download
-        const senderGui = sender.data('gui')
+        // the requesting plugin may have been removed while the download ran
         for(let pluginKey in plugins) {
             // refresh the file lists
             const plugin = plugins[pluginKey]
@@ -5119,11 +5121,11 @@ function T3KIntegration(pedalboard, pubKey) {
                                             t3kinfo.popup?.progress?.(msg, perc)
                                         })
                                         .then((files) => {
-                                            // refresh plugins file list
+                                            // refresh the file lists and load the first downloaded
+                                            // file (alphabetical) into the requesting plugin
                                             let setValue = undefined
                                             if (files && files.length > 0) {
                                                 files.sort((a, b) =>  a.fullname.localeCompare(b.fullname))
-                                                // first in alphabetic order
                                                 setValue = files[0]
                                             }
                                             self.refreshPluginsFilelist(effect, t3kinfo.parameter, setValue)

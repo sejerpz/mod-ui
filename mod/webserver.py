@@ -44,7 +44,7 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
                           DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE, PEDALBOARDS_LABS_HTTP_ADDRESS,
                           FEEDBACK_URL, PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT,
-                          API_KEY)
+                          API_KEY, API_KEY, TONE3000_CLIENT_ID)
 
 from mod import (
     TextFileFlusher, WINDOWS,
@@ -792,6 +792,27 @@ class EffectList(JsonRequestHandler):
     def get(self):
         data = get_all_plugins()
         self.write(data)
+
+class EffectT3KSelect(JsonRequestHandler):
+    """This is the select callback handler from tone3k integration"""
+    def get(self, instance):
+        code = self.get_query_argument('code', default=None)
+        state = self.get_query_argument('state', default=None)
+        tone_id = int(self.get_query_argument('tone_id', default=0))
+        canceled = bool(self.get_query_argument('canceled', default=False))
+
+        # if state != session.get('t3k_state'):
+        #     raise ValueError('State mismatch. Possible CSRF attack.')
+        logging.debug(" T3Keffect select callback: %s, code %s, state %s, tone_id %s, canceled %s", instance, code, state, tone_id, canceled)
+        if canceled:
+            # User exited without selecting a tone.
+            # If code is present, you can still exchange it for tokens.
+            # If code is absent, the user closed before signing in.
+            SESSION.host.msg_callback('t3k-cancel %s' % (instance))
+        else:
+            SESSION.host.msg_callback('t3k-tone-selected %s %s %s %s' % (instance, code, state, tone_id))
+
+        self.write('')
 
 class EffectLicenseList(JsonRequestHandler):
     def post(self):
@@ -2096,16 +2117,20 @@ class TemplateHandler(TimelessRequestHandler):
             return url_escape(version)
         return str(int(time.time()))
 
-    def get_t3k_api_key(self) -> str:
+    def get_t3k_api_key(self):
+        # precedence: user prefs > system key file next to the MOD api key > build-time env (MOD_TONE3000_CLIENT_ID)
         api_key = SESSION.prefs.get('t3k-api-key', None)
 
-        if not api_key:
-            # T3K public system (vendor) api 
-            file_path =  os.path.join(os.path.dirname(API_KEY), 't3k_api_key.pub')
+        if not api_key and API_KEY:
+            # T3K public system (vendor) api
+            file_path = os.path.join(os.path.dirname(API_KEY), 't3k_api_key.pub')
             if os.path.exists(file_path):
                 logging.info("T3K reading system wide apikey from: %s", file_path)
                 with open(file_path, "r", encoding="utf-8") as f:
                     api_key = f.read().strip()
+
+        if not api_key:
+            api_key = TONE3000_CLIENT_ID
 
         return api_key or ''
 
@@ -2158,7 +2183,7 @@ class TemplateHandler(TimelessRequestHandler):
             'feedback_url': FEEDBACK_URL,
             'bufferSize': get_jack_buffer_size(),
             'sampleRate': get_jack_sample_rate(),
-            't3k_api_key': self.get_t3k_api_key() 
+            't3k_api_key': self.get_t3k_api_key()
         }
         return context
 
@@ -2225,7 +2250,6 @@ class TemplateHandler(TimelessRequestHandler):
             'version': self.get_argument('v'),
             't3k_api_key': self.get_t3k_api_key()
         }
-
         return context
 
 class TemplateLoader(TimelessRequestHandler):
@@ -2609,6 +2633,9 @@ class FilesUpload(SimpleFileReceiver):
         directory, _ = FilesList._get_dir_and_extensions_for_filetype(filetype)
         if directory is None:
             logging.error("no directory found for filetype: %s, extension: %s", filetype, ext)
+            os.remove(source_file)
+            callback()
+            return
         configDirectory = config.get('directory', "")
         if configDirectory:
             model_dir_name = FilesUpload.sanitize_filename(configDirectory)
@@ -2646,8 +2673,7 @@ class FilesUpload(SimpleFileReceiver):
             'basepath': basepath,
             'filetype': filetype,
         }
-        if callable:
-            callback()
+        callback()
 
 class FilesList(JsonRequestHandler):
     complete_audiofile_exts = (
@@ -2702,6 +2728,9 @@ class FilesList(JsonRequestHandler):
 
         elif filetype == "nammodel":
             return ("NAM Models", (".nam",))
+
+        elif filetype == "easyspinprog":
+            return ("Easy Spin Programs", (".json",))
 
         else:
             return (None, ())
