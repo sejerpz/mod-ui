@@ -1517,8 +1517,7 @@ function GUI(effect, options) {
             var compareBButton = self.settings.find('.js-ab-compare-snapshot-b')
             var compareTakeButton = self.settings.find('.js-ab-compare-snapshot-take')
 
-            if (instance)
-            {
+            if (instance) {
                 self.updateCompareSnapshotStatus(undefined)
 
                 compareAButton.click(function () {
@@ -1687,37 +1686,37 @@ function GUI(effect, options) {
                     presetElemPerfView.hide()
                 }
 
-            if (instance && self.effect.parameters.length)
-            {
-                self.settings.find('.mod-file-list').each(function () {
-                    var elem = $(this)
-                    var list = elem.find('.mod-enumerated-list')
-                    if (list.length == 1 && list[0].childElementCount > 5) {
-                        elem.find('.file-list-btn-expand').click(function () {
-                            if (elem.hasClass('expanded')) {
-                                elem.removeClass('expanded')
-                            } else {
-                                elem.addClass('expanded')
+                if (self.effect.parameters.length)
+                {
+                    self.settings.find('.mod-file-list').each(function () {
+                        var elem = $(this)
+                        var list = elem.find('.mod-enumerated-list')
+                        if (list.length == 1 && list[0].childElementCount > 5) {
+                            elem.find('.file-list-btn-expand').click(function () {
+                                if (elem.hasClass('expanded')) {
+                                    elem.removeClass('expanded')
+                                } else {
+                                    elem.addClass('expanded')
+                                }
+                            })
+                        } else {
+                            elem.find('.file-list-btn-expand').hide()
+                        }
+
+                        elem.find('.file-list-btn-t3k').click(function () {
+                            const uri = $(this).attr('mod-parameter-uri')
+                            const parameter = self.effect.parameters.find((p) => p.uri == uri)
+
+                            if (parameter) {
+                                // TODO T3K: check if file type can be downloaded from tone3000
+                                const t3k = desktop.pedalboard.data('T3KIntegration')
+                                t3k.startSelectFlow(instance, parameter)
                             }
                         })
-                    } else {
-                        elem.find('.file-list-btn-expand').hide()
-                    }
-
-                    elem.find('.file-list-btn-t3k').click(function () {
-                        const uri = $(this).attr('mod-parameter-uri')
-                        const parameter = self.effect.parameters.find((p) => p.uri == uri)
-
-                        if (parameter) {
-                            // TODO T3K: check if file type can be downloaded from tone3000
-                            const t3k = desktop.pedalboard.data('T3KIntegration')
-                            t3k.startSelectFlow(instance, parameter)
-                        }
                     })
-                })
-            }
-
-            if (! instance) {
+                }
+            } else {
+                // if (! instance)
                 self.settings.find(".js-close").hide()
                 self.settings.find(".mod-address").hide()
             }
