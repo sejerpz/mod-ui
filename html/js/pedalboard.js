@@ -1448,7 +1448,7 @@ JqueryClass('pedalboard', {
         // is fitted as soon as the load starts instead of after every GUI has arrived;
         // the fit that ends the load corrects it with real sizes. Right and bottom only:
         // the left/top shift moves drawn plugins, and a placeholder cannot be moved.
-        // ponytail: fixed guess, 90x155 to 780x480 on a real board; the saved pedal:width
+        // A fixed guess: 90x155 to 780x480 on a real board; the saved pedal:width
         // and height would be exact for boards that stored them (many store 0).
         var guessW = 350, guessH = 450
         for (instance in plugins) {
