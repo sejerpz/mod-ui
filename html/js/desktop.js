@@ -1501,14 +1501,14 @@ function Desktop(elements) {
     this.updateHelpWindow = function (helpId) {
         if (helpId) {
             $('.mod-help-footer').text(`help id: ${helpId}`)
-            $('.mod-help-content').load('help/' + helpId + '.md?v=' + Date.now(), function (response, status, xhr) {
+            $('.mod-help-content').load('help/' + helpId + '.md?v=' + VERSION, function (response, status, xhr) {
                 if (status == "error") {
                     if (xhr.status == 404) {
-                        $('.mod-help-content').load('help/missing-page.md?v=' + Date.now(), function (response, status, xhr) {
+                        $('.mod-help-content').load('help/missing-page.md?v=' + VERSION, function (response, status, xhr) {
                             if (status == "error") {
                                 $('.mod-help-content').html(`<p>Error loading missing help page: ${xhr.status} ${xhr.statusText}</p>`)
                             } else {
-                                response = response.replace(/{{HELP_ID}}/g, helpId).replace(/{{VERSION}}/g, Date.now().toString())
+                                response = response.replace(/{{HELP_ID}}/g, helpId).replace(/{{VERSION}}/g, VERSION)
                                 const htmlText = marked.parse(response)
                                 $('.mod-help-content').html(htmlText)
                             }
@@ -1518,7 +1518,7 @@ function Desktop(elements) {
                     }
                 } else {
                     // success, nothing to do
-                    response = response.replace(/{{VERSION}}/g, Date.now().toString())
+                    response = response.replace(/{{VERSION}}/g, VERSION)
                     const htmlText = marked.parse(response)
                     $('.mod-help-content').html(htmlText)
                 }
