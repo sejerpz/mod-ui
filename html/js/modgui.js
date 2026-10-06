@@ -2021,7 +2021,7 @@ function GUI(effect, options) {
         }
     }
 
-    this.assignParameterControlFunctionality = function(instance, control, uri, onlySetValues) {
+    this.assignParameterControlFunctionality = function(element, instance, control, uri, onlySetValues) {
         var parameter = self.parameters[uri]
 
         if (parameter)
@@ -2242,7 +2242,7 @@ function GUI(effect, options) {
         element.find('[mod-role=input-parameter]').each(function () {
             var control = $(this)
             var uri = $(this).attr('mod-parameter-uri')
-            self.assignParameterControlFunctionality(instance, control, uri, onlySetValues)
+            self.assignParameterControlFunctionality(element, instance, control, uri, onlySetValues)
         })
 
         if (onlySetValues) {
@@ -2517,7 +2517,7 @@ function GUI(effect, options) {
                 .each(function() {
                     // reattach the widget
                     let control = $(this)
-                    self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                    self.assignParameterControlFunctionality(self.icon, instance, control, parameter.uri, false)
                 })
             // need to update the values in the settings UI
             if (self.settings) {
@@ -2527,7 +2527,7 @@ function GUI(effect, options) {
                     .each(function() {
                         // reattach the widget
                         let control = $(this)
-                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                        self.assignParameterControlFunctionality(self.settings, instance, control, parameter.uri, false)
                         if (setValue) {
                             if (control.customSelectPath) {
                                 // preserve current path if available
@@ -2545,7 +2545,7 @@ function GUI(effect, options) {
                     .each(function() {
                         // reattach the widget
                         let control = $(this)
-                        self.assignParameterControlFunctionality(instance, control, parameter.uri, false)
+                        self.assignParameterControlFunctionality(self.settingsPerformance, instance, control, parameter.uri, false)
                     })
             }
         })
