@@ -1254,6 +1254,9 @@ function GUI(effect, options) {
      * when the settings are closed, to avoid interfering with other plugins that may be using the same ports.
      */
     this.setupMonitorVUMeter = function () {
+        if (!self.effect.ports.audio.output || self.effect.ports.audio.output.length === 0)
+            return // plugin without audio output ports, no need to setup a VU meter
+
         const vumeter = new VUMeter("100%", "22px", { orientation: "horizontal" })
         const vumeter_container = self.settings?.find(".js-plugin-vumeter")
 
