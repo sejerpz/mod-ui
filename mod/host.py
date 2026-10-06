@@ -4897,7 +4897,7 @@ _:b%i
     mod:snapshotable %s ;%s
     a lv2:ControlPort ,
         lv2:InputPort .
-""" % (instance, 1 if pluginData['bypassed'] else 0, 'true' if snapshotable else 'false',
+""" % (instance, 1 if pluginData['bypassed'] else 0, 'true' if enabledSnapshotable else 'false',
        ("""
     midi:binding [
         midi:channel %i ;
