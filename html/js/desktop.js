@@ -1634,16 +1634,18 @@ function Desktop(elements) {
     }
 
     // this callback is called when the pedalboard is loaded for the first time
+    // The plugin bar does not depend on the board, so the first fit no longer waits for
+    // its list (and 300-odd thumbnails on a device) to load.
     this.onPedalboardFirstLoadComplete = function (callback) {
         self.effectBox.effectBox('search', function () {
             setTimeout(function () {
+                    // if is a touch device, open performance view by default
                     if (self.isTouchDevice) {
                         elements.performanceBoxTrigger.click()
                     }
-                    // if is a touch device, open performance view by default
-                    self.onPedalboardLoadComplete(callback)
             }, 500)
         })
+        self.onPedalboardLoadComplete(callback)
     }
 
     this.systemStats = {

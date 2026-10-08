@@ -426,7 +426,13 @@ $('document').ready(function() {
             var perfview_visible = parseInt(data[9]) != 0
 
             if (plugins[instance] == null) {
-                plugins[instance] = {} // register plugin
+                // register plugin; the position lets the board be fitted before it is drawn
+                plugins[instance] = { x: x, y: y }
+                // only while loading: a plugin the user drops in keeps the animated fit,
+                // and the forced one would zoom out a board they are working on at 100%
+                if (pb_loading) {
+                    desktop.pedalboard.pedalboard('adapt', true)
+                }
 
                 $.ajax({
                     url: '/effect/get',
