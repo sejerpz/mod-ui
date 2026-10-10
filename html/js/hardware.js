@@ -1118,7 +1118,12 @@ function HardwareManager(options) {
 
           table.append(row)
           row.click(function() {
-            self.onSelectedAddressingChange(binding.addressingData.uri, model, binding)
+            const addressingData = self.addressingsData[binding.addressing]
+            binding.addressingData = addressingData
+            // we need to refresh the binding data that depends on the addressingData values because they could have changed since the last time we built the table
+            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : binding.portSymbol
+
+            self.onSelectedAddressingChange(addressingData.uri, model, binding)
             table.find('tr').removeClass('selected')
             row.addClass('selected')
           })
@@ -1201,7 +1206,12 @@ function HardwareManager(options) {
 
           table.append(row)
           row.click(function() {
-            self.onSelectedAddressingChange(binding.addressingData.uri, model, binding)
+            const addressingData = self.addressingsData[binding.addressing]
+            binding.addressingData = addressingData
+            // we need to refresh the binding data that depends on the addressingData values because they could have changed since the last time we built the table
+            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : binding.portSymbol
+
+            self.onSelectedAddressingChange(addressingData.uri, model, binding)
             table.find('tr').removeClass('selected')
             row.addClass('selected')
           })
