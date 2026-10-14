@@ -7663,6 +7663,7 @@ body {
 }
 body.mobile {
   position: fixed;
+  width: 100%;
 }
 body.ios {
   position: fixed;
