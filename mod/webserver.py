@@ -651,6 +651,47 @@ class SystemExeChange(JsonRequestHandler):
         os_sync()
         yield gen.Task(run_command, ["reboot"], None)
 
+# diagnostics report, see the alabs-mod-diagnostics-logs project
+DIAGNOSTICS_LOGS = "/usr/bin/diagnostics-logs"
+
+class SystemDiagnosticsList(JsonRequestHandler):
+    @gen.coroutine
+    def get(self):
+        # no tool: no sections, the settings page hides the diagnostics
+        if not os.path.exists(DIAGNOSTICS_LOGS):
+            self.write([])
+            return
+
+        resp = yield gen.Task(run_command, [DIAGNOSTICS_LOGS, "--list"], None)
+        try:
+            sections = json.loads(resp[1].decode("utf-8", errors="ignore"))
+        except ValueError:
+            sections = []
+        self.write(sections)
+
+class SystemDiagnosticsReport(TimelessRequestHandler):
+    @gen.coroutine
+    def get(self):
+        if not os.path.exists(DIAGNOSTICS_LOGS):
+            raise web.HTTPError(404)
+
+        args = [DIAGNOSTICS_LOGS]
+
+        # only plain section ids go to the command line
+        sections = [s for s in self.get_argument('sections', '').split(',') if s]
+        for section in sections:
+            if re.match(r'^[a-z0-9_-]+$', section) is None:
+                raise web.HTTPError(400)
+        if sections:
+            args += ["--sections", ",".join(sections)]
+
+        if self.get_argument('anonymize', '1') == '0':
+            args.append("--raw")
+
+        resp = yield gen.Task(run_command, args, None)
+        self.set_header("Content-Type", "text/plain; charset=UTF-8")
+        self.write(resp[1].decode("utf-8", errors="replace"))
+
 class SystemCleanup(JsonRequestHandler):
     @gen.coroutine
     def post(self):
@@ -2506,6 +2547,8 @@ application = web.Application(
             (r"/system/prefs", SystemPreferences),
             (r"/system/exechange", SystemExeChange),
             (r"/system/cleanup", SystemCleanup),
+            (r"/system/diagnostics/list", SystemDiagnosticsList),
+            (r"/system/diagnostics/report", SystemDiagnosticsReport),
 
             (r"/update/download/", UpdateDownload),
             (r"/update/begin", UpdateBegin),

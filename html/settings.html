@@ -107,6 +107,90 @@
         color: #AAA;
     }
 
+    #diagnostics-sections label {
+        display: inline-block;
+        margin-right: 1.5em;
+    }
+    .diagnostics-actions {
+        align-items: center;
+        display: flex;
+        gap: 1em;
+        margin: 1em 0 0.5em 0;
+    }
+    .diagnostics-actions label {
+        margin: 0;
+    }
+    .diagnostics-actions .diagnostics-right {
+        margin-left: auto;
+    }
+    button.diagnostics-icon {
+        background-color: transparent;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: 20px 20px;
+        border: 1px solid #444;
+        border-radius: 3px;
+        height: 2.2em;
+        margin-left: 0.3em;
+        width: 2.4em;
+    }
+    button.diagnostics-icon:hover {
+        background-color: #222;
+        border-color: #777;
+    }
+    button.diagnostics-icon:disabled {
+        background-color: transparent;
+        border-color: #2a2a2a;
+        cursor: default;
+        opacity: 0.3;
+    }
+    #button-diagnostics-copy {
+        background-image: url(img/icons/25/new.png);
+    }
+    #button-diagnostics-download {
+        background-image: url(img/icons/25/save.png);
+    }
+    /* same size as the textarea (block, no margin): the overlay covers it exactly */
+    #diagnostics-report-box {
+        margin-top: 0.5em;
+        position: relative;
+    }
+    #diagnostics-generating {
+        align-items: center;
+        background: rgba(17, 17, 17, 0.8);
+        bottom: 0;
+        color: #ccc;
+        display: flex;
+        font-size: 1.4em;
+        justify-content: center;
+        left: 0;
+        position: absolute;
+        right: 0;
+        top: 0;
+    }
+    #diagnostics-generating.mod-hidden {
+        display: none;
+    }
+    #diagnostics-status {
+        color: #999;
+        font-size: 1.1em;
+    }
+    #diagnostics-report {
+        display: block;
+        width: 100%;
+        height: 30em;
+        margin: 0;
+        background: #1a1a1a;
+        color: #ccc;
+        border: 1px solid #333;
+        /* main.css forces "cooper hewitt" on every element with !important:
+           the report needs a fixed width font to keep its columns aligned */
+        font-family: monospace !important;
+        font-size: 0.9em;
+        white-space: pre;
+        overflow: auto;
+    }
+
     /* smaller screen setup */
     @media screen and (width < 1100px) {
         .settings-page-content {
@@ -162,6 +246,32 @@ function refresh_sysinfo() {
             if (info.platform != "duox" || info.model == "duox:aarch64-a53") {
                 $("#prefs-audio-separate-spdif-outs_div").hide()
             }
+        },
+        cache: false,
+        global: false,
+        dataType: 'json'
+    })
+}
+
+// sections offered by the diagnostics tool; nothing to show without it
+function refresh_diagnostics() {
+    $.ajax({
+        url: '/system/diagnostics/list',
+        method: 'GET',
+        success: function (sections) {
+            var container = $("#diagnostics-sections").empty()
+            if (!sections || sections.length == 0) {
+                $("#tab-diagnostics").addClass("mod-hidden")
+                return
+            }
+            for (var i = 0; i < sections.length; i++) {
+                $('<label>')
+                    .attr("title", sections[i].description)
+                    .append($('<input type="checkbox" autocomplete="off" checked>').data("section", sections[i].id))
+                    .append(document.createTextNode(" " + sections[i].title))
+                    .appendTo(container)
+            }
+            $("#tab-diagnostics").removeClass("mod-hidden")
         },
         cache: false,
         global: false,
@@ -474,6 +584,15 @@ $('document').ready(function() {
         $("#settings-page-basic").show()
     })
 
+    $("#tab-diagnostics").click(function () {
+        // hide all
+        $(".add-bank").removeClass("selected")
+        $(".settings-page").hide()
+        // show diagnostics
+        $("#tab-diagnostics").addClass("selected")
+        $("#settings-page-diagnostics").show()
+    })
+
     $("#tab-advanced").click(function () {
         // hide all
         $(".add-bank").removeClass("selected")
@@ -522,10 +641,89 @@ $('document').ready(function() {
         return false
     })
 
+    // --- Diagnostics
+
+    $("#button-diagnostics-generate").click(function () {
+        var sections = []
+        $("#diagnostics-sections input:checked").each(function () {
+            sections.push($(this).data("section"))
+        })
+        if (sections.length == 0) {
+            $("#diagnostics-status").text("Select at least one section.")
+            return
+        }
+
+        $("#button-diagnostics-generate").prop("disabled", true)
+        $("#diagnostics-status").text("")
+        $("#diagnostics-generating").removeClass("mod-hidden")
+
+        $.ajax({
+            url: '/system/diagnostics/report',
+            method: 'GET',
+            data: {
+                sections : sections.join(","),
+                anonymize: $("#diagnostics-anonymize").prop("checked") ? 1 : 0,
+            },
+            success: function (report) {
+                $("#diagnostics-report").val(report)
+                $("#button-diagnostics-copy").prop("disabled", false)
+                $("#button-diagnostics-download").prop("disabled", false)
+                $("#diagnostics-status").text("")
+            },
+            error: function () {
+                $("#diagnostics-status").text("Failed to generate the report.")
+            },
+            complete: function () {
+                $("#button-diagnostics-generate").prop("disabled", false)
+                $("#diagnostics-generating").addClass("mod-hidden")
+            },
+            cache: false,
+            dataType: 'text'
+        })
+    })
+
+    $("#button-diagnostics-copy").click(function () {
+        var text = $("#diagnostics-report").val()
+        var copied = function () {
+            $("#diagnostics-status").text("Copied to the clipboard.")
+        }
+        // the clipboard API needs a secure context, the device is plain http:
+        // fall back to selecting the text and execCommand
+        var fallback = function () {
+            var textarea = $("#diagnostics-report")[0]
+            textarea.focus()
+            textarea.select()
+            try {
+                if (document.execCommand("copy")) {
+                    copied()
+                    return
+                }
+            } catch (e) {}
+            $("#diagnostics-status").text("Text selected: press Ctrl+C to copy it.")
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(copied, fallback)
+        } else {
+            fallback()
+        }
+    })
+
+    $("#button-diagnostics-download").click(function () {
+        var blob = new Blob([$("#diagnostics-report").val()], { type: "text/plain" })
+        var link = document.createElement("a")
+        link.href = URL.createObjectURL(blob)
+        link.download = "dwarf-diagnostics.txt"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(link.href)
+    })
+
     // ----------------------------------------------------------------------------------------------------------------
 
     refresh_sysinfo()
     refresh_sysprefs()
+    refresh_diagnostics()
 
     if (PREFERENCES['dev-mode'] == "on") {
         $("#prefs-ui-developer-mode").prop("checked", true)
@@ -965,6 +1163,7 @@ $('document').ready(function() {
         <!-- BANK|SETTINGS-LIST -->
         <div id="bank-list">
             <div id="tab-basic" class="add-bank selected">Basic</div>
+            <div id="tab-diagnostics" class="add-bank mod-hidden">Diagnostics</div>
             <div id="tab-advanced" class="add-bank">Advanced</div>
             <div id="tab-device-updates" class="add-bank disabled">Device Updates</div>
             <div id="tab-dangerous" class="add-bank">Dangerous</div>
@@ -973,6 +1172,7 @@ $('document').ready(function() {
         <!-- END BANK|SETTINGS-LIST -->
 
         <!-- SETTINGS PAGE (BASIC) -->
+
         <div class="settings-page" id="settings-page-basic">
             <div class="settings-page-content">
                 <h1>Personal</h1>
@@ -1077,6 +1277,40 @@ $('document').ready(function() {
             </div>
         </div>
         <!-- END SETTINGS PAGE (BASIC) -->
+
+        <!-- SETTINGS PAGE (DIAGNOSTICS) -->
+        <div class="settings-page mod-hidden" id="settings-page-diagnostics">
+            <div class="settings-page-content">
+                <h1>Diagnostics</h1>
+                <form class="form">
+                    <p>
+                        Generate a report of the device state, to paste in a forum post when asking for help.<br/>
+                        When anonymized, network names, MAC addresses and the serial number are replaced; passwords are never included.
+                    </p>
+                    <div id="diagnostics-sections"></div>
+                    <div class="diagnostics-actions">
+                        <label>
+                            <input type="button" id="button-diagnostics-generate" value="Generate"></input>
+                        </label>
+                        <label>
+                            <input type="checkbox" autocomplete="off" id="diagnostics-anonymize" checked>
+                                Anonymize
+                            </input>
+                        </label>
+                        <span id="diagnostics-status"></span>
+                        <span class="diagnostics-right">
+                            <button type="button" id="button-diagnostics-copy" class="diagnostics-icon" title="Copy the report to the clipboard" disabled></button>
+                            <button type="button" id="button-diagnostics-download" class="diagnostics-icon" title="Download the report as a text file" disabled></button>
+                        </span>
+                    </div>
+                    <div id="diagnostics-report-box">
+                        <textarea id="diagnostics-report" readonly autocomplete="off" spellcheck="false"></textarea>
+                        <div id="diagnostics-generating" class="mod-hidden">Generating report...</div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- END SETTINGS PAGE (DIAGNOSTICS) -->
 
         <!-- SETTINGS PAGE (ADVANCED) -->
         <div class="settings-page mod-hidden" id="settings-page-advanced">
@@ -1188,6 +1422,7 @@ $('document').ready(function() {
                         </p>
                     </div>
                 </form>
+
             </div>
         </div>
         <!-- SETTINGS PAGE (ADVANCED) -->
