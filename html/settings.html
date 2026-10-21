@@ -107,6 +107,153 @@
         color: #AAA;
     }
 
+    /* WiFi page */
+    #settings-page-wifi p {
+        margin: 0.6em 0;
+    }
+    .wifi-grid {
+        border-collapse: collapse;
+        border: 1px solid #333;
+        color: #999;
+        font-size: 1.1em;
+        margin: 1.2em 0;
+    }
+    .wifi-grid th {
+        background: #1c1c1c;
+        border-bottom: 1px solid #333;
+        color: #777;
+        font-weight: normal;
+        padding: 0.45em 0.8em;
+        text-align: left;
+    }
+    .wifi-grid td {
+        border-top: 1px solid #262626;
+        padding: 0.4em 0.8em;
+        vertical-align: middle;
+    }
+    .wifi-grid tbody tr:hover td {
+        background: #171717;
+    }
+    .wifi-grid td.wifi-actions {
+        text-align: right;
+        white-space: nowrap;
+    }
+    .wifi-info {
+        border-collapse: collapse;
+        color: #999;
+        font-size: 1.1em;
+        margin: 1em 0 1.2em 0;
+    }
+    .wifi-info td {
+        padding: 0.15em 1.5em 0.15em 0;
+    }
+    .wifi-info td:first-child {
+        color: #666;
+    }
+    #settings-page-wifi label.wifi-field input[type=text], #settings-page-wifi label.wifi-field input[type=password],
+    #settings-page-wifi select {
+        color: #555;
+        width: 14em;
+    }
+    button.wifi-icon {
+        background: transparent;
+        border: 1px solid #444;
+        border-radius: 3px;
+        color: #aaa;
+        font-size: 0.95em;
+        height: 1.9em;
+        line-height: 1.7em;
+        margin: 0 0.1em;
+        padding: 0;
+        text-align: center;
+        width: 2em;
+    }
+    button.wifi-icon:hover {
+        border-color: #777;
+        color: #fff;
+    }
+    button.wifi-icon:disabled {
+        border-color: #2a2a2a;
+        color: #3a3a3a;
+        cursor: default;
+    }
+    #settings-page-wifi label.wifi-field {
+        display: block;
+        margin: 0.5em 0;
+    }
+    #settings-page-wifi label.wifi-field span.wifi-label {
+        display: inline-block;
+        width: 8em;
+    }
+    #settings-page-wifi .wifi-buttons {
+        margin: 1.2em 0;
+    }
+    .wifi-state-connected {
+        color: #6c6;
+    }
+    .wifi-state-missing {
+        color: #555;
+    }
+    .wifi-state-new {
+        color: #c93;
+    }
+    .wifi-dialog {
+        background: rgba(0, 0, 0, 0.75);
+        bottom: 0;
+        left: 0;
+        position: fixed;
+        right: 0;
+        top: 0;
+        z-index: 1001;
+    }
+    .wifi-dialog-box {
+        background: #111;
+        border: 1px solid #333;
+        box-sizing: border-box;
+        left: 50%;
+        max-height: 95%;
+        max-width: 95%;
+        overflow-y: auto;
+        padding: 1.2em 1.8em;
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 40em;
+    }
+    .wifi-scan-box {
+        max-height: 18em;
+        overflow-y: auto;
+    }
+    .wifi-scan-box .wifi-grid {
+        margin: 0.4em 0;
+        width: 100%;
+    }
+    #wifi-scan tbody tr {
+        cursor: pointer;
+        user-select: none;
+    }
+    #wifi-scan th.wifi-actions {
+        padding: 0.2em 0.5em;
+        text-align: right;
+    }
+    #wifi-scan tbody tr.wifi-scan-message td {
+        background: transparent;
+        color: #777;
+        cursor: default;
+        padding: 0.8em;
+        text-align: center;
+    }
+    #wifi-scan tbody tr.selected td {
+        background: #222;
+        color: #ddd;
+    }
+    .wifi-dialog-actions {
+        border-top: 1px solid #333;
+        margin-top: 0.8em;
+        padding-top: 1em;
+        text-align: right;
+    }
+
     #diagnostics-sections label {
         display: inline-block;
         margin-right: 1.5em;
@@ -251,6 +398,362 @@ function refresh_sysinfo() {
         global: false,
         dataType: 'json'
     })
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// WiFi client networks and access point (see the alabs-mod-wifi project)
+
+var WIFI = {
+    state    : null,  // last answer of /system/wifi
+    networks : [],    // grid rows: {ssid, has_password, connected, in_range}
+    saving   : false, // networks being saved
+    scanId   : 0,     // last scan started by the dialog
+    apDirty  : false, // access point fields changed and not saved yet
+}
+
+var WIFI_ERRORS = {
+    'invalid-ssid'    : "Invalid network name.",
+    'invalid-password': "The password must be 8 to 63 characters (empty for an open network).",
+    'duplicated-ssid' : "The network is already in the list.",
+    'missing-password': "Enter the password of the new network.",
+    'invalid-channel' : "This channel can't be used by the access point.",
+    'ap-active'       : "Scan is not available while the access point is on.",
+    'no-wifi-device'  : "No WiFi adapter connected.",
+    'invalid-request' : "Invalid request.",
+    'wifi-ap-failed'  : "The WiFi command failed.",
+}
+
+function wifi_error(resp) {
+    var msg = WIFI_ERRORS[resp.error] || ("Error: " + resp.error)
+    if (resp.ssid) {
+        msg += " (" + resp.ssid + ")"
+    }
+    return msg
+}
+
+function wifi_post(action, data, callback) {
+    $.ajax({
+        url: '/system/wifi/' + action,
+        method: 'POST',
+        data: data == null ? "" : JSON.stringify(data),
+        contentType: 'application/json',
+        success: callback,
+        error: function () {
+            callback({ ok: false, error: 'wifi-ap-failed' })
+        },
+        cache: false,
+        global: false,
+        dataType: 'json'
+    })
+}
+
+function refresh_wifi() {
+    $.ajax({
+        url: '/system/wifi',
+        method: 'GET',
+        success: function (state) {
+            // no alabs-mod-wifi: no tab
+            if (!state.available || !state.status) {
+                $("#tab-wifi").addClass("mod-hidden")
+                return
+            }
+            $("#tab-wifi").removeClass("mod-hidden")
+            WIFI.state = state
+            WIFI.networks = state.networks
+
+            render_wifi_status(state)
+            render_wifi_networks()
+            render_wifi_ap(state)
+        },
+        cache: false,
+        global: false,
+        dataType: 'json'
+    })
+}
+
+function render_wifi_status(state) {
+    var st = state.status, info = state.info, text
+
+    if (!info.present) {
+        text = "No WiFi adapter connected."
+    } else if (st.state == "on") {
+        text = "Access point on: \"" + (st.ssid || "") + "\" (" + st.ip + ")."
+    } else if (st.state == "starting") {
+        text = "The access point is starting..."
+    } else if (st.state == "stopping") {
+        text = "The access point is stopping..."
+    } else if (st.state == "off") {
+        var connected = $.grep(state.networks, function (n) { return n.connected })
+        if (st.ip) {
+            text = "Connected" + (connected.length ? " to \"" + connected[0].ssid + "\"" : "") + " (" + st.ip + ")."
+        } else {
+            text = "Not connected to a WiFi network."
+        }
+    } else {
+        text = WIFI_ERRORS[st.error] || ("WiFi error: " + st.error)
+    }
+    $("#wifi-status").text(text)
+
+    var table = $("#wifi-info").empty()
+    var row = function (label, value) {
+        if (value) {
+            $('<tr>').append($('<td>').text(label)).append($('<td>').text(value)).appendTo(table)
+        }
+    }
+    if (info.present) {
+        var usb = info.usb || {}, drv = info.driver || {}, cur = info.current || {}
+        row("Adapter", (usb.manufacturer || "") + " " + (usb.product || "") + " (" + (usb.id || "?") + ")")
+        row("Chip", (info.chip || "unknown") + (info.firmware ? ", firmware " + info.firmware : ""))
+        row("Driver", (drv.name || "?") + (drv.alabs_mod_wifi ? " (alabs-mod-wifi)" : " (kernel)"))
+        row("Access point", info.ap_supported ? "supported" + (info.max_ap_clients ? ", max " + info.max_ap_clients + " clients" : "") : "not supported")
+        if (cur.mode == "managed") {
+            row("Signal", cur.signal)
+            row("Speed", cur.tx_bitrate)
+        } else if (cur.mode == "AP") {
+            row("Clients", String((cur.stations || []).length))
+        }
+    }
+}
+
+function render_wifi_networks() {
+    var state = WIFI.state, tbody = $("#wifi-networks tbody").empty()
+
+    $.each(WIFI.networks, function (i, net) {
+        var tr = $('<tr>').appendTo(tbody)
+
+        var up = $('<button type="button" class="wifi-icon" title="Move up">&#9650;</button>')
+            .prop("disabled", WIFI.saving || i == 0)
+        var down = $('<button type="button" class="wifi-icon" title="Move down">&#9660;</button>')
+            .prop("disabled", WIFI.saving || i == WIFI.networks.length - 1)
+        up.click(function () { wifi_move(i, -1) })
+        down.click(function () { wifi_move(i, 1) })
+        $('<td class="wifi-actions">').append(up).append(down).appendTo(tr)
+
+        $('<td>').text(net.ssid).appendTo(tr)
+        $('<td>').text(net.has_password ? "secured" : "open").appendTo(tr)
+
+        var stateText = "-", stateClass = ""
+        if (net.connected) {
+            stateText = "connected"
+            stateClass = "wifi-state-connected"
+        } else if (net.in_range === true) {
+            stateText = "in range"
+        } else if (net.in_range === false) {
+            stateText = "not in range"
+            stateClass = "wifi-state-missing"
+        }
+        $('<td>').addClass(stateClass).text(stateText).appendTo(tr)
+
+        var remove = $('<button type="button" class="wifi-icon" title="Remove the network"><i class="icon-trash"></i></button>')
+            .prop("disabled", WIFI.saving)
+        remove.click(function () {
+            var question = "Remove the network \"" + net.ssid + "\"?"
+            if (net.connected) {
+                question += "\nThe device is connected to it: the connection will be lost."
+            }
+            if (!confirm(question)) {
+                return
+            }
+            WIFI.networks.splice(i, 1)
+            wifi_save_networks(wifi_rows(), $("#wifi-networks-status"))
+        })
+        $('<td class="wifi-actions">').append(remove).appendTo(tr)
+    })
+
+    if (state && state.unmanaged > 0) {
+        $("#wifi-unmanaged").text(state.unmanaged + " other entr" + (state.unmanaged == 1 ? "y" : "ies") +
+                                  " of /data/wpa_supplicant.conf (e.g. any open network) can't be edited here and " +
+                                  (state.unmanaged == 1 ? "is" : "are") + " kept as they are.").removeClass("mod-hidden")
+    } else {
+        $("#wifi-unmanaged").addClass("mod-hidden")
+    }
+
+    $("#button-wifi-add").prop("disabled", WIFI.saving || !state || !state.info.present)
+}
+
+// grid as sent to /system/wifi/networks: highest priority first, passwords unchanged
+function wifi_rows() {
+    return $.map(WIFI.networks, function (n) {
+        return { ssid: n.ssid, password: null }
+    })
+}
+
+// saves the list; the grid is read again afterwards, so it shows what was really saved
+function wifi_save_networks(rows, status, callback) {
+    WIFI.saving = true
+    render_wifi_networks()
+    status.text("Saving...")
+
+    wifi_post("networks", rows, function (resp) {
+        WIFI.saving = false
+        if (resp.ok) {
+            status.text("")
+            if (resp.applied == "deferred") {
+                new Notification("info", "WiFi networks saved: used when the access point is switched off.", 4000)
+            }
+            // the connection takes a few seconds
+            setTimeout(refresh_wifi, 6000)
+        } else {
+            status.text(wifi_error(resp))
+        }
+        refresh_wifi()
+        if (callback) {
+            callback(resp)
+        }
+    })
+}
+
+function wifi_move(index, offset) {
+    var row = WIFI.networks.splice(index, 1)[0]
+    WIFI.networks.splice(index + offset, 0, row)
+    wifi_save_networks(wifi_rows(), $("#wifi-networks-status"))
+}
+
+function wifi_show_password(field, button, show) {
+    // jQuery 1.9 doesn't allow to change the type of an input: use the DOM
+    field[0].type = show ? "text" : "password"
+    button.attr("title", show ? "Hide the password" : "Show the password")
+        .find("i").toggleClass("icon-eye", !show).toggleClass("icon-eye-off", show)
+}
+
+function wifi_dialog_open() {
+    $("#wifi-new-ssid, #wifi-new-password").val("")
+    wifi_show_password($("#wifi-new-password"), $("#button-wifi-new-show"), false)
+    $("#wifi-dialog-status, #wifi-networks-status").text("")
+    $("#button-wifi-dialog-save, #button-wifi-dialog-cancel").prop("disabled", false)
+    $("#wifi-dialog").removeClass("mod-hidden")
+    $("#wifi-new-ssid").focus()
+    wifi_scan()
+}
+
+function wifi_dialog_close() {
+    // a scan still running is ignored
+    WIFI.scanId++
+    $("#wifi-dialog").addClass("mod-hidden")
+}
+
+// the table is always shown: messages (scanning, nothing found, errors) take its body
+function wifi_scan_message(text) {
+    var tbody = $("#wifi-scan tbody").empty()
+    $('<tr class="wifi-scan-message">').append($('<td colspan="5">').text(text)).appendTo(tbody)
+}
+
+function wifi_scan() {
+    var state = WIFI.state, id = ++WIFI.scanId
+
+    $("#button-wifi-rescan").prop("disabled", true)
+
+    if (!state.info.present) {
+        wifi_scan_message(WIFI_ERRORS['no-wifi-device'])
+        return
+    }
+    if (state.status.state != "off") {
+        wifi_scan_message("Scan is available in client mode, with the access point off.")
+        return
+    }
+
+    wifi_scan_message("Scanning...")
+    wifi_post("scan", null, function (resp) {
+        // dialog closed or reopened meanwhile
+        if (id != WIFI.scanId) {
+            return
+        }
+        $("#button-wifi-rescan").prop("disabled", false)
+        if (!resp.ok) {
+            wifi_scan_message(wifi_error(resp))
+            return
+        }
+        if (!resp.networks.length) {
+            wifi_scan_message("No WiFi networks found.")
+            return
+        }
+
+        var tbody = $("#wifi-scan tbody").empty()
+        $.each(resp.networks, function (i, net) {
+            var tr = $('<tr>').appendTo(tbody)
+            $('<td>').text(net.ssid).appendTo(tr)
+            $('<td>').text(net.signal != null ? net.signal + " dBm" : "-").appendTo(tr)
+            $('<td>').text(net.secured ? "secured" : "open").appendTo(tr)
+            $('<td>').text(net.channel != null ? net.channel : "-").appendTo(tr)
+            var known = $.grep(WIFI.networks, function (n) { return n.ssid == net.ssid }).length
+            $('<td class="wifi-actions wifi-state-missing">').text(known ? "in the list" : "").appendTo(tr)
+
+            tr.dblclick(function () {
+                tbody.find("tr").removeClass("selected")
+                tr.addClass("selected")
+                $("#wifi-new-ssid").val(net.ssid)
+                $("#wifi-new-password").val("").focus()
+                $("#wifi-dialog-status").text("")
+            })
+        })
+    })
+}
+
+// a new network is added at the end of the list; a known one gets the new password
+function wifi_dialog_save() {
+    var ssid = $("#wifi-new-ssid").val()
+    var password = $("#wifi-new-password").val()
+
+    if (ssid == "") {
+        $("#wifi-dialog-status").text("Enter the network name.")
+        return
+    }
+    if (password != "" && (password.length < 8 || password.length > 64)) {
+        $("#wifi-dialog-status").text(WIFI_ERRORS['invalid-password'])
+        return
+    }
+
+    var rows = wifi_rows(), known = false
+    $.each(rows, function (i, row) {
+        if (row.ssid == ssid) {
+            row.password = password
+            known = true
+        }
+    })
+    if (!known) {
+        rows.push({ ssid: ssid, password: password })
+    }
+
+    $("#button-wifi-dialog-save, #button-wifi-dialog-cancel").prop("disabled", true)
+    wifi_save_networks(rows, $("#wifi-dialog-status"), function (resp) {
+        $("#button-wifi-dialog-save, #button-wifi-dialog-cancel").prop("disabled", false)
+        if (resp.ok) {
+            wifi_dialog_close()
+        }
+    })
+}
+
+function render_wifi_ap(state) {
+    var ap = state.ap, present = state.info.present
+    var usable = present && ap.supported
+
+    if (!present) {
+        $("#wifi-ap-message").text("No WiFi adapter connected.")
+    } else if (!ap.supported) {
+        $("#wifi-ap-message").text("This WiFi adapter doesn't support the access point mode.")
+    } else if (ap.running) {
+        $("#wifi-ap-message").text("The access point is on: changes are applied the next time it is switched on.")
+    } else {
+        $("#wifi-ap-message").text("Network created by the device when the access point is switched on.")
+    }
+
+    $("#wifi-ap-ssid, #wifi-ap-password, #wifi-ap-channel, #button-wifi-ap-show, #button-wifi-ap-save")
+        .prop("disabled", !usable)
+
+    // don't overwrite fields being edited
+    if (WIFI.apDirty) {
+        return
+    }
+    $("#wifi-ap-ssid").val(ap.ssid)
+    $("#wifi-ap-password").val(ap.password)
+    var select = $("#wifi-ap-channel").empty()
+    $.each(ap.channels, function (i, channel) {
+        $('<option>').attr("value", channel).text(channel).appendTo(select)
+    })
+    if ($.inArray(ap.channel, ap.channels) < 0) {
+        $('<option>').attr("value", ap.channel).text(ap.channel).appendTo(select)
+    }
+    select.val(String(ap.channel))
 }
 
 // sections offered by the diagnostics tool; nothing to show without it
@@ -584,6 +1087,16 @@ $('document').ready(function() {
         $("#settings-page-basic").show()
     })
 
+    $("#tab-wifi").click(function () {
+        // hide all
+        $(".add-bank").removeClass("selected")
+        $(".settings-page").hide()
+        // show wifi
+        $("#tab-wifi").addClass("selected")
+        $("#settings-page-wifi").show()
+        refresh_wifi()
+    })
+
     $("#tab-diagnostics").click(function () {
         // hide all
         $(".add-bank").removeClass("selected")
@@ -639,6 +1152,52 @@ $('document').ready(function() {
             dataType: 'json'
         })
         return false
+    })
+
+    // --- WiFi
+
+    $("#button-wifi-add").click(wifi_dialog_open)
+    $("#button-wifi-dialog-cancel").click(wifi_dialog_close)
+    $("#button-wifi-dialog-save").click(wifi_dialog_save)
+    $("#button-wifi-rescan").click(wifi_scan)
+
+    $("#wifi-dialog").keydown(function (e) {
+        if (e.keyCode == 27) {
+            wifi_dialog_close()
+        } else if (e.keyCode == 13) {
+            wifi_dialog_save()
+        }
+    })
+
+    $("#wifi-ap-ssid, #wifi-ap-password, #wifi-ap-channel").on("input change", function () {
+        WIFI.apDirty = true
+        $("#wifi-ap-status").text("")
+    })
+
+    $("button.wifi-show").click(function () {
+        var field = $(this).prev("input")
+        wifi_show_password(field, $(this), field.attr("type") == "password")
+    })
+
+    $("#button-wifi-ap-save").click(function () {
+        var data = {
+            ssid    : $("#wifi-ap-ssid").val(),
+            password: $("#wifi-ap-password").val(),
+            channel : parseInt($("#wifi-ap-channel").val()),
+        }
+        $("#wifi-ap-status").text("Saving...")
+
+        wifi_post("ap", data, function (resp) {
+            if (!resp.ok) {
+                $("#wifi-ap-status").text(wifi_error(resp))
+                return
+            }
+            WIFI.apDirty = false
+            $("#wifi-ap-status").text(resp.applied == "next-start"
+                ? "Saved: applied the next time the access point is switched on."
+                : "Saved.")
+            refresh_wifi()
+        })
     })
 
     // --- Diagnostics
@@ -724,6 +1283,7 @@ $('document').ready(function() {
     refresh_sysinfo()
     refresh_sysprefs()
     refresh_diagnostics()
+    refresh_wifi()
 
     if (PREFERENCES['dev-mode'] == "on") {
         $("#prefs-ui-developer-mode").prop("checked", true)
@@ -1163,6 +1723,7 @@ $('document').ready(function() {
         <!-- BANK|SETTINGS-LIST -->
         <div id="bank-list">
             <div id="tab-basic" class="add-bank selected">Basic</div>
+            <div id="tab-wifi" class="add-bank mod-hidden">WiFi</div>
             <div id="tab-diagnostics" class="add-bank mod-hidden">Diagnostics</div>
             <div id="tab-advanced" class="add-bank">Advanced</div>
             <div id="tab-device-updates" class="add-bank disabled">Device Updates</div>
@@ -1277,6 +1838,97 @@ $('document').ready(function() {
             </div>
         </div>
         <!-- END SETTINGS PAGE (BASIC) -->
+
+        <!-- SETTINGS PAGE (WIFI) -->
+        <div class="settings-page mod-hidden" id="settings-page-wifi">
+            <div class="settings-page-content">
+                <h1>WiFi</h1>
+                <form class="form" onsubmit="return false">
+                    <p id="wifi-status">Reading the WiFi state...</p>
+                    <table class="wifi-info" id="wifi-info"></table>
+                </form>
+
+                <h1>WiFi networks</h1>
+                <form class="form" onsubmit="return false">
+                    <p>
+                        The device connects to the first network of the list that is in range: use the arrows to change the order.<br/>
+                        Changes are saved immediately. Hidden networks are not supported.
+                    </p>
+                    <table class="wifi-grid" id="wifi-networks">
+                        <thead>
+                            <tr><th></th><th>Name (SSID)</th><th>Security</th><th>State</th><th></th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <p id="wifi-unmanaged" class="mod-hidden"></p>
+                    <p class="wifi-buttons">
+                        <label>
+                            <input type="button" id="button-wifi-add" value="Add">
+                        </label>
+                        <span id="wifi-networks-status"></span>
+                    </p>
+                </form>
+
+                <!-- add / change a network: the scan starts when the dialog opens -->
+                <div id="wifi-dialog" class="wifi-dialog mod-hidden">
+                    <form class="form wifi-dialog-box" onsubmit="return false">
+                        <h1>Add network</h1>
+                        <label class="wifi-field"><span class="wifi-label">Name (SSID)</span>
+                            <input type="text" id="wifi-new-ssid" maxlength="32" autocomplete="off">
+                        </label>
+                        <label class="wifi-field"><span class="wifi-label">Password</span>
+                            <input type="password" id="wifi-new-password" maxlength="64" autocomplete="new-password" placeholder="Empty: open network">
+                            <button type="button" id="button-wifi-new-show" class="wifi-icon wifi-show" title="Show the password"><i class="icon-eye"></i></button>
+                        </label>
+                        <p>Double click a network to use it.</p>
+                        <div class="wifi-scan-box">
+                            <table class="wifi-grid" id="wifi-scan">
+                                <thead>
+                                    <tr>
+                                        <th>Visible network</th><th>Signal</th><th>Security</th><th>Channel</th>
+                                        <th class="wifi-actions"><button type="button" id="button-wifi-rescan" class="wifi-icon" title="Scan again">&#8635;</button></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <p id="wifi-dialog-status"></p>
+                        <div class="wifi-dialog-actions">
+                            <label>
+                                <input type="button" id="button-wifi-dialog-cancel" value="Cancel">
+                                <input type="button" id="button-wifi-dialog-save" value="Save">
+                            </label>
+                        </div>
+                    </form>
+                </div>
+
+                <h1>Access point</h1>
+                <form class="form" onsubmit="return false">
+                    <p id="wifi-ap-message"></p>
+                    <label class="wifi-field"><span class="wifi-label">Name (SSID)</span>
+                        <input type="text" id="wifi-ap-ssid" maxlength="32" autocomplete="off">
+                    </label>
+                    <label class="wifi-field"><span class="wifi-label">Password</span>
+                        <input type="password" id="wifi-ap-password" maxlength="63" autocomplete="new-password">
+                        <button type="button" id="button-wifi-ap-show" class="wifi-icon wifi-show" title="Show the password"><i class="icon-eye"></i></button>
+                    </label>
+                    <label class="wifi-field"><span class="wifi-label">Channel</span>
+                        <select id="wifi-ap-channel"></select>
+                    </label>
+                    <p class="wifi-buttons">
+                        <label>
+                            <input type="button" id="button-wifi-ap-save" value="Save">
+                        </label>
+                        <span id="wifi-ap-status"></span>
+                    </p>
+                    <p>
+                        The access point is switched on and off from the device (SETTINGS &gt; WIFI).<br/>
+                        Changes are applied the next time it is switched on.
+                    </p>
+                </form>
+            </div>
+        </div>
+        <!-- END SETTINGS PAGE (WIFI) -->
 
         <!-- SETTINGS PAGE (DIAGNOSTICS) -->
         <div class="settings-page mod-hidden" id="settings-page-diagnostics">

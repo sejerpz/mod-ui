@@ -176,6 +176,24 @@ def run_command(args, cwd, callback):
     thread.daemon = True
     thread.start()
 
+def run_command_input(args, data, callback):
+    # as run_command, with data written to the stdin of the command
+    ioloop = IOLoop.instance()
+    proc   = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc.stdin.write(data)
+    proc.stdin.close()
+
+    def end_fileno(fileno, event):
+        ret = proc.poll()
+        if ret is None:
+            return
+        ioloop.remove_handler(fileno)
+        if callback is not None:
+            # not communicate(): python 3.4 fails flushing the closed stdin
+            callback((ret, proc.stdout.read(), proc.stderr.read()))
+
+    ioloop.add_handler(proc.stdout.fileno(), end_fileno, 16)
+
 def install_package(filename, callback):
     if not os.path.exists(filename):
         callback({
@@ -691,6 +709,46 @@ class SystemDiagnosticsReport(TimelessRequestHandler):
         resp = yield gen.Task(run_command, args, None)
         self.set_header("Content-Type", "text/plain; charset=UTF-8")
         self.write(resp[1].decode("utf-8", errors="replace"))
+
+# WiFi client networks and access point, see the alabs-mod-wifi project
+WIFI_AP = "/usr/bin/wifi-ap"
+
+def wifi_ap_json(resp):
+    try:
+        return json.loads(resp[1].decode("utf-8", errors="ignore"))
+    except ValueError:
+        return {'ok': False, 'error': 'wifi-ap-failed'}
+
+class SystemWifi(JsonRequestHandler):
+    @gen.coroutine
+    def get(self):
+        # no alabs-mod-wifi: the settings page hides the WiFi tab
+        if not os.path.exists(WIFI_AP):
+            self.write({'available': False})
+            return
+
+        resp = yield gen.Task(run_command, [WIFI_AP, "state"], None)
+        state = wifi_ap_json(resp)
+        state['available'] = True
+        self.write(state)
+
+class SystemWifiAction(JsonRequestHandler):
+    @gen.coroutine
+    def post(self, action):
+        if not os.path.exists(WIFI_AP):
+            raise web.HTTPError(404)
+
+        # passwords go through stdin, not on the command line
+        if action == "networks":
+            resp = yield gen.Task(run_command_input, [WIFI_AP, "networks-set"], self.request.body)
+        elif action == "ap":
+            resp = yield gen.Task(run_command_input, [WIFI_AP, "ap-set"], self.request.body)
+        elif action == "scan":
+            resp = yield gen.Task(run_command, [WIFI_AP, "scan"], None)
+        else:
+            raise web.HTTPError(404)
+
+        self.write(wifi_ap_json(resp))
 
 class SystemCleanup(JsonRequestHandler):
     @gen.coroutine
@@ -2549,6 +2607,8 @@ application = web.Application(
             (r"/system/cleanup", SystemCleanup),
             (r"/system/diagnostics/list", SystemDiagnosticsList),
             (r"/system/diagnostics/report", SystemDiagnosticsReport),
+            (r"/system/wifi", SystemWifi),
+            (r"/system/wifi/(networks|ap|scan)", SystemWifiAction),
 
             (r"/update/download/", UpdateDownload),
             (r"/update/begin", UpdateBegin),
