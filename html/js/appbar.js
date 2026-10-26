@@ -25,6 +25,13 @@ JqueryClass('appBar', {
         }
         viewport.attr('content', 'width=980, user-scalable=no')
 
+        // A phone, by the short side of its screen, which the page's 980 wide layout does
+        // not change: too small for the action icons above each plugin, see
+        // dashboard.css. Tapping a plugin leads to its actions there. A screen of no
+        // known size is not one
+        var side = Math.min(screen.width, screen.height)
+        $('body').toggleClass('phone', side > 0 && side < 600)
+
         // A button opening a menu upwards. `sections` are lists of [label, element]
         // pairs, the element being clicked when its label is, each list under its title
         // if it has one, and `picked` called right before. Any other tap closes the menu.
