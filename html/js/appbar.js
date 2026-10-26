@@ -189,7 +189,7 @@ JqueryClass('appBar', {
 
         // The performance view's own actions, from its header: the switch into arranging
         // it, and while arranging, the filter of what it shows and saving. Shown in the
-        // dock while performing, in place of the board's tools.
+        // dock while performing, in place of the board's tools but the A/B comparer.
         // Arranging, the dock has just the filter, Cancel and Save, both of which end
         // it. Cancel puts back the plugins' order, visibility and names as they were:
         // each change reached the host as it was made, so it is undone the same way
@@ -257,7 +257,60 @@ JqueryClass('appBar', {
             })
         })
 
-        tools.append(options.abCompare)
+        // The A/B comparer as one button: A/B, on black, until there is a snapshot to
+        // compare with. A tap takes one, which goes to B, and from then on switches
+        // between A and B. A double tap brings up the whole comparer above it, the way
+        // to take a new snapshot. A tap waits briefly for a second one, or a double tap
+        // would switch there and back first
+        var compareA = options.abCompare.find('.js-ab-compare-snapshot-a')
+        var compareB = options.abCompare.find('.js-ab-compare-snapshot-b')
+        var compareTake = options.abCompare.find('.js-ab-compare-snapshot-take')
+        // 'A' or 'B' as selected, 'init' with a snapshot but neither, null with none
+        var compared = function () {
+            if (compareA.hasClass('js-ab-compare-snapshot-selected')) {
+                return 'A'
+            }
+            if (compareB.hasClass('js-ab-compare-snapshot-selected')) {
+                return 'B'
+            }
+            return compareA.hasClass('js-ab-compare-snapshot-disabled') ? null : 'init'
+        }
+        var ab = $('<div class="popup ab">').appendTo(tools)
+        $('<div class="menu">').append(options.abCompare).appendTo(ab)
+        popups = popups.add(ab)
+        var tapped = null
+        var abButton = $('<div class="toggle">').click(function () {
+            if (tapped) {
+                clearTimeout(tapped)
+                tapped = null
+                popups.not(ab).removeClass('open')
+                ab.toggleClass('open')
+                return false
+            }
+            tapped = setTimeout(function () {
+                tapped = null
+                var status = compared()
+                if (! status) {
+                    compareTake.click()
+                } else {
+                    (status == 'B' ? compareA : compareB).click()
+                }
+            }, 300)
+            return false
+        }).appendTo(ab)
+        var showCompared = function () {
+            var status = compared()
+            abButton.text(status == 'A' || status == 'B' ? status : 'A/B')
+                .removeClass('compare-none compare-init compare-a compare-b')
+                .addClass('compare-' + (status || 'none').toLowerCase())
+        }
+        compareA.add(compareB).each(function () {
+            new MutationObserver(showCompared).observe(this, {
+                attributes: true,
+                attributeFilter: ['class']
+            })
+        })
+        showCompared()
 
         // the header's save marks unsaved changes as 'unmodified-changes'
         var save = $('<div class="save">').text('Save').click(function () {
