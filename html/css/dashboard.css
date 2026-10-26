@@ -1970,7 +1970,6 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     transform: none;
 }
 
-#plugins-library.grid-library > ul.js-category-tabs,
 #plugins-library.grid-library .fold,
 #plugins-library.grid-library .settings,
 #plugins-library.grid-library #plugins-list .nav {
@@ -2013,6 +2012,7 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
 }
 
 #plugins-library.grid-library #plugins-list {
+    order: 1;
     flex: 1;
     /* or the flex item grows to its content and nothing scrolls */
     min-height: 0;
@@ -2028,7 +2028,60 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     overflow: visible;
 }
 
-/* every category, one under the other; All would only repeat them */
+/* the category tabs, big enough for a finger, in a bar fixed at the bottom where the
+   thumbs are, scrolling sideways when it does not fit. Set apart from the main menu
+   right below it, so a tap does not land on the wrong bar */
+#plugins-library.grid-library ul.js-category-tabs {
+    order: 2;
+    flex: none;
+    margin: 0;
+    padding: 0 16px;
+    width: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    touch-action: pan-x;
+    background: #262626;
+    border-top: 1px solid #444;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+    scrollbar-width: none;
+}
+
+#plugins-library.grid-library ul.js-category-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+#plugins-library.grid-library ul.js-category-tabs li,
+#plugins-library.grid-library ul.js-category-tabs li:hover,
+#plugins-library.grid-library ul.js-category-tabs li.selected {
+    flex: none;
+    margin: 0;
+    padding: 11px 16px 14px;
+    font-size: 14px;
+    white-space: nowrap;
+    background: none;
+    border-top: 3px solid transparent;
+    border-bottom: 0;
+    transition: none;
+}
+
+#plugins-library.grid-library ul.js-category-tabs li.selected {
+    color: #fff;
+    border-top-color: #883996;
+}
+
+/* the bar drops it on narrow screens for lack of room, this row scrolls instead */
+#plugins-library.grid-library ul.js-category-tabs #effect-tab-Favorites {
+    display: inline-block !important;
+}
+
+/* a single category, the one whose tab is picked; under All every category, one under
+   the other, and the All list itself would only repeat them */
+#plugins-library.grid-library:not(.show-all) #plugins-list .plugins-wrapper:not(.selected),
+#plugins-library.grid-library.show-all #plugins-list #effect-content-Favorites {
+    display: none;
+}
+
+/* a category: its title, then its plugins in a grid */
 #plugins-library.grid-library #plugins-list .plugins-wrapper {
     position: static;
     left: auto !important;

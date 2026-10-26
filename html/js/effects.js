@@ -155,15 +155,18 @@ JqueryClass('effectBox', {
     },
 
     // Grid mode's library: instead of the bar, an "Add plugin +" tab centered at the
-    // bottom, which slides the library up to the title bar. Every category is listed one
-    // under the other, in a grid, scrolling vertically. Picking a plugin closes it and
-    // starts tap-to-place.
+    // bottom, which slides the library up to the title bar. The category tabs head it,
+    // and the plugins are in a grid scrolling vertically: All lists every category one
+    // under the other, any other tab just its own. Picking a plugin closes it and starts
+    // tap-to-place.
     setGridLibrary: function (on) {
         var self = $(this)
         if (! on || self.hasClass('grid-library')) {
             return
         }
         self.addClass('grid-library')
+        self.toggleClass('show-all', self.data('category') == 'All')
+        self.find('#effect-tab-Other').show()
         // animated only from now on, or it is seen sliding away as the page loads
         setTimeout(function () {
             self.addClass('grid-library-ready')
@@ -253,6 +256,12 @@ JqueryClass('effectBox', {
         self.find('#effect-tab-' + category).addClass('selected')
         self.find('#effect-content-' + category).addClass("selected");
         self.data('category', category)
+        // the grid library shows every category under All, see dashboard.css, and
+        // starts a newly picked one from its top
+        self.toggleClass('show-all', category == 'All')
+        if (self.hasClass('grid-library')) {
+            self.find('#plugins-list').scrollTop(0)
+        }
         self.effectBox('unfold')
         self.effectBox('calculateNavigation')
     },
@@ -331,6 +340,7 @@ JqueryClass('effectBox', {
             'Utility': 0,
             'MaxGen': 0,
             'Camomile': 0,
+            'Other': 0,
         }
         var category
         for (i in plugins) {
@@ -340,6 +350,10 @@ JqueryClass('effectBox', {
                     categories[category] = 1
                 else
                     categories[category] += 1
+            }
+            // counted where showPlugins renders them: under Other when no tab is theirs
+            if (! category || self.find('#effect-tab-' + category).length == 0) {
+                categories.Other += 1
             }
             if (FAVORITES.indexOf(plugins[i].uri) >= 0) {
                 categories.Favorites += 1
