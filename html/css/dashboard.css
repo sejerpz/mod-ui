@@ -2213,11 +2213,12 @@ body.app-bar-mode {
     touch-action: manipulation;
 }
 
-/* the title floats over the board's top left corner, like the dock */
+/* the title floats over the board's top right corner, like the dock, clear of the
+   first cells where the board starts */
 body.app-bar-mode header#pedalboard-actions {
     top: 12px;
-    left: 12px;
-    right: auto;
+    left: auto;
+    right: 12px;
     max-width: calc(100% - 24px);
     height: 44px;
     line-height: 44px;
@@ -2262,8 +2263,8 @@ body.app-bar-mode #performance {
    the dock. What it shows runs under the title and stops above the dock */
 body.app-bar-mode #performance header {
     top: 12px;
-    left: 12px;
-    right: auto;
+    left: auto;
+    right: 12px;
     max-width: calc(100% - 24px);
     height: 44px;
     line-height: 44px;
@@ -2288,13 +2289,6 @@ body.app-bar-mode #performance header h1 {
 body.app-bar-mode #performance .remote {
     top: 0;
     bottom: 80px;
-}
-
-/* the plugins listed down the left, on a phone on its side, start below the title */
-@media screen and (max-width: 1022px) and (orientation: landscape) {
-    body.app-bar-mode #performance .js-performance-plugins {
-        top: 68px;
-    }
 }
 
 body.app-bar-mode #plugins-library.grid-library {
