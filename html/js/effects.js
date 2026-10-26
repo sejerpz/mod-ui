@@ -154,7 +154,7 @@ JqueryClass('effectBox', {
         return self
     },
 
-    // Grid mode's library: instead of the bar, an "Add plugin +" button in the app bar,
+    // Grid mode's library: instead of the bar, an "Add Plugin" button in the app bar,
     // which slides the library up to the title bar. The category tabs head it,
     // and the plugins are in a grid scrolling vertically: All lists every category one
     // under the other, any other tab just its own. Picking a plugin closes it and starts
@@ -192,7 +192,7 @@ JqueryClass('effectBox', {
 
         // the app bar takes it in, see js/appbar.js. It is 'active' while the library is
         // open or its plugin is being placed
-        var tab = $('<div id="plugins-library-tab" class="ignore-arrive">Add plugin +</div>')
+        var tab = $('<div id="plugins-library-tab" class="ignore-arrive">Add Plugin</div>')
         tab.click(function () {
             if (self.data('pedalboard').pedalboard('placing')) {
                 self.data('pedalboard').pedalboard('hidePlacementGrid')
@@ -239,14 +239,14 @@ JqueryClass('effectBox', {
         self.addClass('open')
         // it takes the whole height, the title out of its way, see dashboard.css
         $('body').addClass('library-open')
-        self.data('gridTab').text('Close \u00d7').addClass('active')
+        self.data('gridTab').text('\u2039 Back').addClass('active')
     },
 
     closeLibrary: function () {
         var self = $(this)
         self.removeClass('open')
         $('body').removeClass('library-open')
-        self.data('gridTab').text('Add plugin +').removeClass('active')
+        self.data('gridTab').text('Add Plugin').removeClass('active')
     },
 
     fold: function () {
@@ -510,7 +510,7 @@ JqueryClass('effectBox', {
                 // while the plugin is being placed, the tab is how a finger gives up
                 tab.text('Cancel \u00d7').addClass('active')
                 self.data('pedalboard').pedalboard('showPlacementGrid', rendered, function () {
-                    tab.text('Add plugin +').removeClass('active')
+                    tab.text('Add Plugin').removeClass('active')
                 })
                 return
             }
