@@ -1907,3 +1907,138 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     transition: opacity 0.15s, filter 0.15s;
 }
 
+
+/* grid mode's plugin library, see setGridLibrary in js/effects.js. Slid out of sight
+   below the bottom menu until the "Add plugin +" tab opens it up to the title bar */
+#plugins-library.grid-library {
+    top: 45px;
+    bottom: 45px;
+    height: auto;
+    z-index: 9;
+    display: flex;
+    flex-direction: column;
+    background: rgba(17, 17, 17, 0.96);
+    transform: translateY(calc(100% + 45px));
+    transition: none;
+}
+
+#plugins-library.grid-library.grid-library-ready {
+    transition: transform 0.35s ease;
+}
+
+#plugins-library.grid-library.open {
+    transform: none;
+}
+
+#plugins-library.grid-library > ul.js-category-tabs,
+#plugins-library.grid-library .fold,
+#plugins-library.grid-library .settings,
+#plugins-library.grid-library #plugins-list .nav {
+    display: none !important;
+}
+
+#plugins-library.grid-library .grid-library-header {
+    display: flex;
+    align-items: center;
+    flex: none;
+    padding: 8px 16px;
+    border-bottom: 1px solid #333;
+}
+
+#plugins-library.grid-library .grid-library-header .title {
+    flex: 1;
+    color: #fff;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#plugins-library.grid-library .grid-library-header .close {
+    color: #bbb;
+    cursor: pointer;
+    font-size: 32px;
+    line-height: 32px;
+    padding: 0 6px 0 18px;
+}
+
+/* the search box, a window of its own in the bar, always open here */
+#plugins-library.grid-library #plugins-library-settings-window {
+    display: block !important;
+    position: static;
+    background: none;
+}
+
+#plugins-library.grid-library #plugins-library-settings-window input {
+    width: 220px;
+    height: 34px;
+}
+
+#plugins-library.grid-library #plugins-list {
+    flex: 1;
+    /* or the flex item grows to its content and nothing scrolls */
+    min-height: 0;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: none;
+}
+
+#plugins-library.grid-library #plugins-list #plugins-results {
+    position: static;
+    overflow: visible;
+}
+
+/* every category, one under the other; All would only repeat them */
+#plugins-library.grid-library #plugins-list .plugins-wrapper {
+    position: static;
+    left: auto !important;
+    opacity: 1;
+    transition: none;
+    white-space: normal;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    padding: 0 16px 16px;
+}
+
+#plugins-library.grid-library #plugins-list .plugins-wrapper:empty,
+#plugins-library.grid-library #plugins-list #effect-content-All {
+    display: none;
+}
+
+#plugins-library.grid-library #plugins-list .plugins-wrapper::before {
+    content: attr(data-title);
+    grid-column: 1 / -1;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    padding: 16px 0 6px;
+    border-bottom: 3px solid #883996;
+    margin-bottom: 4px;
+}
+
+#plugins-library.grid-library #plugins-list .plugins-wrapper .plugin {
+    display: block;
+    /* the list scrolls under the finger, a plugin is picked by tapping it */
+    touch-action: pan-y;
+}
+
+#plugins-library-tab {
+    position: absolute;
+    bottom: 45px;
+    left: 50%;
+    z-index: 8;
+    transform: translateX(-50%);
+    padding: 8px 28px;
+    border-radius: 8px 8px 0 0;
+    background: #883996;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+#plugins-library-tab.hidden {
+    display: none;
+}

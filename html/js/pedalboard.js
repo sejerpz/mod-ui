@@ -1420,6 +1420,11 @@ JqueryClass('pedalboard', {
         self.data('placementGrid', grid)
     },
 
+    // Whether a plugin picked from the library is waiting to be placed.
+    placing: function () {
+        return !! $(this).data('placementGrid')
+    },
+
     hidePlacementGrid: function () {
         var self = $(this)
         var grid = self.data('placementGrid')

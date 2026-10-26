@@ -37,6 +37,11 @@ var TOUCH_SLOP = 10
     // text keeps the touch, a jQuery UI mouse widget or an element marked with
     // data-touch-mouse gets the translation, and anything else is left to the browser.
     var wantsMouse = function (target) {
+        // inside data-touch-native the browser keeps the touch, draggables or not:
+        // a list that scrolls under the finger
+        if ($(target).closest('[data-touch-native]').length) {
+            return false
+        }
         for (var el = target; el && el.nodeType === 1; el = el.parentNode) {
             if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable) {
                 return false

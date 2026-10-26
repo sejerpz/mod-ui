@@ -358,6 +358,7 @@ $('document').ready(function() {
 
         desktop.isMobile = (navigator?.userAgentData?.mobile ?? false) || mobileCheck();
         desktop.isTouchDevice = desktop.isMobile || touchCheck();
+        desktop.effectBox.effectBox('setGridLibrary', desktop.pedalboard.pedalboard('gridMode'));
 
         if (desktop.isMobile) {
             $('body').addClass('mobile');
@@ -974,6 +975,7 @@ $('document').ready(function() {
                     <div id="effect-content-Utility" class="plugins-wrapper"></div>
                     <div id="effect-content-MaxGen" class="plugins-wrapper"></div>
                     <div id="effect-content-Camomile" class="plugins-wrapper"></div>
+                    <div id="effect-content-Other" class="plugins-wrapper"></div>
                 </div>
             </div>
             <div class="nav nav-right"></div>
