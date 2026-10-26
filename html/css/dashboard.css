@@ -2199,6 +2199,15 @@ body.app-bar-mode header#pedalboard-actions {
     pointer-events: none;
 }
 
+/* out of the way of the open plugin library, which takes the whole height */
+body.app-bar-mode header#pedalboard-actions {
+    transition: opacity 0.3s ease;
+}
+
+body.app-bar-mode.library-open header#pedalboard-actions {
+    opacity: 0;
+}
+
 body.app-bar-mode #pedalboard-info {
     position: static;
     display: block;
@@ -2216,6 +2225,7 @@ body.app-bar-mode #performance {
 }
 
 body.app-bar-mode #plugins-library.grid-library {
+    top: 0;
     bottom: 80px;
     transform: translateY(calc(100% + 80px));
 }
