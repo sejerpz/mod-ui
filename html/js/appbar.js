@@ -34,9 +34,9 @@ JqueryClass('appBar', {
 
         // A button opening a menu upwards. `sections` are lists of [label, element]
         // pairs, the element being clicked when its label is, each list under its title
-        // if it has one, and `picked` called right before. Any other tap closes the menu.
+        // if it has one. Any other tap closes the menu.
         var popups = $()
-        var popup = function (name, label, sections, picked) {
+        var popup = function (name, label, sections) {
             var holder = $('<div class="popup">').addClass(name)
             var menu = $('<div class="menu">').appendTo(holder)
             $.each(sections, function (i, section) {
@@ -48,7 +48,6 @@ JqueryClass('appBar', {
                 $.each(section.items, function (j, item) {
                     $('<li>').text(item[0]).click(function () {
                         holder.removeClass('open')
-                        picked && picked()
                         item[1].click()
                         return false
                     }).appendTo(list)
@@ -87,14 +86,8 @@ JqueryClass('appBar', {
             }, 300)
         }
 
-        // The gateway to whatever the hidden bars had and the dock has no room for. The
-        // mode it is left from is the one to go back to, see showMode
-        var cameFrom = 'edit'
-        popup('main', 'Menu', options.menu, function () {
-            if (! options.places.filter(':visible').length) {
-                cameFrom = options.performanceBox.is(':visible') ? 'live' : 'edit'
-            }
-        }).appendTo(self)
+        // the gateway to whatever the hidden bars had and the dock has no room for
+        popup('main', 'Menu', options.menu).appendTo(self)
 
         // Edit is the constructor, Live the performance view: two states of one switch.
         // Going from one to the other fades the one out and then the other in: the
@@ -173,17 +166,16 @@ JqueryClass('appBar', {
             })
         }).appendTo(mode)
         // In one of the places the menu leads to, like the plugin store, the board and
-        // its tools are not there: the dock folds down to the way back to the mode the
-        // menu was left from
-        var back = $('<div>').click(function () {
-            (cameFrom == 'live' ? live : edit).click()
+        // its tools are not there: the dock folds down to the way back to the board, the
+        // menu being only there
+        $('<div>').text('‹ Back').click(function () {
+            edit.click()
         }).appendTo($('<div class="back">').appendTo(self))
         var showMode = function () {
             var elsewhere = options.places.filter(':visible').length > 0
             var performing = ! elsewhere && options.performanceBox.is(':visible')
             edit.toggleClass('selected', ! elsewhere && ! performing)
             live.toggleClass('selected', performing)
-            back.text(cameFrom == 'live' ? '‹ Back to Live' : '‹ Back to Edit')
             setState('performing', performing)
             setState('elsewhere', elsewhere)
         }
