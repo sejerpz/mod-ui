@@ -81,18 +81,22 @@ $.ui.intersect = function(draggable, droppable, toleranceMode) {
 // Size of a grid mode cell, in canvas units. Room for a typical pedal and its cables:
 // real plugins run from 90x155 to 780x480, and most are under 400 wide. A plugin
 // bigger than a cell is scaled down to keep PLACEMENT_PAD clear of the cell's edges.
-// Plugins are saved where they would be in cells of this size, whatever size they are
-// drawn in, so a board opens with every plugin in the same cell on any screen
+// Plugins are saved where they would be in cells of this size, drawn at
+// PLACEMENT_SAVED_ICON_SCALE, whatever size they are drawn in, so a board opens with
+// every plugin in the same cell on any screen
 var PLACEMENT_SAVED_CELL = { width: 420, height: 620 }
-// The size they are drawn in, see fitCellToScreen: as saved, or tighter from
-// PLACEMENT_WIDE_SCREEN wide up, where there is room to show the plugins bigger with
-// less space around them
-var PLACEMENT_CELL = { width: 420, height: 620 }
+var PLACEMENT_SAVED_ICON_SCALE = 0.75
+// The size they are drawn in, see fitCellToScreen: PLACEMENT_NARROW_CELL, or tighter
+// from PLACEMENT_WIDE_SCREEN wide up, where there is room to show the plugins bigger
+// with less space around them. Both leave the gaps between the plugins wide enough for
+// the cables to run along, see gridCableCorners
+var PLACEMENT_CELL = { width: 460, height: 660 }
+var PLACEMENT_NARROW_CELL = { width: 460, height: 660 }
 var PLACEMENT_WIDE_SCREEN = 1280
-var PLACEMENT_WIDE_CELL = { width: 320, height: 480 }
+var PLACEMENT_WIDE_CELL = { width: 360, height: 520 }
 var PLACEMENT_PAD = 20
 // How big a plugin is drawn in a cell, against the biggest that fits it
-var PLACEMENT_ICON_SCALE = 0.75
+var PLACEMENT_ICON_SCALE = 0.68
 // How much of a cell grid mode's zoom leaves past the cells in use, to the right and
 // below: room to grow the board into, without a whole empty row and column
 var PLACEMENT_SPARE = 0.3
@@ -1259,7 +1263,7 @@ JqueryClass('pedalboard', {
     // Every plugin is laid out again when that changes, nothing saved.
     fitCellToScreen: function () {
         var self = $(this)
-        var size = $(window).width() >= PLACEMENT_WIDE_SCREEN ? PLACEMENT_WIDE_CELL : PLACEMENT_SAVED_CELL
+        var size = $(window).width() >= PLACEMENT_WIDE_SCREEN ? PLACEMENT_WIDE_CELL : PLACEMENT_NARROW_CELL
         if (size.width == PLACEMENT_CELL.width && size.height == PLACEMENT_CELL.height) {
             return
         }
@@ -1281,8 +1285,8 @@ JqueryClass('pedalboard', {
     // PLACEMENT_SAVED_CELL. Laid out in a cell of that size the same way as in
     // fitInCell, so a board saved on a screen of either size reads the same
     savedPosition: function (cell, w, h) {
-        var s = PLACEMENT_ICON_SCALE * Math.min(1, (PLACEMENT_SAVED_CELL.width - 2 * PLACEMENT_PAD) / w,
-                                                   (PLACEMENT_SAVED_CELL.height - 2 * PLACEMENT_PAD) / h)
+        var s = PLACEMENT_SAVED_ICON_SCALE * Math.min(1, (PLACEMENT_SAVED_CELL.width - 2 * PLACEMENT_PAD) / w,
+                                                         (PLACEMENT_SAVED_CELL.height - 2 * PLACEMENT_PAD) / h)
         return {
             x: Math.round(cell.col * PLACEMENT_SAVED_CELL.width + (PLACEMENT_SAVED_CELL.width - w * s) / 2),
             y: Math.round(cell.row * PLACEMENT_SAVED_CELL.height + (PLACEMENT_SAVED_CELL.height - h * s) / 2),
@@ -5684,6 +5688,7 @@ JqueryClass('pedalboard', {
     // split again to in1 and in2. Same three stroked paths as drawBezier, so the cable,
     // shadow and light CSS is shared. Each point is an {x, y}.
     drawStereoBezier: function (canvas, out1, out2, in1, in2, stylePrefix) {
+        var self = $(this)
         var svg = canvas.svg('get')
         if (!svg)
             return
@@ -5697,7 +5702,6 @@ JqueryClass('pedalboard', {
         var y1 = (out1.y + out2.y) / 2
         var x2 = Math.min(in1.x, in2.x) - stub
         var y2 = (in1.y + in2.y) / 2
-        var deltaX = cableDeltaX(x1, x2)
 
         var parts = [['pathShadow', 'shadow'], ['pathCable', 'cable'], ['pathLight', 'light']]
         var i
@@ -5707,7 +5711,7 @@ JqueryClass('pedalboard', {
         for (i = 0; i < parts.length; i++) {
             var trunk = canvas.data(parts[i][0])
             trunk.reset()
-            trunk.move(x1, y1).curveC(x2 - deltaX, y1, x1 + deltaX, y2, x2, y2)
+            self.pedalboard('cablePath', trunk, x1, y1, x2, y2, true)
             svg.path(null, trunk, { class_: stylePrefix + parts[i][1] + ' mod-trunk' })
         }
 
@@ -5727,6 +5731,7 @@ JqueryClass('pedalboard', {
     },
 
     drawBezier: function (canvas, xi, yi, xo, yo, stylePrefix) {
+        var self = $(this)
         var svg = canvas.svg('get')
         if (!svg)
             return
@@ -5741,27 +5746,92 @@ JqueryClass('pedalboard', {
         pathC.reset()
         pathL.reset()
 
-        var deltaX = cableDeltaX(xi, xo)
+        // the one being dragged keeps its curve, it has no cell to go to yet
+        var routed = ! stylePrefix
 
         // Draw three lines following same path, one for shadow, one for cable and one for light
         // The recipe for a good cable is that shadow is wide and darke, cable is not so wide and not so dark,
         // and light is very thin and light.
         // Each has a different class, so it will be defined by CSS.
         svg.path(null,
-            pathS.move(xi, yi).curveC(xo - deltaX, yi, xi + deltaX, yo, xo, yo), {
+            self.pedalboard('cablePath', pathS, xi, yi, xo, yo, routed), {
                 class_: stylePrefix + 'shadow'
             }
         )
         svg.path(null,
-            pathC.move(xi, yi).curveC(xo - deltaX, yi, xi + deltaX, yo, xo, yo), {
+            self.pedalboard('cablePath', pathC, xi, yi, xo, yo, routed), {
                 class_: stylePrefix + 'cable'
             }
         )
         svg.path(null,
-            pathL.move(xi, yi).curveC(xo - deltaX, yi, xi + deltaX, yo, xo, yo), {
+            self.pedalboard('cablePath', pathL, xi, yi, xo, yo, routed), {
                 class_: stylePrefix + 'light'
             }
         )
+    },
+
+    // A cable from the output at (xi, yi) to the input at (xo, yo), into `path`. A bezier
+    // curve, or in grid mode, when `routed`, along the gaps between the cells, see
+    // gridCableCorners, its corners rounded off
+    cablePath: function (path, xi, yi, xo, yo, routed) {
+        var self = $(this)
+        if (! routed || ! self.pedalboard('gridMode')) {
+            var deltaX = cableDeltaX(xi, xo)
+            return path.move(xi, yi).curveC(xo - deltaX, yi, xi + deltaX, yo, xo, yo)
+        }
+        var points = self.pedalboard('gridCableCorners', xi, yi, xo, yo)
+        var radius = 40
+        path.move(points[0].x, points[0].y)
+        for (var i = 1; i < points.length - 1; i++) {
+            var prev = points[i - 1], at = points[i], next = points[i + 1]
+            var inLength = Math.abs(at.x - prev.x) + Math.abs(at.y - prev.y)
+            var outLength = Math.abs(next.x - at.x) + Math.abs(next.y - at.y)
+            var r = Math.min(radius, inLength / 2, outLength / 2)
+            var toward = function (from, to, distance) {
+                var length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y) || 1
+                return { x: from.x + (to.x - from.x) * distance / length,
+                         y: from.y + (to.y - from.y) * distance / length }
+            }
+            var before = toward(at, prev, r), after = toward(at, next, r)
+            path.line(before.x, before.y).curveQ(at.x, at.y, after.x, after.y)
+        }
+        var last = points[points.length - 1]
+        return path.line(last.x, last.y)
+    },
+
+    // The corners of a cable laid along the gaps between grid mode's cells, from (xi, yi)
+    // to (xo, yo). It turns into the vertical gap at the edge of its plugin's cell right
+    // away, runs to the gap along the row it goes to, across to the gap at the edge of
+    // that row's cell, and into the input. Between neighbours that is just the gap
+    // between them, and along a row with only free cells between it goes straight
+    // across. A port outside the cells, on the board's edge, turns a little way off it.
+    gridCableCorners: function (xi, yi, xo, yo) {
+        var self = $(this)
+        var W = PLACEMENT_CELL.width, H = PLACEMENT_CELL.height, stub = 30
+        var from = self.pedalboard('cellAt', xi, yi)
+        var to = self.pedalboard('cellAt', xo, yo)
+        // a plugin's output is on its right, in its cell's right half, its input in the left
+        var outGap = xi - from.col * W > W / 2 ? (from.col + 1) * W : xi + stub
+        var inGap = xo - to.col * W < W / 2 ? to.col * W : xo - stub
+        var start = { x: xi, y: yi }, end = { x: xo, y: yo }
+
+        if (outGap == inGap) {
+            return [start, { x: outGap, y: yi }, { x: outGap, y: yo }, end]
+        }
+        if (from.row == to.row && outGap < inGap) {
+            var clear = true
+            for (var col = from.col + 1; col < to.col; col++) {
+                clear = clear && self.pedalboard('cellFree', { col: col, row: from.row })
+            }
+            if (clear) {
+                return [start, { x: inGap, y: yi }, { x: inGap, y: yo }, end]
+            }
+        }
+        // the gap along the row it goes to: on the side it comes from, below its own row
+        // within the same row
+        var gapY = to.row > from.row ? to.row * H : (to.row + 1) * H
+        return [start, { x: outGap, y: yi }, { x: outGap, y: gapY },
+                { x: inGap, y: gapY }, { x: inGap, y: yo }, end]
     },
 
     startConnection: function (output) {
