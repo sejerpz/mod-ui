@@ -143,6 +143,51 @@ JqueryClass('appBar', {
         })
         showMode()
 
+        // The performance view's own actions, from its header: the switch into arranging
+        // it, and while arranging, the filter of what it shows and saving. Shown in the
+        // dock while performing, in place of the board's tools.
+        // Arranging, the dock has just the filter, Cancel and Save, both of which end
+        // it. Cancel puts back the plugins' order, visibility and names as they were:
+        // each change reached the host as it was made, so it is undone the same way
+        var perf = $('<div class="perf">').append(options.performanceActions).appendTo(self)
+        var design = options.performanceActions.find('.js-settings')
+        var saveLayout = options.performanceActions.find('.js-save')
+        var guis = function () {
+            return $.map(options.pedalboard.data('plugins'), function (plugin) {
+                return plugin.data && plugin.data('gui') || null
+            })
+        }
+        var before = null
+        design.click(function () {
+            var arranging = !! options.performanceBox.data('inDesign')
+            before = arranging ? $.map(guis(), function (gui) {
+                var performance = gui.getPerformanceOptions()
+                return { gui: gui, index: performance.index, visible: performance.visible, label: gui.label }
+            }) : null
+            setState('arranging', arranging)
+        })
+        $('<button class="js-cancel">').text('Cancel').click(function () {
+            $.each(before || [], function (i, was) {
+                var performance = was.gui.getPerformanceOptions()
+                if (performance.index != was.index) {
+                    performance.index = was.index
+                    options.pedalboard.data('performancePluginIndexSet')(was.gui.instance, was.index)
+                }
+                if (performance.visible != was.visible) {
+                    performance.visible = was.visible
+                    options.pedalboard.data('performancePluginVisibilitySet')(was.gui.instance, was.visible)
+                }
+                if (was.gui.label != was.label) {
+                    was.gui.setLabel(was.label || '')
+                }
+            })
+            design.click()
+        }).insertBefore(saveLayout)
+        // after the view's own handler, which saves
+        saveLayout.click(function () {
+            design.click()
+        })
+
         var tools = $('<div class="tools">').appendTo(self)
 
         // the header's snapshots menu

@@ -2258,6 +2258,45 @@ body.app-bar-mode #performance {
     bottom: 80px;
 }
 
+/* The performance view's title floats over it like the board's, its actions are in
+   the dock. What it shows runs under the title and stops above the dock */
+body.app-bar-mode #performance header {
+    top: 12px;
+    left: 12px;
+    right: auto;
+    max-width: calc(100% - 24px);
+    height: 44px;
+    line-height: 44px;
+    box-sizing: border-box;
+    padding: 0 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(51, 51, 51, 0.6);
+    background-color: rgba(17, 17, 17, 0.6);
+    background-image: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+
+body.app-bar-mode #performance header h1 {
+    margin: 0;
+    line-height: 42px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.app-bar-mode #performance .remote {
+    top: 0;
+    bottom: 80px;
+}
+
+/* the plugins listed down the left, on a phone on its side, start below the title */
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    body.app-bar-mode #performance .js-performance-plugins {
+        top: 68px;
+    }
+}
+
 body.app-bar-mode #plugins-library.grid-library {
     top: 0;
     bottom: 80px;
@@ -2358,6 +2397,10 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .mode,
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
+.mod-app-bar.performing > .popup,
+.mod-app-bar.performing > .tools,
+.mod-app-bar.arranging > .mode,
+.mod-app-bar:not(.performing) > .perf,
 .mod-app-bar.elsewhere > :not(.back),
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
@@ -2371,6 +2414,10 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .mode,
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
+.mod-app-bar.performing > .popup,
+.mod-app-bar.performing > .tools,
+.mod-app-bar.arranging > .mode,
+.mod-app-bar:not(.performing) > .perf,
 .mod-app-bar.elsewhere > :not(.back),
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
@@ -2380,9 +2427,12 @@ body.app-bar-mode .mod-placement-badge {
     max-width: 0;
     opacity: 0;
     margin-left: 0;
+    border-width: 0;
 }
 
 .mod-app-bar.adding .add,
+.mod-app-bar.performing .mode,
+.mod-app-bar.arranging .perf,
 .mod-app-bar.elsewhere .back,
 .mod-app-bar.viewing .plugin,
 .mod-app-bar.dialog .dialog {
@@ -2445,6 +2495,62 @@ body.app-bar-mode .mod-placement-badge {
 
 .mod-app-bar .meter.xrun .fill {
     background: #fff;
+}
+
+/* the performance view's actions, see js/appbar.js */
+.mod-app-bar > .perf {
+    max-width: 640px;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+.mod-app-bar .perf .actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mod-app-bar .perf .actions > * {
+    height: 40px;
+    min-width: 44px;
+    line-height: 40px;
+    box-sizing: border-box;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background-color: transparent;
+    color: #fff;
+    text-align: center;
+    opacity: 1;
+    cursor: pointer;
+}
+
+.mod-app-bar .perf .actions > .mod-hidden {
+    display: none;
+}
+
+.mod-app-bar .perf .js-settings {
+    width: 44px;
+    padding: 0;
+    background: url(../img/icons/36/settings.png) center / 26px no-repeat;
+}
+
+/* arranging, only the filter, Cancel and Save */
+.mod-app-bar.arranging .perf .js-settings,
+.mod-app-bar:not(.arranging) .perf .js-cancel {
+    display: none;
+}
+
+.mod-app-bar .perf .js-cancel {
+    padding: 0 12px;
+}
+
+.mod-app-bar .perf .js-save {
+    padding: 0 12px;
+    background: #883996;
+    border-color: #883996;
+}
+
+.mod-app-bar .perf .view-filter {
+    font-size: 18px;
 }
 
 /* the way back from the places the menu leads to */
