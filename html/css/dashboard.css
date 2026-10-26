@@ -2284,6 +2284,11 @@ body.app-bar-mode .mod-placement-badge {
     display: none;
 }
 
+.mod-app-bar.elsewhere .add,
+.mod-app-bar.elsewhere .tools {
+    display: none;
+}
+
 #plugins-library-tab {
     height: 40px;
     line-height: 40px;

@@ -73,13 +73,18 @@ JqueryClass('appBar', {
         var live = $('<div class="segment">').text('Live').click(function () {
             options.performanceTrigger.click()
         }).appendTo(mode)
+        // In one of the places the menu leads to, like the plugin store, the board and
+        // its tools are not there: the dock keeps the menu and the way back to either
+        // mode, neither of which is the one shown
         var showMode = function () {
-            var performing = options.performanceBox.is(':visible')
-            edit.toggleClass('selected', ! performing)
+            var elsewhere = options.places.filter(':visible').length > 0
+            var performing = ! elsewhere && options.performanceBox.is(':visible')
+            edit.toggleClass('selected', ! elsewhere && ! performing)
             live.toggleClass('selected', performing)
             self.toggleClass('performing', performing)
+            self.toggleClass('elsewhere', elsewhere)
         }
-        options.performanceBox.on('windowopen windowclose', showMode)
+        options.performanceBox.add(options.places).on('windowopen windowclose', showMode)
         showMode()
 
         // the library's tab, see effectBox's setGridLibrary
