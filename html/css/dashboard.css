@@ -3002,3 +3002,74 @@ body.app-bar-mode.plugin-view .plugin-info span.js-close {
 body.app-bar-mode.plugin-view .plugin-info .box {
     margin-bottom: 96px;
 }
+
+/* The bindings dialog (also a single control's addressing), with the dock: the title
+   and the buttons stay where they are and what is between them scrolls, rather than the
+   whole box. Its box is a column, down to the table itself */
+body.app-bar-mode .mod-pedal-settings-address .mod-box {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1,
+body.app-bar-mode .mod-pedal-settings-address .mod-box > .close {
+    flex: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 {
+    align-self: flex-start;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > .close {
+    position: absolute;
+    align-self: flex-end;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > .form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container > div:first-child {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container > div:first-child > * {
+    flex: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container > div:first-child > .main-form-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > * {
+    flex: none;
+}
+
+/* the controls' table scrolls, under the tabs of what the binding is assigned to.
+   Like it, the tables of the other tabs */
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .dynamic-field {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* the advanced settings beside it scroll on their own, should they not fit */
+body.app-bar-mode .mod-pedal-settings-address .mod-box .advanced-container {
+    min-height: 0;
+    overflow-y: auto;
+}

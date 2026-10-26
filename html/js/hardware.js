@@ -560,6 +560,26 @@ function HardwareManager(options) {
       }
     }
 
+    // The names a binding is listed under. Not every binding is a plugin's: the
+    // pedalboard's own, the transport's tempo and play, are under /pedalboard
+    this.bindingPluginLabel = function (binding) {
+      if (! binding.plugin) {
+        return binding.pluginId == '/pedalboard' ? 'Transport' : binding.pluginId
+      }
+      return (binding.plugin.label && binding.plugin.label.length > 0) ? binding.plugin.label : binding.plugin.effect.label
+    }
+    this.bindingPortLabel = function (binding) {
+      if (binding.pluginId == '/pedalboard') {
+        if (binding.portSymbol == ':bpm') {
+          return 'Tempo (BPM)'
+        }
+        if (binding.portSymbol == ':rolling') {
+          return 'Play / Stop'
+        }
+      }
+      return binding.portSymbol
+    }
+
     this.parseAddressing = function(addressing, addressingData, model) {
       // found
       const parts = addressing.split('/')
@@ -986,8 +1006,8 @@ function HardwareManager(options) {
 
           let binding = self.parseAddressing(addressing, addressingData, model)
 
-          binding.pluginLabel = (binding.plugin.label && binding.plugin.label.length > 0) ? binding.plugin.label : binding.plugin.effect.label
-          binding.portLabel = binding.port?.name ?? binding.portSymbol,
+          binding.pluginLabel = self.bindingPluginLabel(binding)
+          binding.portLabel = binding.port?.name ?? self.bindingPortLabel(binding),
           binding.midi = self.getMidiDisplayLabel(addressingData)
 
           bindings.push(binding)
@@ -1068,8 +1088,8 @@ function HardwareManager(options) {
 
             let binding = self.parseAddressing(addressing, addressingData, model)
 
-            binding.pluginLabel = (binding.plugin.label && binding.plugin.label.length > 0) ? binding.plugin.label : binding.plugin.effect.label
-            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : binding.portSymbol
+            binding.pluginLabel = self.bindingPluginLabel(binding)
+            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : self.bindingPortLabel(binding)
             binding.cc = self.ccActuators.find((item) => item.uri == addressingData.uri)
 
             bindings.push(binding)
@@ -1121,7 +1141,7 @@ function HardwareManager(options) {
             const addressingData = self.addressingsData[binding.addressing]
             binding.addressingData = addressingData
             // we need to refresh the binding data that depends on the addressingData values because they could have changed since the last time we built the table
-            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : binding.portSymbol
+            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : self.bindingPortLabel(binding)
 
             self.onSelectedAddressingChange(addressingData.uri, model, binding)
             table.find('tr').removeClass('selected')
@@ -1156,8 +1176,8 @@ function HardwareManager(options) {
 
             let binding = self.parseAddressing(addressing, addressingData, model)
 
-            binding.pluginLabel = (binding.plugin.label && binding.plugin.label.length > 0) ? binding.plugin.label : binding.plugin.effect.label
-            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : binding.portSymbol
+            binding.pluginLabel = self.bindingPluginLabel(binding)
+            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : self.bindingPortLabel(binding)
             binding.cv = self.cvOutputPorts.find((item) => item.uri == addressingData.uri)
 
             bindings.push(binding)
@@ -1209,7 +1229,7 @@ function HardwareManager(options) {
             const addressingData = self.addressingsData[binding.addressing]
             binding.addressingData = addressingData
             // we need to refresh the binding data that depends on the addressingData values because they could have changed since the last time we built the table
-            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : binding.portSymbol
+            binding.portLabel = (addressingData.label && addressingData.label.length > 0) ? addressingData.label : (binding.port?.name && binding.port.name.length > 0) ? binding.port.name : self.bindingPortLabel(binding)
 
             self.onSelectedAddressingChange(addressingData.uri, model, binding)
             table.find('tr').removeClass('selected')
