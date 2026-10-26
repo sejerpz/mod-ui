@@ -237,12 +237,15 @@ JqueryClass('effectBox', {
         // a plugin picked earlier and not placed yet is dropped
         self.data('pedalboard').pedalboard('hidePlacementGrid')
         self.addClass('open')
+        // it takes the whole height, the title out of its way, see dashboard.css
+        $('body').addClass('library-open')
         self.data('gridTab').text('Close \u00d7').addClass('active')
     },
 
     closeLibrary: function () {
         var self = $(this)
         self.removeClass('open')
+        $('body').removeClass('library-open')
         self.data('gridTab').text('Add plugin +').removeClass('active')
     },
 
