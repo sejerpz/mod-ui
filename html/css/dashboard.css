@@ -88,6 +88,18 @@
     background-color: rgba(224, 76, 76, 0.2);
 }
 
+/* the plugin flying from the badge into the cell it was put in, see flyToCell */
+.mod-placement-flyer {
+    position: fixed;
+    z-index: 1000;
+    transform-origin: 0 0;
+    pointer-events: none;
+}
+
+.mod-placement-flyer.flying {
+    transition: left 0.4s ease-in-out, top 0.4s ease-in-out, transform 0.4s ease-in-out;
+}
+
 /* the plugin waiting for a cell in tap-to-place, see showPlacementGrid */
 .mod-placement-badge {
     position: absolute;

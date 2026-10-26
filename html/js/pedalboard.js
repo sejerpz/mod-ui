@@ -1384,6 +1384,12 @@ JqueryClass('pedalboard', {
         }
         cell = self.pedalboard('nearestFreeCell', cell, instance)
         self.pedalboard('fitInCell', instance, icon, cell, persist)
+        // added into a cell: in place under the plugin flown there, see flyToCell
+        var landed = persist && self.data('placementLanded')
+        if (landed) {
+            self.data('placementLanded', null)
+            landed()
+        }
 
         // having a size is not having its final one: the gui keeps growing as its
         // stylesheet and images come in, which leaves it off its cell's center
@@ -1456,6 +1462,8 @@ JqueryClass('pedalboard', {
                 return false
             }
             var chosen = cell.data('cell')
+            // before hiding, which takes the badge away
+            self.pedalboard('flyToCell', chosen)
             self.pedalboard('hidePlacementGrid')
             self.pedalboard('addToCell', element, chosen)
             return false
@@ -1527,6 +1535,60 @@ JqueryClass('pedalboard', {
         var s = self.pedalboard('cellFitScale', w, h) * self.data('scale') * PLACEMENT_BADGE_SCALE
         icon.css('transform', 'scale(' + s + ')')
         grid.data('badge').find('.preview').css({ width: w * s, height: h * s })
+    },
+
+    // Flies the plugin waiting in the badge into `cell`, where and as big as it will be
+    // drawn there. It stays over the cell until the plugin itself has arrived under it,
+    // see snapPlugin, and at least until it has landed.
+    flyToCell: function (cell) {
+        var self = $(this)
+        var grid = self.data('placementGrid')
+        var icon = grid && grid.data('badge').data('icon')
+        if (! icon) {
+            return
+        }
+        var w = icon.width()
+        var h = icon.height()
+        var from = icon[0].getBoundingClientRect()
+        var s = self.pedalboard('cellFitScale', w, h)
+        var rect = self.pedalboard('cellRect', cell)
+        var origin = self[0].getBoundingClientRect()
+        var scale = self.data('scale')
+
+        var flyer = $('<div class="mod-placement-flyer ignore-arrive">').css({
+            left: from.left,
+            top: from.top,
+            width: w,
+            height: h,
+            transform: 'scale(' + from.width / w + ')'
+        }).appendTo('body')
+        icon.detach().css('transform', '').appendTo(flyer)
+        // laid out where it starts, or the transition has nowhere to start from
+        flyer[0].getBoundingClientRect()
+        flyer.addClass('flying').css({
+            left: origin.left + (rect.x + (rect.width - w * s) / 2) * scale,
+            top: origin.top + (rect.y + (rect.height - h * s) / 2) * scale,
+            transform: 'scale(' + s * scale + ')'
+        })
+
+        var flown = false, landed = false
+        var finish = function () {
+            if (flown && landed) {
+                flyer.remove()
+            }
+        }
+        setTimeout(function () {
+            flown = true
+            finish()
+        }, 400)
+        self.data('placementLanded', function () {
+            landed = true
+            finish()
+        })
+        // a plugin that never arrives does not leave it there
+        setTimeout(function () {
+            flyer.remove()
+        }, 5000)
     },
 
     // Whether a plugin picked from the library is waiting to be placed.
