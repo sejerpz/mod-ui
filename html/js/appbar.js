@@ -386,8 +386,20 @@ JqueryClass('appBar', {
                 closeSettings()
             } else if (info) {
                 info.window('close')
+            } else if (options.transportWindow.is(':visible')) {
+                options.transportButton.click()
             }
         }).appendTo(dialog)
+
+        // The transport, from the menu, folds the dock down to the same way back. It is
+        // no window, its button shows and hides it
+        var showTransport = function () {
+            setState('dialog', options.transportWindow.is(':visible'))
+        }
+        new MutationObserver(showTransport).observe(options.transportWindow[0], {
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        })
         // A double tap on the settings' background goes back too: not on a control,
         // nor where a finger scrolls
         var down = null, tapped = 0

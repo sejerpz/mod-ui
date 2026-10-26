@@ -2405,7 +2405,7 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
 .mod-app-bar.viewing > :not(.plugin):not(.dialog),
-.mod-app-bar.dialog > .plugin,
+.mod-app-bar.dialog > :not(.dialog),
 .mod-app-bar:not(.dialog) > .dialog {
     overflow: hidden;
 }
@@ -2422,7 +2422,7 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
 .mod-app-bar.viewing > :not(.plugin):not(.dialog),
-.mod-app-bar.dialog > .plugin,
+.mod-app-bar.dialog > :not(.dialog),
 .mod-app-bar:not(.dialog) > .dialog {
     max-width: 0;
     opacity: 0;
@@ -2762,6 +2762,16 @@ body > .mod-settings.mod-flip-out {
 @keyframes mod-flip-other-out {
     from { transform: perspective(1200px) rotateY(0); opacity: 1; }
     to { transform: perspective(1200px) rotateY(-90deg); opacity: 0; }
+}
+
+/* the transport, from the menu, above the dock which has the way back to the board,
+   see js/appbar.js */
+body.app-bar-mode #mod-transport-window {
+    bottom: 80px;
+    left: 50%;
+    right: auto !important;
+    transform: translateX(-50%);
+    border-radius: 16px;
 }
 
 /* the title makes room for the columns */
