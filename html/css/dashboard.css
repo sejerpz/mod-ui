@@ -49,6 +49,23 @@
     background-color: rgba(135, 76, 224, 0.45);
 }
 
+/* a big see-through + on every free cell, an arrow into a tray instead while a plugin
+   is dragged over the grid. Drawn as svg, so it does not depend on the font */
+.mod-placement-cell.free::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 14v72M14 50h72' fill='none' stroke='white' stroke-opacity='0.3' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E") center / 45% no-repeat;
+    pointer-events: none;
+}
+
+.mod-placement-grid.passive .mod-placement-cell.free::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 10v54M28 42l22 22 22-22M16 68v18h68V68' fill='none' stroke='white' stroke-opacity='0.3' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 /* shown under a plugin being dragged, which must keep receiving the pointer */
 .mod-placement-grid.passive {
     pointer-events: none;
