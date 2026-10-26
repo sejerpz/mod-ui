@@ -2560,6 +2560,11 @@ body.app-bar-mode .mod-placement-badge {
     color: #666;
 }
 
+/* on a phone none of the plugins have them, see js/appbar.js */
+body.app-bar-mode.phone .mod-pedal .mod-actions {
+    display: none;
+}
+
 /* the dock has the viewed plugin's actions */
 .mod-pedal.mod-viewed .mod-actions {
     display: none;
