@@ -2225,7 +2225,6 @@ body.app-bar-mode .mod-placement-badge {
     z-index: 1001;
     display: flex;
     align-items: center;
-    gap: 12px;
     padding: 0 8px;
     box-sizing: border-box;
     border-radius: 16px;
@@ -2278,6 +2277,41 @@ body.app-bar-mode .mod-placement-badge {
 /* adding a plugin is the constructor's main action, in the middle */
 .mod-app-bar .add {
     display: flex;
+}
+
+/* spaced with margins rather than a gap, which would stay between folded parts */
+.mod-app-bar > * + * {
+    margin-left: 12px;
+}
+
+/* folding down to the add button while a plugin is being added, see js/appbar.js */
+.mod-app-bar > .popup,
+.mod-app-bar > .mode,
+.mod-app-bar > .tools {
+    max-width: 640px;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+.mod-app-bar .add {
+    transition: margin 0.3s ease;
+}
+
+.mod-app-bar.folded > .popup,
+.mod-app-bar.folded > .mode,
+.mod-app-bar.folded > .tools {
+    overflow: hidden;
+}
+
+.mod-app-bar.adding > .popup,
+.mod-app-bar.adding > .mode,
+.mod-app-bar.adding > .tools {
+    max-width: 0;
+    opacity: 0;
+    margin-left: 0;
+}
+
+.mod-app-bar.adding .add {
+    margin-left: 0;
 }
 
 .mod-app-bar.performing .add {
