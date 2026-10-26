@@ -48,7 +48,8 @@ JqueryClass('appBar', {
 
         // A button opening a menu upwards. `sections` are lists of [label, element]
         // pairs, the element being clicked when its label is, each list under its title
-        // if it has one. Any other tap closes the menu.
+        // if it has one. Any other tap closes the menu. Each element keeps its entry,
+        // as data('appBarItem')
         var popups = $()
         var popup = function (name, label, sections) {
             var holder = $('<div class="popup">').addClass(name)
@@ -60,11 +61,12 @@ JqueryClass('appBar', {
                 }
                 var list = $('<ul>').appendTo(column)
                 $.each(section.items, function (j, item) {
-                    $('<li>').text(item[0]).click(function () {
+                    var entry = $('<li>').text(item[0]).click(function () {
                         holder.removeClass('open')
                         item[1].click()
                         return false
                     }).appendTo(list)
+                    item[1].data('appBarItem', entry)
                 })
             })
             $('<div class="toggle">').text(label).click(function () {
@@ -102,6 +104,21 @@ JqueryClass('appBar', {
 
         // the gateway to whatever the hidden bars had and the dock has no room for
         popup('main', 'Menu', options.menu).appendTo(self)
+
+        // CV ports is a mode rather than a place: it shows a box on every plugin's CV
+        // output, which offers it to the bindings. Its entry is ticked while it is on,
+        // and turning it on says so, or that there is no CV output on the board to show.
+        // After the bar's own handler, which switches it
+        options.cvToggle.click(function () {
+            var on = options.cvToggle.hasClass('selected')
+            var entry = options.cvToggle.data('appBarItem')
+            entry && entry.toggleClass('checked', on)
+            if (on && $('.output-cv-checkbox').length) {
+                new Notification('info', "Tick a plugin's CV output to use it in the bindings", 4000)
+            } else if (on) {
+                new Notification('warning', 'No plugin on this pedalboard has CV outputs', 4000)
+            }
+        })
 
         // Edit is the constructor, Live the performance view: two states of one switch.
         // Going from one to the other fades the one out and then the other in: the
