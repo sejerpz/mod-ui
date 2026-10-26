@@ -1299,6 +1299,13 @@ JqueryClass('pedalboard', {
         return element.closest('[mod-instance]').data('gridScale') || 1
     },
 
+    // The scale a w x h plugin is drawn at in a cell: down to fit inside PLACEMENT_PAD
+    // of the cell's edges, never up.
+    cellFitScale: function (w, h) {
+        return Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
+                           (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
+    },
+
     // Puts a plugin in `cell`: scaled down to fit inside PLACEMENT_PAD of the cell's
     // edges, never up, and centered. The scale is a transform from the top left
     // corner, so the plugin's left/top stay its saved position. `persist` saves the
@@ -1307,8 +1314,7 @@ JqueryClass('pedalboard', {
         var self = $(this)
         var w = icon.width()
         var h = icon.height()
-        var s = Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
-                            (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
+        var s = self.pedalboard('cellFitScale', w, h)
         var rect = self.pedalboard('cellRect', cell)
         var x = Math.round(rect.x + (rect.width - w * s) / 2)
         var y = Math.round(rect.y + (rect.height - h * s) / 2)
@@ -1348,8 +1354,7 @@ JqueryClass('pedalboard', {
         if (! cell) {
             var w = icon.width()
             var h = icon.height()
-            var s = Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
-                                (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
+            var s = self.pedalboard('cellFitScale', w, h)
             cell = self.pedalboard('cellAt', parseInt(icon.css('left')) + w * s / 2,
                                              parseInt(icon.css('top')) + h * s / 2)
         }
@@ -1419,7 +1424,8 @@ JqueryClass('pedalboard', {
         })
 
         // The plugin being added waits in the bottom right corner of the board, labelled,
-        // until a cell is chosen. Outside the scaled canvas, so it keeps its size.
+        // until a cell is chosen. Outside the scaled canvas, but drawn the size it will be
+        // in its cell, see sizePlacementBadge.
         var pluginData = element.data('pluginData')
         var badge = $('<div class="mod-placement-badge ignore-arrive">')
         var preview = $('<div class="preview">').appendTo(badge)
@@ -1441,20 +1447,31 @@ JqueryClass('pedalboard', {
                     return
                 }
                 icon.width(w).height(h)
-                var s = Math.min(preview.width() / w, preview.height() / h)
-                icon.css({
-                    transform: 'scale(' + s + ')',
-                    'transform-origin': '0 0',
-                    left: (preview.width() - w * s) / 2,
-                    top: (preview.height() - h * s) / 2,
-                    visibility: 'visible'
-                })
+                icon.css({ 'transform-origin': '0 0', visibility: 'visible' })
+                badge.data('icon', icon)
+                self.pedalboard('sizePlacementBadge')
             }
             settle(0)
         })
 
         grid.data('done', done)
         self.data('placementGrid', grid)
+    },
+
+    // Scales the preview of the plugin waiting to be placed as it will be drawn in a
+    // cell at the board's current zoom.
+    sizePlacementBadge: function () {
+        var self = $(this)
+        var grid = self.data('placementGrid')
+        var icon = grid && grid.data('badge').data('icon')
+        if (! icon) {
+            return
+        }
+        var w = icon.width()
+        var h = icon.height()
+        var s = self.pedalboard('cellFitScale', w, h) * self.data('scale')
+        icon.css('transform', 'scale(' + s + ')')
+        grid.data('badge').find('.preview').css({ width: w * s, height: h * s })
     },
 
     // Whether a plugin picked from the library is waiting to be placed.
@@ -1850,6 +1867,7 @@ JqueryClass('pedalboard', {
                     transform: 'scale(' + value + ')',
                 })
                 self.data('scale', value)
+                self.pedalboard('sizePlacementBadge')
             },
         })
     },
