@@ -1849,7 +1849,9 @@ JqueryClass('pedalboard', {
     // along the cables and level with the middle of the row it would go in. Tapping
     // one puts it there, in a column of its own right after where the cables come from,
     // fed by what fed them and feeding what they fed. The cables of one kind between
-    // the same two make one run, the left and right of a stereo pair together.
+    // the same two make one run, the left and right of a stereo pair together. No point
+    // where a free cell already does the same: put there, the plugin goes between the
+    // same two, see wirePlugin.
     showInsertPoints: function (grid, element, pluginData) {
         var self = $(this)
         var plugins = self.data('plugins')
@@ -1912,8 +1914,29 @@ JqueryClass('pedalboard', {
             return at ? { col: at.col, row: at.row } : { col: 0, row: 0 }
         }
 
+        // whether a plugin put in a free cell would be cabled into `run` anyway
+        var freeCells = grid.find('.mod-placement-cell.free').map(function () {
+            return $(this).data('cell')
+        }).get()
+        var between = function (run) {
+            var source = instanceOf(run.from[0]), target = instanceOf(run.to[0])
+            var fits = function (neighbour, end) {
+                return plugins[end] ? neighbour == end : ! neighbour
+            }
+            for (var i = 0; i < freeCells.length; i++) {
+                if (fits(self.pedalboard('wireNeighbour', null, freeCells[i], 'left', run.type), source) &&
+                    fits(self.pedalboard('wireNeighbour', null, freeCells[i], 'right', run.type), target)) {
+                    return true
+                }
+            }
+            return false
+        }
+
         var size = 36 / scale
         $.each(runs.list, function (key, run) {
+            if (between(run)) {
+                return
+            }
             var sorted = function (ports) {
                 return ports.sort(function (a, b) {
                     return instanceOf(a) == instanceOf(b) && order(a) >= 0 && order(b) >= 0
