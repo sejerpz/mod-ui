@@ -2167,7 +2167,7 @@ body.app-bar-mode {
     touch-action: manipulation;
 }
 
-/* the logo and the title float over the board's top left corner, like the dock */
+/* the title floats over the board's top left corner, like the dock */
 body.app-bar-mode header#pedalboard-actions {
     top: 12px;
     left: 12px;
@@ -2177,9 +2177,12 @@ body.app-bar-mode header#pedalboard-actions {
     line-height: 44px;
     box-sizing: border-box;
     padding-right: 16px;
+    padding-left: 16px;
     border-radius: 16px;
     border: 1px solid rgba(51, 51, 51, 0.6);
     background-color: rgba(17, 17, 17, 0.6);
+    /* the logo moved to the dock's menu */
+    background-image: none;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     pointer-events: none;
 }
@@ -2251,7 +2254,7 @@ body.app-bar-mode .mod-placement-badge {
 }
 
 .mod-app-bar .mode .segment,
-.mod-app-bar .snapshots .toggle,
+.mod-app-bar .popup .toggle,
 .mod-app-bar .save {
     min-width: 64px;
     height: 40px;
@@ -2321,48 +2324,82 @@ body.app-bar-mode .mod-placement-badge {
     border-radius: 8px;
 }
 
-.mod-app-bar .snapshots {
+.mod-app-bar .popup {
     position: relative;
 }
 
-.mod-app-bar .snapshots .toggle {
+.mod-app-bar .popup .toggle {
     border: 1px solid #333;
     border-radius: 8px;
 }
 
-.mod-app-bar .snapshots.open .toggle {
-    background: #883996;
+.mod-app-bar .popup.open .toggle {
+    background-color: #883996;
     border-color: #883996;
 }
 
-.mod-app-bar .snapshots .menu {
+/* the menu carries the logo the title had */
+.mod-app-bar .popup.main .toggle {
+    padding-left: 40px;
+    background-image: url(../img/icons/36/mod.png);
+    background-repeat: no-repeat;
+    background-position: 6px 50%;
+    background-size: 28px;
+}
+
+.mod-app-bar .popup .menu {
     display: none;
     position: absolute;
     bottom: calc(100% + 16px);
     left: 50%;
     transform: translateX(-50%);
-    min-width: 180px;
-    margin: 0;
     padding: 6px 0;
-    list-style: none;
     border-radius: 12px;
     border: 1px solid rgba(51, 51, 51, 0.6);
     background: rgba(17, 17, 17, 0.92);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
 }
 
-.mod-app-bar .snapshots.open .menu {
-    display: block;
+/* the main menu opens from the dock's left end, its sections side by side */
+.mod-app-bar .popup.main .menu {
+    left: -8px;
+    transform: none;
+    padding: 6px;
 }
 
-.mod-app-bar .snapshots .menu li {
+.mod-app-bar .popup.open .menu {
+    display: flex;
+}
+
+.mod-app-bar .popup .section {
+    min-width: 180px;
+}
+
+.mod-app-bar .popup .section .title {
+    margin: 6px 14px 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #883996;
+    color: #aaa;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.mod-app-bar .popup ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.mod-app-bar .popup li {
     height: 44px;
     line-height: 44px;
     padding: 0 20px;
+    border-radius: 8px;
     cursor: pointer;
 }
 
-.mod-app-bar .snapshots .menu li:active {
+.mod-app-bar .popup li:active {
     background: rgba(136, 57, 150, 0.45);
 }
 
