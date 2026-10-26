@@ -2327,7 +2327,9 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.elsewhere > :not(.back),
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
-.mod-app-bar.viewing > :not(.plugin) {
+.mod-app-bar.viewing > :not(.plugin):not(.dialog),
+.mod-app-bar.dialog > .plugin,
+.mod-app-bar:not(.dialog) > .dialog {
     overflow: hidden;
 }
 
@@ -2338,7 +2340,9 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.elsewhere > :not(.back),
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
-.mod-app-bar.viewing > :not(.plugin) {
+.mod-app-bar.viewing > :not(.plugin):not(.dialog),
+.mod-app-bar.dialog > .plugin,
+.mod-app-bar:not(.dialog) > .dialog {
     max-width: 0;
     opacity: 0;
     margin-left: 0;
@@ -2346,8 +2350,25 @@ body.app-bar-mode .mod-placement-badge {
 
 .mod-app-bar.adding .add,
 .mod-app-bar.elsewhere .back,
-.mod-app-bar.viewing .plugin {
+.mod-app-bar.viewing .plugin,
+.mod-app-bar.dialog .dialog {
     margin-left: 0;
+}
+
+/* the way back from the viewed plugin's settings */
+.mod-app-bar > .dialog {
+    max-width: 640px;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+.mod-app-bar > .dialog > div {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 20px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: #883996;
+    cursor: pointer;
 }
 
 /* the way back from the places the menu leads to */
@@ -2499,6 +2520,19 @@ body.app-bar-mode .mod-placement-badge {
 
 /* the dock has the viewed plugin's actions */
 .mod-pedal.mod-viewed .mod-actions {
+    display: none;
+}
+
+/* the viewed plugin's settings take the whole screen above the dock, which has the way
+   back in place of the window's close */
+body.app-bar-mode.plugin-view > .mod-settings .mod-pedal-settings {
+    top: 12px;
+    right: 16px;
+    bottom: 80px;
+    left: 16px;
+}
+
+body.app-bar-mode.plugin-view > .mod-settings .js-close {
     display: none;
 }
 
