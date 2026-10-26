@@ -190,7 +190,8 @@ JqueryClass('effectBox', {
         }).appendTo(header)
         self.prepend(header)
 
-        // the app bar takes it in, see js/appbar.js
+        // the app bar takes it in, see js/appbar.js. It is 'active' while the library is
+        // open or its plugin is being placed
         var tab = $('<div id="plugins-library-tab" class="ignore-arrive">Add plugin +</div>')
         tab.click(function () {
             if (self.data('pedalboard').pedalboard('placing')) {
@@ -236,13 +237,13 @@ JqueryClass('effectBox', {
         // a plugin picked earlier and not placed yet is dropped
         self.data('pedalboard').pedalboard('hidePlacementGrid')
         self.addClass('open')
-        self.data('gridTab').text('Close \u00d7')
+        self.data('gridTab').text('Close \u00d7').addClass('active')
     },
 
     closeLibrary: function () {
         var self = $(this)
         self.removeClass('open')
-        self.data('gridTab').text('Add plugin +')
+        self.data('gridTab').text('Add plugin +').removeClass('active')
     },
 
     fold: function () {
@@ -504,9 +505,9 @@ JqueryClass('effectBox', {
                 var tab = self.data('gridTab')
                 self.effectBox('closeLibrary')
                 // while the plugin is being placed, the tab is how a finger gives up
-                tab.text('Cancel \u00d7')
+                tab.text('Cancel \u00d7').addClass('active')
                 self.data('pedalboard').pedalboard('showPlacementGrid', rendered, function () {
-                    tab.text('Add plugin +')
+                    tab.text('Add plugin +').removeClass('active')
                 })
                 return
             }

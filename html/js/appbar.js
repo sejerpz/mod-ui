@@ -3,8 +3,8 @@
 
 // Grid mode's application bar, a dock floating at the bottom center of the screen,
 // where a thumb reaches on a tablet. It takes the place of the top and bottom bars,
-// which are hidden: the menu, the constructor and performance switch, adding a plugin,
-// the snapshots, the A/B comparer and saving the pedalboard are on it, and the menu
+// which are hidden: the menu, the constructor and performance switch, the snapshots,
+// the A/B comparer, saving the pedalboard and adding a plugin are on it, and the menu
 // leads to everything else the bars had.
 // Every button drives the element that already does the job, so the app's own state
 // and handlers stay where they are.
@@ -87,9 +87,6 @@ JqueryClass('appBar', {
         options.performanceBox.add(options.places).on('windowopen windowclose', showMode)
         showMode()
 
-        // the library's tab, see effectBox's setGridLibrary
-        $('<div class="add">').append(options.addButton).appendTo(self)
-
         var tools = $('<div class="tools">').appendTo(self)
 
         // the header's snapshots menu
@@ -125,6 +122,33 @@ JqueryClass('appBar', {
             attributeFilter: ['class']
         })
         showModified()
+
+        // the library's tab, see effectBox's setGridLibrary, last. While a plugin is
+        // being added it is the way out of it, and the dock folds down to just it. The
+        // folded parts clip what they hold only while folded and folding back, or the
+        // menus opening above them would be cut too
+        $('<div class="add">').append(options.addButton).appendTo(self)
+        var fold = function () {
+            var adding = options.addButton.hasClass('active')
+            if (adding == self.hasClass('adding')) {
+                return
+            }
+            self.toggleClass('adding', adding)
+            if (adding) {
+                popups.removeClass('open')
+                self.addClass('folded')
+            } else {
+                setTimeout(function () {
+                    if (! self.hasClass('adding')) {
+                        self.removeClass('folded')
+                    }
+                }, 300)
+            }
+        }
+        new MutationObserver(fold).observe(options.addButton[0], {
+            attributes: true,
+            attributeFilter: ['class']
+        })
 
         self.appendTo('body')
 
