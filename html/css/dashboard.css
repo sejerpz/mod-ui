@@ -2666,6 +2666,25 @@ body.app-bar-mode .mod-placement-badge {
     color: #888;
 }
 
+/* unplugs the entry under it */
+.mod-plugin-view-side .disconnect {
+    display: inline-block;
+    margin-bottom: 4px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    background: #c0392b;
+    color: #fff;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.mod-plugin-view-side .disconnect:active {
+    background: #e74c3c;
+}
+
 .mod-plugin-view-side .entry {
     margin-bottom: 16px;
     padding: 8px;

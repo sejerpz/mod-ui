@@ -1179,6 +1179,13 @@ JqueryClass('pedalboard', {
         self.data('hmargins', 0)
         self.data('vmargins', top + bottom)
         self.data('coveredBottom', covered || 0)
+        // The board moves by its own pan and zoom, never by scrolling what holds it. That
+        // can still be scrolled from script, by an element brought into view, and the
+        // board and the plugin view's columns would then sit off where they are drawn
+        self.parent().off('scroll.margins').on('scroll.margins', function () {
+            this.scrollLeft = 0
+            this.scrollTop = 0
+        })
         self.pedalboard('fitToWindow')
     },
 
@@ -2468,6 +2475,14 @@ JqueryClass('pedalboard', {
                 $('<div class="none">').text('Not connected').appendTo(column)
             }
             $.each(neighbours[side], function (j, other) {
+                // above each, the way to unplug it: every cable between the two goes,
+                // and it leaves the column as the host confirms them gone
+                $('<div class="disconnect">').text('Disconnect').click(function () {
+                    $.each(other.cables, function (k, cable) {
+                        self.data('portDisconnect')(cable[0], cable[1], function () {})
+                    })
+                    return false
+                }).appendTo(column)
                 var entry = $('<div class="entry">').appendTo(column)
                 if (other.instance) {
                     $('<img>').attr('src', other.thumbnail).appendTo(entry)
@@ -2482,8 +2497,24 @@ JqueryClass('pedalboard', {
         })
     },
 
+    // The side columns again, once the cables have stopped changing: a stereo pair
+    // goes or comes as two
+    refreshPluginView: function () {
+        var self = $(this)
+        if (! self.data('pluginView')) {
+            return
+        }
+        clearTimeout(self.data('pluginViewRefresh'))
+        self.data('pluginViewRefresh', setTimeout(function () {
+            if (self.data('pluginView')) {
+                self.pedalboard('fillPluginView')
+            }
+        }, 50))
+    },
+
     // What a plugin is cabled to: {inputs: [...], outputs: [...]}, each a list of
-    // {instance, label, thumbnail} for plugins and {label} for hardware ports, the
+    // {instance, label, thumbnail} for plugins and {label} for hardware ports, along
+    // with the [from, to] cables between the two in `cables`, the
     // plugins in the order of their cells, column by column, the hardware at the ends
     pluginNeighbours: function (instance) {
         var self = $(this)
@@ -2503,10 +2534,12 @@ JqueryClass('pedalboard', {
                 return
             }
             var plugin = plugins[other]
+            var key, entry
             if (plugin && plugin.data && plugin.data('gui')) {
                 var effect = plugin.data('gui').effect
                 var ver = [effect.builder, effect.microVersion, effect.minorVersion, effect.release].join('_')
-                found[side][other] = {
+                key = other
+                entry = {
                     instance: other,
                     label: effect.label || effect.name,
                     cell: plugin.data('gridCell') || { col: 0, row: 0 },
@@ -2516,9 +2549,11 @@ JqueryClass('pedalboard', {
                 }
             } else {
                 var label = (element.closest('[title]').attr('title') || element.attr('mod-port'))
-                label = label.replace(/^Hardware /, '')
-                found[side][label] = { label: label }
+                key = label.replace(/^Hardware /, '')
+                entry = { label: key }
             }
+            found[side][key] = found[side][key] || $.extend(entry, { cables: [] })
+            found[side][key].cables.push([origin.attr('mod-port'), destination.attr('mod-port')])
         })
         var sorted = function (side, hardwareFirst) {
             var list = $.map(found[side], function (other) { return other })
@@ -4640,6 +4675,7 @@ JqueryClass('pedalboard', {
         var self = $(this)
         var output = jack.data('origin')
         var input = jack.data('destination')
+        self.pedalboard('refreshPluginView')
         // Looked up while the connection is still there, because that is what identifies
         // the pair. A merged stereo cable is painted into one half's canvas, so losing
         // either half leaves the wrong thing on screen - a cable with a leg dangling
@@ -5771,6 +5807,7 @@ JqueryClass('pedalboard', {
     connect: function (jack, input, skipModified) {
         var self = $(this)
         var output = jack.data('origin')
+        self.pedalboard('refreshPluginView')
         if (output == null) {
             console.log("ERROR: The origin for '" + jack.selector + "' is missing")
             return
