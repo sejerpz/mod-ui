@@ -217,10 +217,11 @@ JqueryClass('appBar', {
         })
         // Its settings take the whole screen above the dock, which folds down to the way
         // back to the plugin, in place of the window's own close. Its other windows, like
-        // the info, have the dock slide away. Wherever they were opened from
-        // The plugin and its settings are the two faces of a card: going from one to the
-        // other flips it, the face going away fading out as the other fades in. The
-        // plugin's face is the whole board, under its own scale
+        // the info, have the dock slide away. Wherever they were opened from.
+        // The board and a plugin's settings are the two faces of a card: going from one
+        // to the other flips it, the face going away fading out as the other fades in,
+        // whether the board shows just that plugin or all of them. The board's face is
+        // the whole of it, under its own scale
         var settings = null
         var front = options.pedalboard.parent()
         var FLIP = 350
@@ -268,23 +269,34 @@ JqueryClass('appBar', {
                 tapped = Date.now()
             }
         }
-        $(document).on('windowopen', function (e) {
-            if (! viewed) {
-                return
+        // the window's own close, where it has one, flips back too
+        var closeClicked = function (ev) {
+            if ($(ev.target).closest('.js-close').length) {
+                ev.stopPropagation()
+                closeSettings()
             }
-            if ($(e.target).is('.mod-settings')) {
-                settings = $(e.target)
-                settings.on('pointerdown.appbar', settingsDown).on('pointerup.appbar', settingsUp)
+        }
+        $(document).on('windowopen', function (e) {
+            var target = $(e.target)
+            // the settings of a plugin on the board, not those of the performance view
+            if (target.is('.mod-settings') && target.parent().is('body') &&
+                ! options.performanceBox.is(':visible')) {
+                settings = target
+                settings[0].addEventListener('click', closeClicked, true)
                 settings.removeClass('mod-flip-out').addClass('mod-flip-in')
                 front.removeClass('mod-flip-back').addClass('mod-flip-away')
+            }
+            if (viewed && settings && settings[0] == e.target) {
+                settings.on('pointerdown.appbar', settingsDown).on('pointerup.appbar', settingsUp)
                 setState('dialog', true)
-            } else {
+            } else if (viewed || settings && settings[0] == e.target) {
                 dialogs = dialogs.add(e.target)
                 makeRoom()
             }
         })
         $(document).on('windowclose', function (e) {
             if (settings && settings[0] == e.target) {
+                settings[0].removeEventListener('click', closeClicked, true)
                 settings.off('.appbar').removeClass('mod-flip-in mod-flip-out')
                 settings = null
                 // closed some other way than ours, all at once
