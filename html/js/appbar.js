@@ -16,14 +16,28 @@ JqueryClass('appBar', {
         self.addClass('mod-app-bar')
         $('body').addClass('app-bar-mode')
 
-        // the page itself never zooms: a double tap used to zoom it in with no way back,
-        // since the board takes pinches for its own zoom. Still laid out 980 wide, as
-        // mobile browsers do with no viewport given, which the dock fits in
+        // The page itself never zooms: a double tap used to zoom it in with no way back,
+        // since the board takes pinches for its own zoom. Laid out at least 980 wide, as
+        // mobile browsers do with no viewport given, which the dock fits in: narrower
+        // screens show it smaller, wider ones at their own width rather than enlarged,
+        // which also kept Firefox's touch simulation from landing taps outside the page.
+        // Again whenever the screen turns
         var viewport = $('meta[name=viewport]')
         if (! viewport.length) {
             viewport = $('<meta name="viewport">').appendTo('head')
         }
-        viewport.attr('content', 'width=980, user-scalable=no')
+        var fitViewport = function () {
+            var landscape = window.matchMedia('(orientation: landscape)').matches
+            var across = landscape ? Math.max(screen.width, screen.height)
+                                   : Math.min(screen.width, screen.height)
+            var content = across >= 980 ? 'width=device-width, initial-scale=1, user-scalable=no'
+                                        : 'width=980, user-scalable=no'
+            if (viewport.attr('content') != content) {
+                viewport.attr('content', content)
+            }
+        }
+        fitViewport()
+        $(window).on('orientationchange resize', fitViewport)
 
         // A phone, by the short side of its screen, which the page's 980 wide layout does
         // not change: too small for the action icons above each plugin, see
