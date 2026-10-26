@@ -2325,7 +2325,9 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
 .mod-app-bar.elsewhere > .tools,
-.mod-app-bar.elsewhere > .add {
+.mod-app-bar.elsewhere > .add,
+.mod-app-bar:not(.viewing) > .plugin,
+.mod-app-bar.viewing > :not(.plugin) {
     overflow: hidden;
 }
 
@@ -2334,14 +2336,158 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
 .mod-app-bar.elsewhere > .tools,
-.mod-app-bar.elsewhere > .add {
+.mod-app-bar.elsewhere > .add,
+.mod-app-bar:not(.viewing) > .plugin,
+.mod-app-bar.viewing > :not(.plugin) {
     max-width: 0;
     opacity: 0;
     margin-left: 0;
 }
 
-.mod-app-bar.adding .add {
+.mod-app-bar.adding .add,
+.mod-app-bar.viewing .plugin {
     margin-left: 0;
+}
+
+/* a plugin's actions, while the board shows just it */
+.mod-app-bar > .plugin {
+    display: flex;
+    gap: 12px;
+    max-width: 640px;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+.mod-app-bar .plugin > div {
+    min-width: 64px;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    text-align: center;
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.mod-app-bar .plugin > .board {
+    background: #883996;
+    border-color: #883996;
+}
+
+.mod-app-bar .plugin > .remove {
+    color: #e66;
+}
+
+/* The plugin view, see js/pedalboard.js showPlugin. The backdrop is in the canvas,
+   under the viewed plugin and over the rest of the board, and big enough to cover the
+   screen at any zoom */
+.mod-plugin-view-backdrop {
+    position: absolute;
+    left: -200%;
+    top: -200%;
+    width: 500%;
+    height: 500%;
+    background: #111;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    touch-action: none;
+}
+
+.mod-plugin-view-backdrop.shown {
+    opacity: 0.96;
+}
+
+.mod-plugin-view-side {
+    position: absolute;
+    top: 0;
+    width: 132px;
+    z-index: 1000;
+    box-sizing: border-box;
+    padding: 16px 12px;
+    overflow-y: auto;
+    opacity: 0;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    touch-action: pan-y;
+    color: #ccc;
+    text-align: center;
+    user-select: none;
+}
+
+.mod-plugin-view-side.inputs {
+    left: 0;
+    transform: translateX(-24px);
+}
+
+.mod-plugin-view-side.outputs {
+    right: 0;
+    transform: translateX(24px);
+}
+
+.mod-plugin-view-side.shown {
+    opacity: 1;
+    transform: none;
+}
+
+/* a swipe towards a side with no plugin to go to */
+.mod-plugin-view-side.bump {
+    animation: mod-bump 0.3s ease;
+}
+
+@keyframes mod-bump {
+    0%, 100% { transform: none; }
+    50% { transform: scale(1.06); }
+}
+
+.mod-plugin-view-side .title {
+    margin-bottom: 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+}
+
+.mod-plugin-view-side .entry {
+    margin-bottom: 16px;
+    padding: 8px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+}
+
+.mod-plugin-view-side .entry img {
+    display: block;
+    max-width: 100%;
+    max-height: 90px;
+    margin: 0 auto 6px;
+}
+
+.mod-plugin-view-side .entry .label {
+    font-size: 13px;
+    line-height: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mod-plugin-view-side .entry.hardware {
+    background: none;
+    border: 1px dashed #444;
+    cursor: default;
+    color: #888;
+}
+
+.mod-plugin-view-side .none {
+    font-size: 13px;
+    color: #666;
+}
+
+/* the dock has the viewed plugin's actions */
+.mod-pedal.mod-viewed .mod-actions {
+    display: none;
+}
+
+/* the title makes room for the columns */
+body.app-bar-mode.plugin-view header#pedalboard-actions {
+    opacity: 0;
 }
 
 /* the mode switch slides its highlight across */

@@ -725,7 +725,7 @@ JqueryClass('pedalboard', {
             ev.preventDefault()
         })
         self[0].addEventListener('dblclick', function (ev) {
-            if (ev.handled) return
+            if (ev.handled || self.data('pluginView')) return
             self.pedalboard('zoomOut')
             ev.preventDefault()
         })
@@ -1913,7 +1913,8 @@ JqueryClass('pedalboard', {
     // position of the screen. This way, when user uses the mousewheel to zoom, the
     // mouse will remain in the same point of the pedalboard while scale is changed.
     // Duration is the time in miliseconds used to animate the zoom, default is 400.
-    zoom: function (scale, canvasX, canvasY, screenX, screenY, duration) {
+    // Unless `free`, the view stays inside the canvas.
+    zoom: function (scale, canvasX, canvasY, screenX, screenY, duration, free) {
         var self = $(this)
         self.data('currentZoom', {
             scale: scale,
@@ -1939,10 +1940,12 @@ JqueryClass('pedalboard', {
         var maxOffsetY = -autoOffsetY
         var minOffsetY = -autoOffsetY - self.height() * scale + self.parent().height()
 
-        offsetX = Math.max(minOffsetX, offsetX)
-        offsetX = Math.min(maxOffsetX, offsetX)
-        offsetY = Math.max(minOffsetY, offsetY)
-        offsetY = Math.min(maxOffsetY, offsetY)
+        if (! free) {
+            offsetX = Math.max(minOffsetX, offsetX)
+            offsetX = Math.min(maxOffsetX, offsetX)
+            offsetY = Math.max(minOffsetY, offsetY)
+            offsetY = Math.min(maxOffsetY, offsetY)
+        }
 
         self.data('offsetX', offsetX)
         self.data('offsetY', offsetY)
@@ -2005,6 +2008,283 @@ JqueryClass('pedalboard', {
         var x = plugin.position().left / scale + plugin.width() / 2
         var y = plugin.position().top / scale + plugin.height() / 2
         self.pedalboard('zoomAt', 1, x, y)
+    },
+
+    // Grid mode's plugin view: one plugin as big as the screen allows, the plugins
+    // feeding it in a column on the left and the ones it feeds on the right. Everything
+    // else on the board goes behind a backdrop, inside the canvas so it can stay under
+    // the plugin. A swipe goes along the cables, to a plugin on the left or the right,
+    // a double tap on the plugin opens its settings, one on the backdrop goes back to
+    // the whole board. The app bar shows the plugin's own actions meanwhile, on the
+    // 'pluginview' event.
+    showPlugin: function (instance, duration) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        if (! icon || ! icon.data || ! icon.data('gridSize')) {
+            return
+        }
+        if (duration == null) {
+            duration = 400
+        }
+        var view = self.data('pluginView')
+        if (! view) {
+            view = self.pedalboard('openPluginView')
+        }
+
+        // the plugin left behind stays over the backdrop until the view has moved off it
+        var previous = view.instance && view.instance != instance ? self.data('plugins')[view.instance] : null
+        if (previous && previous.length) {
+            view.from = view.instance
+            setTimeout(function () {
+                if (self.data('pluginView') == view && view.instance != previous.attr('mod-instance')) {
+                    previous.removeClass('mod-viewed')
+                }
+            }, duration)
+        }
+        view.instance = instance
+        var z = self.data('z_index')
+        view.backdrop.css('z-index', z + 1)
+        icon.addClass('mod-viewed').css('z-index', z + 2)
+        self.data('z_index', z + 2)
+
+        self.pedalboard('fillPluginView')
+
+        // as big as it fits between the columns and above the dock, up to twice its own
+        // size, beyond which it only gets blurry
+        var size = icon.data('gridSize')
+        var cellScale = icon.data('gridScale')
+        var room = self.pedalboard('pluginViewRoom')
+        var scale = Math.min(2, room.width / size.width, room.height / size.height) / cellScale
+        var x = parseFloat(icon.css('left')) + size.width * cellScale / 2
+        var y = parseFloat(icon.css('top')) + size.height * cellScale / 2
+        self.pedalboard('zoom', scale, x, y, room.x, room.y, duration, true)
+        self.trigger('pluginview', instance)
+    },
+
+    // Where the viewed plugin goes: the middle of the screen between the side columns,
+    // above the dock, and how much room it has there
+    pluginViewRoom: function () {
+        var self = $(this)
+        var view = self.data('pluginView')
+        var margin = 16
+        var side = view.inputs.outerWidth()
+        var width = self.parent().width()
+        var height = self.parent().height() - (self.data('coveredBottom') || 0)
+        return {
+            x: width / 2,
+            y: height / 2,
+            width: width - 2 * (side + margin),
+            height: height - 2 * margin
+        }
+    },
+
+    openPluginView: function () {
+        var self = $(this)
+        var view = {}
+
+        // A swipe or a double tap. The backdrop handles its own touches: utils/touch.js
+        // would make them a pan of the board
+        var down = null, lastTap = 0
+        var gestures = function (element, onDoubleTap) {
+            element.attr('data-touch-native', '').on('mousedown', function (e) {
+                e.stopPropagation()
+            })
+            var release = function (ev) {
+                if (! down || down.pointerId != ev.pointerId) {
+                    return
+                }
+                var dx = ev.clientX - down.clientX
+                var dy = ev.clientY - down.clientY
+                down = null
+                if (Math.abs(dx) > 50 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+                    lastTap = 0
+                    self.pedalboard('stepPluginView', dx < 0 ? 'outputs' : 'inputs')
+                } else if (onDoubleTap && Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+                    if (Date.now() - lastTap < 350) {
+                        lastTap = 0
+                        onDoubleTap()
+                    } else {
+                        lastTap = Date.now()
+                    }
+                }
+            }
+            element.each(function () {
+                this.addEventListener('pointerdown', function (ev) {
+                    ev.stopPropagation()
+                    // A swipe on the backdrop may well end over the plugin, where a mouse
+                    // would release. Not on the columns, where it would take the taps
+                    // from their entries
+                    if (onDoubleTap) {
+                        this.setPointerCapture(ev.pointerId)
+                    }
+                    down = ev
+                })
+                this.addEventListener('pointerup', release)
+            })
+        }
+
+        view.backdrop = $('<div class="mod-plugin-view-backdrop ignore-arrive">').appendTo(self)
+        gestures(view.backdrop, function () {
+            self.pedalboard('leavePluginView')
+        })
+        view.inputs = $('<div class="mod-plugin-view-side inputs">').appendTo(self.parent())
+        view.outputs = $('<div class="mod-plugin-view-side outputs">').appendTo(self.parent())
+        gestures(view.inputs.add(view.outputs))
+        view.inputs.add(view.outputs).css('bottom', self.data('coveredBottom') || 0)
+
+        // a double tap on the plugin's own background, not on its controls, opens its
+        // settings
+        var tapped = 0
+        view.iconTap = function (ev) {
+            var role = $(ev.target).closest('[mod-role]')
+            if (! role.is('[mod-role=drag-handle]') || $(ev.target).closest('.mod-actions').length) {
+                return
+            }
+            if (Date.now() - tapped < 350) {
+                tapped = 0
+                var icon = self.data('plugins')[view.instance]
+                icon && icon.find('.mod-settings').click()
+            } else {
+                tapped = Date.now()
+            }
+        }
+        self.on('click', '.mod-viewed', view.iconTap)
+
+        self.data('pluginView', view)
+        $('body').addClass('plugin-view')
+        // faded in, as the view moves to the plugin
+        view.backdrop[0].getBoundingClientRect()
+        view.backdrop.add(view.inputs).add(view.outputs).addClass('shown')
+        return view
+    },
+
+    // The plugins (and hardware ports) cabled into the viewed plugin and out of it, in
+    // the side columns. Tapping one goes to it.
+    fillPluginView: function () {
+        var self = $(this)
+        var view = self.data('pluginView')
+        var neighbours = self.pedalboard('pluginNeighbours', view.instance)
+        $.each(['inputs', 'outputs'], function (i, side) {
+            var column = view[side].empty()
+            $('<div class="title">').text(side == 'inputs' ? 'From' : 'To').appendTo(column)
+            if (! neighbours[side].length) {
+                $('<div class="none">').text('Not connected').appendTo(column)
+            }
+            $.each(neighbours[side], function (j, other) {
+                var entry = $('<div class="entry">').appendTo(column)
+                if (other.instance) {
+                    $('<img>').attr('src', other.thumbnail).appendTo(entry)
+                    entry.click(function () {
+                        self.pedalboard('showPlugin', other.instance)
+                    })
+                } else {
+                    entry.addClass('hardware')
+                }
+                $('<div class="label">').text(other.label).appendTo(entry)
+            })
+        })
+    },
+
+    // What a plugin is cabled to: {inputs: [...], outputs: [...]}, each a list of
+    // {instance, label, thumbnail} for plugins and {label} for hardware ports, the
+    // plugins in the order of their cells, column by column, the hardware at the ends
+    pluginNeighbours: function (instance) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var found = { inputs: {}, outputs: {} }
+        var instanceOf = function (port) {
+            return port.substring(0, port.lastIndexOf('/'))
+        }
+        self.data('connectionManager').iterateInstance(instance, function (jack) {
+            var origin = jack.data('origin')
+            var destination = jack.data('destination')
+            var incoming = instanceOf(destination.attr('mod-port')) == instance
+            var side = incoming ? 'inputs' : 'outputs'
+            var element = incoming ? origin : destination
+            var other = instanceOf(element.attr('mod-port'))
+            if (other == instance) {
+                return
+            }
+            var plugin = plugins[other]
+            if (plugin && plugin.data && plugin.data('gui')) {
+                var effect = plugin.data('gui').effect
+                var ver = [effect.builder, effect.microVersion, effect.minorVersion, effect.release].join('_')
+                found[side][other] = {
+                    instance: other,
+                    label: effect.label || effect.name,
+                    cell: plugin.data('gridCell') || { col: 0, row: 0 },
+                    thumbnail: effect.gui && effect.gui.thumbnail
+                             ? '/effect/image/thumbnail.png?uri=' + escape(effect.uri) + '&v=' + ver
+                             : '/resources/pedals/default-thumbnail.png'
+                }
+            } else {
+                var label = (element.closest('[title]').attr('title') || element.attr('mod-port'))
+                label = label.replace(/^Hardware /, '')
+                found[side][label] = { label: label }
+            }
+        })
+        var sorted = function (side, hardwareFirst) {
+            var list = $.map(found[side], function (other) { return other })
+            return list.sort(function (a, b) {
+                if (! a.instance != ! b.instance) {
+                    return (! a.instance) == hardwareFirst ? -1 : 1
+                }
+                if (! a.instance) {
+                    return a.label < b.label ? -1 : 1
+                }
+                return a.cell.col - b.cell.col || a.cell.row - b.cell.row
+            })
+        }
+        return { inputs: sorted('inputs', true), outputs: sorted('outputs', false) }
+    },
+
+    // Goes along the cables to a plugin on one side: back to the one the view came
+    // from if it is there, otherwise to the first one
+    stepPluginView: function (side) {
+        var self = $(this)
+        var view = self.data('pluginView')
+        var targets = $.grep(self.pedalboard('pluginNeighbours', view.instance)[side], function (other) {
+            return !! other.instance
+        })
+        if (! targets.length) {
+            view[side].removeClass('bump')
+            view[side][0].getBoundingClientRect()
+            view[side].addClass('bump')
+            return
+        }
+        var target = targets[0].instance
+        for (var i = 0; i < targets.length; i++) {
+            if (targets[i].instance == view.from) {
+                target = view.from
+            }
+        }
+        self.pedalboard('showPlugin', target)
+    },
+
+    // Back to the whole board, at grid mode's own zoom
+    leavePluginView: function () {
+        var self = $(this)
+        var view = self.data('pluginView')
+        if (! view) {
+            return
+        }
+        self.data('pluginView', null)
+        self.off('click', '.mod-viewed', view.iconTap)
+        $('body').removeClass('plugin-view')
+        var parts = view.backdrop.add(view.inputs).add(view.outputs).removeClass('shown')
+        setTimeout(function () {
+            parts.remove()
+            self.find('.mod-viewed').removeClass('mod-viewed')
+        }, 400)
+        var fit = self.pedalboard('gridFitScale')
+        self.data('gridFit', fit)
+        self.data('minScale', fit)
+        self.pedalboard('zoom', fit, 0, 0, 0, 0, 400)
+        // and the canvas sized for it, should the cells in use have changed meanwhile
+        setTimeout(function () {
+            self.pedalboard('adapt', true)
+        }, 400)
+        self.trigger('pluginview', null)
     },
 
     // Increase zoom level
@@ -2079,6 +2359,11 @@ JqueryClass('pedalboard', {
         var self = $(this)
         if (self.pedalboard('gridMode')) {
             // against the last fit, not the current zoom: a finger may have zoomed in
+            // the plugin view has a zoom of its own, laid out again for a new screen size
+            if (self.data('pluginView')) {
+                self.pedalboard('showPlugin', self.data('pluginView').instance, 0)
+                return
+            }
             var fit = self.pedalboard('gridFitScale')
             if (fit == self.data('gridFit') && ! forcedUpdate) {
                 return
@@ -2495,6 +2780,10 @@ JqueryClass('pedalboard', {
         var obj = {}
         var options = $.extend({
             dragStart: function () {
+                // the viewed plugin stays where it is, its controls get the finger
+                if (self.data('pluginView')) {
+                    return false
+                }
                 self.trigger('pluginDragStart', instance)
                 obj.icon.addClass('dragging')
                 obj.icon.css({'z-index': self.data('z_index')+1})
@@ -2557,7 +2846,11 @@ JqueryClass('pedalboard', {
 
                 // setTimeout avoids cable drawing bug
                 setTimeout(function () {
-                    self.pedalboard('focusPlugin', obj.icon)
+                    if (! self.pedalboard('gridMode')) {
+                        self.pedalboard('focusPlugin', obj.icon)
+                    } else if (! self.data('pluginView')) {
+                        self.pedalboard('showPlugin', instance)
+                    }
                 }, 0)
             },
             change: function (port, value) {
@@ -3268,6 +3561,13 @@ JqueryClass('pedalboard', {
 
             delete plugins[instance]
             delete self.data('selected')[instance]
+
+            var view = self.data('pluginView')
+            if (view && view.instance == instance) {
+                self.pedalboard('leavePluginView')
+            } else if (view) {
+                self.pedalboard('fillPluginView')
+            }
 
             // nothing else asks the canvas to reconsider its size after a removal, and
             // scheduleAdapt debounces, so deleting several plugins recalculates once
