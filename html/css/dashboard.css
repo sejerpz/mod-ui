@@ -2861,6 +2861,13 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     order: 1;
 }
 
+/* a menu entry that is a mode, while it is on */
+.mod-app-bar .popup li.checked::after {
+    content: ' \2713';
+    color: #b86bc6;
+    font-weight: bold;
+}
+
 /* the A/B comparer's one button, see js/appbar.js: on black with nothing to compare
    with, on grey on either A or B. Its double tap opens the whole comparer above it */
 .mod-app-bar .popup.ab .toggle {
