@@ -697,6 +697,60 @@ JqueryClass('pedalboard', {
             self.pedalboard('zoomOut')
             ev.preventDefault()
         })
+
+        // Everywhere else a pinch is two touch pointers. Safari has the gesture events
+        // above and would zoom twice. One finger is a pan, which utils/touch.js gets to
+        // the mousedown handler as if it were a mouse
+        self.attr('data-touch-mouse', '')
+        if ('ongesturestart' in window || ! window.PointerEvent) {
+            return
+        }
+        var fingers = {}
+        var pinch = null
+        var spread = function () {
+            var ids = Object.keys(fingers)
+            var a = fingers[ids[0]], b = fingers[ids[1]]
+            return {
+                distance: Math.max(1, Math.sqrt(Math.pow(a.pageX - b.pageX, 2) + Math.pow(a.pageY - b.pageY, 2))),
+                pageX: (a.pageX + b.pageX) / 2,
+                pageY: (a.pageY + b.pageY) / 2
+            }
+        }
+        self[0].addEventListener('pointerdown', function (ev) {
+            if (ev.pointerType !== 'touch') return
+            fingers[ev.pointerId] = { pageX: ev.pageX, pageY: ev.pageY }
+            if (Object.keys(fingers).length != 2) {
+                pinch = null
+                return
+            }
+            var s = spread()
+            var scale = self.data('scale')
+            pinch = {
+                scale: scale,
+                distance: s.distance,
+                canvasX: (s.pageX - self.offset().left) / scale,
+                canvasY: (s.pageY - self.offset().top) / scale
+            }
+        }, true)
+        self[0].addEventListener('pointermove', function (ev) {
+            if (! fingers[ev.pointerId]) return
+            fingers[ev.pointerId] = { pageX: ev.pageX, pageY: ev.pageY }
+            if (! pinch) return
+            var s = spread()
+            var newScale = pinch.scale * s.distance / pinch.distance
+            newScale = Math.min(self.data('maxScale'), newScale)
+            newScale = Math.max(self.data('minScale'), newScale)
+            self.pedalboard('zoom', newScale, pinch.canvasX, pinch.canvasY,
+                            s.pageX - self.parent().offset().left,
+                            s.pageY - self.parent().offset().top, 0)
+        }, true)
+        var lift = function (ev) {
+            delete fingers[ev.pointerId]
+            pinch = null
+        }
+        // on the document, a finger lifted off the board must still be forgotten
+        document.addEventListener('pointerup', lift, true)
+        document.addEventListener('pointercancel', lift, true)
     },
 
     // Does anything between a wheel event's target and the pedalboard want the wheel
