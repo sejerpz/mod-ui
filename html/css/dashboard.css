@@ -2817,3 +2817,46 @@ body.app-bar-mode #performance.leaving {
     border-radius: 50%;
     background: #883996;
 }
+
+/* The plugin info where the screen is too narrow for the plugin and its description
+   side by side, as on a phone, where the page is 980 wide. Rather than the plugin on
+   top of the description, pushing it off the screen, the description starts at the top
+   over a smaller, see-through plugin in the corner */
+@media (max-width: 991px) {
+    .plugin-info .row-fluid > .span10 {
+        position: relative;
+    }
+
+    .plugin-info figure.screenshot {
+        position: absolute;
+        top: 0;
+        right: 0;
+        z-index: 0 !important;
+        transform: scale(0.7);
+        transform-origin: top right;
+        opacity: 0.3;
+        pointer-events: none;
+    }
+
+    .plugin-info .plugin-description {
+        z-index: 1;
+        padding-left: 15px;
+        background: none;
+    }
+
+    /* over the description, which now starts beside it */
+    .plugin-info .row-fluid > span.js-close {
+        position: relative;
+        z-index: 2;
+    }
+}
+
+/* the viewed plugin's info: the dock has the way back, see js/appbar.js, and the end of
+   the info scrolls up from under it */
+body.app-bar-mode.plugin-view .plugin-info span.js-close {
+    display: none;
+}
+
+body.app-bar-mode.plugin-view .plugin-info .box {
+    margin-bottom: 96px;
+}

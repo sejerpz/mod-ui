@@ -254,14 +254,14 @@ JqueryClass('appBar', {
             viewed = instance
             setState('viewing', !! instance)
         })
-        // Its settings take the whole screen above the dock, which folds down to the way
-        // back to the plugin, in place of the window's own close. Its other windows, like
-        // the info, have the dock slide away. Wherever they were opened from.
+        // Its settings and its info take the whole screen above the dock, which folds
+        // down to the way back to the plugin, in place of the windows' own close. Its
+        // other windows have the dock slide away. Wherever they were opened from.
         // The board and a plugin's settings are the two faces of a card: going from one
         // to the other flips it, the face going away fading out as the other fades in,
         // whether the board shows just that plugin or all of them. The board's face is
         // the whole of it, under its own scale
-        var settings = null
+        var settings = null, info = null
         var front = options.pedalboard.parent()
         var FLIP = 350
         var flipBack = function () {
@@ -284,7 +284,13 @@ JqueryClass('appBar', {
             }, FLIP)
         }
         var dialog = $('<div class="dialog">').appendTo(self)
-        $('<div>').text('‹ Back').click(closeSettings).appendTo(dialog)
+        $('<div>').text('‹ Back').click(function () {
+            if (settings) {
+                closeSettings()
+            } else if (info) {
+                info.window('close')
+            }
+        }).appendTo(dialog)
         // A double tap on the settings' background goes back too: not on a control,
         // nor where a finger scrolls
         var down = null, tapped = 0
@@ -328,6 +334,9 @@ JqueryClass('appBar', {
             if (viewed && settings && settings[0] == e.target) {
                 settings.on('pointerdown.appbar', settingsDown).on('pointerup.appbar', settingsUp)
                 setState('dialog', true)
+            } else if (viewed && target.is('.plugin-info')) {
+                info = target
+                setState('dialog', true)
             } else if (viewed || settings && settings[0] == e.target) {
                 dialogs = dialogs.add(e.target)
                 makeRoom()
@@ -340,6 +349,10 @@ JqueryClass('appBar', {
                 settings = null
                 // closed some other way than ours, all at once
                 flipBack()
+                setState('dialog', false)
+            }
+            if (info && info[0] == e.target) {
+                info = null
                 setState('dialog', false)
             }
             dialogs = dialogs.not(e.target)
