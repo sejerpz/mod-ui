@@ -77,7 +77,7 @@
     right: 16px;
     bottom: 16px;
     z-index: 8;
-    width: 150px;
+    min-width: 120px;
     padding: 10px;
     border-radius: 8px;
     border: 2px solid #883996;
@@ -89,7 +89,7 @@
 
 .mod-placement-badge .preview {
     position: relative;
-    height: 160px;
+    margin: 0 auto;
     /* or the plugin's own absolutely placed body shifts to the middle of the icon */
     text-align: left;
 }
