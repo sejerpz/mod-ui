@@ -84,7 +84,7 @@ $.ui.intersect = function(draggable, droppable, toleranceMode) {
 var PLACEMENT_CELL = { width: 420, height: 620 }
 var PLACEMENT_PAD = 20
 // How big a plugin is drawn in a cell, against the biggest that fits it
-var PLACEMENT_ICON_SCALE = 0.65
+var PLACEMENT_ICON_SCALE = 0.75
 // How big the plugin waiting to be placed is drawn, against its size in a cell
 var PLACEMENT_BADGE_SCALE = 0.5
 
