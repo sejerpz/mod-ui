@@ -2014,6 +2014,7 @@ header#pedalboard-actions button.js-device:hover {
 }
 
 #plugins-library.grid-library .grid-library-header {
+    order: -1;
     display: flex;
     align-items: center;
     flex: none;
@@ -2065,11 +2066,10 @@ header#pedalboard-actions button.js-device:hover {
     overflow: visible;
 }
 
-/* the category tabs, big enough for a finger, in a bar fixed at the bottom where the
-   thumbs are, scrolling sideways when it does not fit. Set apart from the main menu
-   right below it, so a tap does not land on the wrong bar */
+/* the category tabs, big enough for a finger, in a bar right under the title, above
+   the list, scrolling sideways when it does not fit. The dock has the bottom */
 #plugins-library.grid-library ul.js-category-tabs {
-    order: 2;
+    order: 0;
     flex: none;
     margin: 0;
     padding: 0 16px;
@@ -2078,8 +2078,8 @@ header#pedalboard-actions button.js-device:hover {
     overflow-y: hidden;
     touch-action: pan-x;
     background: #262626;
-    border-top: 1px solid #444;
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+    border-bottom: 1px solid #444;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     scrollbar-width: none;
 }
 
@@ -2092,18 +2092,18 @@ header#pedalboard-actions button.js-device:hover {
 #plugins-library.grid-library ul.js-category-tabs li.selected {
     flex: none;
     margin: 0;
-    padding: 11px 16px 14px;
+    padding: 14px 16px 11px;
     font-size: 14px;
     white-space: nowrap;
     background: none;
-    border-top: 3px solid transparent;
-    border-bottom: 0;
+    border-top: 0;
+    border-bottom: 3px solid transparent;
     transition: none;
 }
 
 #plugins-library.grid-library ul.js-category-tabs li.selected {
     color: #fff;
-    border-top-color: #883996;
+    border-bottom-color: #883996;
 }
 
 /* the bar drops it on narrow screens for lack of room, this row scrolls instead */
