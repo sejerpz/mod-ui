@@ -85,6 +85,9 @@ var PLACEMENT_CELL = { width: 420, height: 620 }
 var PLACEMENT_PAD = 20
 // How big a plugin is drawn in a cell, against the biggest that fits it
 var PLACEMENT_ICON_SCALE = 0.75
+// How much of a cell grid mode's zoom leaves past the cells in use, to the right and
+// below: room to grow the board into, without a whole empty row and column
+var PLACEMENT_SPARE = 0.3
 // How big the plugin waiting to be placed is drawn, against its size in a cell
 var PLACEMENT_BADGE_SCALE = 0.5
 
@@ -1161,12 +1164,17 @@ JqueryClass('pedalboard', {
     },
 
     // Resize pedalboard size to fit whole window
-    // Gives the board the window's height less `top` and `bottom` pixels, for when the
-    // bars around it are not the ones its css was laid out for, see js/appbar.js
-    setMargins: function (top, bottom) {
+    // Gives the board the window's whole width and its height less `top` and `bottom`
+    // pixels, for when the bars around it are not the ones its css was laid out for, see
+    // js/appbar.js
+    // `covered` is how much of its bottom is under something floating over it, which
+    // grid mode's zoom keeps the cells clear of.
+    setMargins: function (top, bottom, covered) {
         var self = $(this)
-        self.parent().css('top', top)
+        self.parent().css({ top: top, left: 0 })
+        self.data('hmargins', 0)
         self.data('vmargins', top + bottom)
+        self.data('coveredBottom', covered || 0)
         self.pedalboard('fitToWindow')
     },
 
@@ -1345,6 +1353,8 @@ JqueryClass('pedalboard', {
             self.data('pluginMove')(instance, x, y)
         }
         self.pedalboard('drawPluginJacks', icon)
+        // the cells in use may have grown or shrunk, and the zoom with them
+        self.pedalboard('scheduleAdapt', false)
     },
 
     // Lays out a plugin that just arrived on the board. Into `cell` when it was added
@@ -1399,8 +1409,10 @@ JqueryClass('pedalboard', {
     // `except` is an instance whose own cell counts as free.
     buildGrid: function (except) {
         var self = $(this)
-        var cols = Math.floor(self.width() / PLACEMENT_CELL.width)
-        var rows = Math.floor(self.height() / PLACEMENT_CELL.height)
+        // the cells the canvas only partly shows too: the spare room the zoom leaves past
+        // the last row and column is where the board grows
+        var cols = Math.ceil(self.width() / PLACEMENT_CELL.width)
+        var rows = Math.ceil(self.height() / PLACEMENT_CELL.height)
         var grid = $('<div class="mod-placement-grid ignore-arrive">')
         grid.css({
             width: cols * PLACEMENT_CELL.width,
@@ -1980,9 +1992,39 @@ JqueryClass('pedalboard', {
         }
     },
 
+    // Grid mode's zoom: the cells in use, and PLACEMENT_SPARE of a cell to the right and
+    // below them, as big as they fit the screen, never past the plugins' own size. The
+    // canvas is then the screen at that zoom, so it starts at the cells' origin.
+    gridFitScale: function () {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var cols = 1, rows = 1
+        for (var instance in plugins) {
+            var cell = plugins[instance].data && plugins[instance].data('gridCell')
+            if (cell) {
+                cols = Math.max(cols, cell.col + 1)
+                rows = Math.max(rows, cell.row + 1)
+            }
+        }
+        var width = self.parent().width()
+        var height = self.parent().height() - (self.data('coveredBottom') || 0)
+        return Math.min(1, width / ((cols + PLACEMENT_SPARE) * PLACEMENT_CELL.width),
+                           height / ((rows + PLACEMENT_SPARE) * PLACEMENT_CELL.height))
+    },
+
     // Enlarge the pedalboard to a minimum size capable of accommodating all plugins.
     adapt: function (forcedUpdate) {
         var self = $(this)
+        if (self.pedalboard('gridMode')) {
+            // against the last fit, not the current zoom: a finger may have zoomed in
+            var fit = self.pedalboard('gridFitScale')
+            if (fit == self.data('gridFit') && ! forcedUpdate) {
+                return
+            }
+            self.data('gridFit', fit)
+            self.pedalboard('scaleCanvas', fit, self.data('skipAnimations') || forcedUpdate ? 0 : 400, true)
+            return
+        }
         // First, get the minmum bounding rectangle,
         // given by minX, maxX, minY and maxY
         var minX, maxX, minY, maxY, padX, padY, w, h, x, y, plugin, pos
@@ -2134,9 +2176,16 @@ JqueryClass('pedalboard', {
             self.data('pluginMove')(instance, x, y)
         }
 
+        self.pedalboard('scaleCanvas', self.parent().width() / w, time, forcedUpdate)
+    },
+
+    // Zooms to `newScale` with the canvas just covering the screen, over `time` ms, and
+    // makes it the farthest zoom out.
+    scaleCanvas: function (newScale, time, forcedUpdate) {
+        var self = $(this)
+        var scale = self.data('scale')
         var viewWidth = self.parent().width()
         var viewHeight = self.parent().height()
-        var newScale = viewWidth / w
 
         self.data('minScale', newScale)
 
