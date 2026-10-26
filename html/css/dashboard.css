@@ -2307,8 +2307,8 @@ body.app-bar-mode .mod-placement-badge {
 }
 
 /* The dock's states fold parts of it away, see js/appbar.js: down to the add button
-   while a plugin is being added, without it while performing, to the menu and the
-   mode switch elsewhere. A part folds by animating its width away, so the dock
+   while a plugin is being added, without it while performing, to the way back to the
+   board elsewhere, to the plugin's actions while viewing one. A part folds by animating its width away, so the dock
    changes size smoothly whatever the change */
 .mod-app-bar > .popup,
 .mod-app-bar > .mode,
@@ -2324,8 +2324,8 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .mode,
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
-.mod-app-bar.elsewhere > .tools,
-.mod-app-bar.elsewhere > .add,
+.mod-app-bar.elsewhere > :not(.back),
+.mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
 .mod-app-bar.viewing > :not(.plugin) {
     overflow: hidden;
@@ -2335,8 +2335,8 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .mode,
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
-.mod-app-bar.elsewhere > .tools,
-.mod-app-bar.elsewhere > .add,
+.mod-app-bar.elsewhere > :not(.back),
+.mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
 .mod-app-bar.viewing > :not(.plugin) {
     max-width: 0;
@@ -2345,8 +2345,25 @@ body.app-bar-mode .mod-placement-badge {
 }
 
 .mod-app-bar.adding .add,
+.mod-app-bar.elsewhere .back,
 .mod-app-bar.viewing .plugin {
     margin-left: 0;
+}
+
+/* the way back from the places the menu leads to */
+.mod-app-bar > .back {
+    max-width: 640px;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+.mod-app-bar > .back > div {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 20px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: #883996;
+    cursor: pointer;
 }
 
 /* a plugin's actions, while the board shows just it */
