@@ -2392,8 +2392,8 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
 .mod-app-bar.performing > .popup,
-.mod-app-bar.performing > .tools,
 .mod-app-bar.arranging > .mode,
+.mod-app-bar.arranging > .tools,
 .mod-app-bar:not(.performing) > .perf,
 .mod-app-bar.elsewhere > :not(.back),
 .mod-app-bar:not(.elsewhere) > .back,
@@ -2409,8 +2409,8 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.adding > .tools,
 .mod-app-bar.performing > .add,
 .mod-app-bar.performing > .popup,
-.mod-app-bar.performing > .tools,
 .mod-app-bar.arranging > .mode,
+.mod-app-bar.arranging > .tools,
 .mod-app-bar:not(.performing) > .perf,
 .mod-app-bar.elsewhere > :not(.back),
 .mod-app-bar:not(.elsewhere) > .back,
@@ -2849,6 +2849,38 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar .popup.open .toggle {
     background-color: #883996;
     border-color: #883996;
+}
+
+/* performing, of the board's tools only the A/B comparer stays, before the
+   performance view's own actions */
+.mod-app-bar.performing .tools > :not(.ab) {
+    display: none;
+}
+
+.mod-app-bar.performing > .perf {
+    order: 1;
+}
+
+/* the A/B comparer's one button, see js/appbar.js: on black with nothing to compare
+   with, on grey on either A or B. Its double tap opens the whole comparer above it */
+.mod-app-bar .popup.ab .toggle {
+    min-width: 56px;
+    font-weight: bold;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+.mod-app-bar .popup.ab .toggle.compare-none {
+    background-color: #000;
+}
+
+.mod-app-bar .popup.ab .toggle.compare-a,
+.mod-app-bar .popup.ab .toggle.compare-b {
+    background-color: #333;
+    border-color: #555;
+}
+
+.mod-app-bar .popup.ab .menu {
+    padding: 6px;
 }
 
 /* the menu carries the logo the title had */
