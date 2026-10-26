@@ -46,7 +46,7 @@
 }
 
 .mod-placement-cell.free:active {
-    background-color: rgba(135, 76, 224, 0.45);
+    background-color: rgba(136, 57, 150, 0.45);
 }
 
 /* a big see-through + on every free cell, an arrow into a tray instead while a plugin
@@ -79,8 +79,8 @@
 .mod-placement-target {
     position: absolute;
     box-sizing: border-box;
-    border: 8px solid rgba(135, 76, 224, 0.9);
-    background-color: rgba(135, 76, 224, 0.2);
+    border: 8px solid rgba(136, 57, 150, 0.9);
+    background-color: rgba(136, 57, 150, 0.2);
 }
 
 .mod-placement-target.blocked {
