@@ -62,13 +62,46 @@ JqueryClass('appBar', {
             })
         })
 
+        // The dock's states, which fold parts of it away, see dashboard.css: adding a
+        // plugin, performing, elsewhere. It changes size by animating those parts in and
+        // out, which clip what they hold for as long as they move: not longer, or the
+        // menus opening above them would be cut too.
+        var moving = null
+        var setState = function (name, on) {
+            if (self.hasClass(name) == on) {
+                return
+            }
+            popups.removeClass('open')
+            self.addClass('folded').toggleClass(name, on)
+            clearTimeout(moving)
+            moving = setTimeout(function () {
+                self.removeClass('folded')
+            }, 300)
+        }
+
         // the gateway to whatever the hidden bars had and the dock has no room for
         popup('main', 'Menu', options.menu).appendTo(self)
 
-        // Edit is the constructor, Live the performance view: two states of one switch
+        // Edit is the constructor, Live the performance view: two states of one switch.
+        // The performance view fades in as it opens, and out before it closes when Edit
+        // closes it
         var mode = $('<div class="mode">').appendTo(self)
         var edit = $('<div class="segment">').text('Edit').click(function () {
-            options.constructorTrigger.click()
+            var view = options.performanceBox
+            if (! view.is(':visible') || options.places.filter(':visible').length) {
+                options.constructorTrigger.click()
+                return
+            }
+            if (view.hasClass('leaving')) {
+                return
+            }
+            edit.addClass('selected')
+            live.removeClass('selected')
+            view.addClass('leaving')
+            setTimeout(function () {
+                view.removeClass('leaving')
+                options.constructorTrigger.click()
+            }, 250)
         }).appendTo(mode)
         var live = $('<div class="segment">').text('Live').click(function () {
             options.performanceTrigger.click()
@@ -81,10 +114,15 @@ JqueryClass('appBar', {
             var performing = ! elsewhere && options.performanceBox.is(':visible')
             edit.toggleClass('selected', ! elsewhere && ! performing)
             live.toggleClass('selected', performing)
-            self.toggleClass('performing', performing)
-            self.toggleClass('elsewhere', elsewhere)
+            setState('performing', performing)
+            setState('elsewhere', elsewhere)
         }
         options.performanceBox.add(options.places).on('windowopen windowclose', showMode)
+        options.performanceBox.on('windowopen', function () {
+            var view = options.performanceBox.removeClass('entering')
+            view[0].getBoundingClientRect()
+            view.addClass('entering')
+        })
         showMode()
 
         var tools = $('<div class="tools">').appendTo(self)
@@ -124,26 +162,10 @@ JqueryClass('appBar', {
         showModified()
 
         // the library's tab, see effectBox's setGridLibrary, last. While a plugin is
-        // being added it is the way out of it, and the dock folds down to just it. The
-        // folded parts clip what they hold only while folded and folding back, or the
-        // menus opening above them would be cut too
+        // being added it is the way out of it, and the dock folds down to just it
         $('<div class="add">').append(options.addButton).appendTo(self)
         var fold = function () {
-            var adding = options.addButton.hasClass('active')
-            if (adding == self.hasClass('adding')) {
-                return
-            }
-            self.toggleClass('adding', adding)
-            if (adding) {
-                popups.removeClass('open')
-                self.addClass('folded')
-            } else {
-                setTimeout(function () {
-                    if (! self.hasClass('adding')) {
-                        self.removeClass('folded')
-                    }
-                }, 300)
-            }
+            setState('adding', options.addButton.hasClass('active'))
         }
         new MutationObserver(fold).observe(options.addButton[0], {
             attributes: true,

@@ -2296,27 +2296,35 @@ body.app-bar-mode .mod-placement-badge {
     margin-left: 12px;
 }
 
-/* folding down to the add button while a plugin is being added, see js/appbar.js */
+/* The dock's states fold parts of it away, see js/appbar.js: down to the add button
+   while a plugin is being added, without it while performing, to the menu and the
+   mode switch elsewhere. A part folds by animating its width away, so the dock
+   changes size smoothly whatever the change */
 .mod-app-bar > .popup,
 .mod-app-bar > .mode,
-.mod-app-bar > .tools {
+.mod-app-bar > .tools,
+.mod-app-bar > .add {
     max-width: 640px;
     transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
 }
 
-.mod-app-bar .add {
-    transition: margin 0.3s ease;
-}
-
-.mod-app-bar.folded > .popup,
-.mod-app-bar.folded > .mode,
-.mod-app-bar.folded > .tools {
+/* while it is moving, and for good once folded */
+.mod-app-bar.folded > *,
+.mod-app-bar.adding > .popup,
+.mod-app-bar.adding > .mode,
+.mod-app-bar.adding > .tools,
+.mod-app-bar.performing > .add,
+.mod-app-bar.elsewhere > .tools,
+.mod-app-bar.elsewhere > .add {
     overflow: hidden;
 }
 
 .mod-app-bar.adding > .popup,
 .mod-app-bar.adding > .mode,
-.mod-app-bar.adding > .tools {
+.mod-app-bar.adding > .tools,
+.mod-app-bar.performing > .add,
+.mod-app-bar.elsewhere > .tools,
+.mod-app-bar.elsewhere > .add {
     max-width: 0;
     opacity: 0;
     margin-left: 0;
@@ -2326,13 +2334,28 @@ body.app-bar-mode .mod-placement-badge {
     margin-left: 0;
 }
 
-.mod-app-bar.performing .add {
-    display: none;
+/* the mode switch slides its highlight across */
+.mod-app-bar .mode .segment {
+    transition: background-color 0.25s ease;
 }
 
-.mod-app-bar.elsewhere .add,
-.mod-app-bar.elsewhere .tools {
-    display: none;
+/* the switch between the board and the performance view, see js/appbar.js */
+body.app-bar-mode #performance.entering {
+    animation: mod-view-in 0.3s ease;
+}
+
+body.app-bar-mode #performance.leaving {
+    animation: mod-view-out 0.25s ease forwards;
+}
+
+@keyframes mod-view-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes mod-view-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }
 
 #plugins-library-tab {
