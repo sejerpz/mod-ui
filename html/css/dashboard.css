@@ -2012,7 +2012,7 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
 
 
 /* grid mode's plugin library, see setGridLibrary in js/effects.js. Slid out of sight
-   below the bottom menu until the "Add plugin +" tab opens it up to the title bar */
+   below the bottom menu until the "Add Plugin" tab opens it up to the title bar */
 #plugins-library.grid-library {
     top: 45px;
     bottom: 45px;
@@ -2061,6 +2061,11 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     font-size: 32px;
     line-height: 32px;
     padding: 0 6px 0 18px;
+}
+
+/* with the dock, which has the way back, as everywhere else */
+body.app-bar-mode #plugins-library.grid-library .grid-library-header .close {
+    display: none;
 }
 
 /* the search box, a window of its own in the bar, always open here */
@@ -2795,6 +2800,18 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 /* the mode switch slides its highlight across */
 .mod-app-bar .mode .segment {
     transition: background-color 0.25s ease;
+}
+
+/* "Add Plugin", with a white disc behind it whose + shows the purple through. Not
+   while it is the way out of adding, as Close or Cancel */
+#plugins-library-tab:not(.active)::after {
+    content: '';
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    margin-left: 8px;
+    vertical-align: -3px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' fill-rule='evenodd' d='M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20ZM8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 #plugins-library-tab {
