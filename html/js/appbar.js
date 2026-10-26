@@ -215,14 +215,31 @@ JqueryClass('appBar', {
             viewed = instance
             setState('viewing', !! instance)
         })
-        // its settings and info, wherever they were opened from
+        // Its settings take the whole screen above the dock, which folds down to the way
+        // back to the plugin, in place of the window's own close. Its other windows, like
+        // the info, have the dock slide away. Wherever they were opened from
+        var settings = null
+        var dialog = $('<div class="dialog">').appendTo(self)
+        $('<div>').text('‹ Back').click(function () {
+            settings && settings.window('close')
+        }).appendTo(dialog)
         $(document).on('windowopen', function (e) {
-            if (viewed) {
+            if (! viewed) {
+                return
+            }
+            if ($(e.target).is('.mod-settings')) {
+                settings = $(e.target)
+                setState('dialog', true)
+            } else {
                 dialogs = dialogs.add(e.target)
                 makeRoom()
             }
         })
         $(document).on('windowclose', function (e) {
+            if (settings && settings[0] == e.target) {
+                settings = null
+                setState('dialog', false)
+            }
             dialogs = dialogs.not(e.target)
             makeRoom()
         })
