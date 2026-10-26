@@ -3234,6 +3234,20 @@ JqueryClass('pedalboard', {
                 self.pedalboard('adapt', false)
             },
             click: function (event) {
+                // a cable being made by taps goes into the plugin tapped anywhere but on
+                // a port, which has its own tap, see connectToPlugin
+                var connection = self.data('ongoingConnection')
+                if (connection && ! $(event.target).closest('[mod-port]').length) {
+                    self.pedalboard('connectToPlugin', connection.jack, instance)
+                    return
+                }
+                // in grid mode, a tap on its background by its outputs starts a cable from
+                // them, see connectFromPlugin, and further in shows just the plugin
+                if (! connection && self.pedalboard('gridMode') && ! self.data('pluginView') &&
+                    $(event.target).hasClass('mod-drag-handle') &&
+                    self.pedalboard('connectFromPlugin', instance, event)) {
+                    return
+                }
                 if (event.shiftKey) {
                     // A port has its own shift-click, which toggles its vu meter, and the
                     // ports sit inside the plugin, so the click reaches here too on its
@@ -5897,6 +5911,64 @@ JqueryClass('pedalboard', {
         self.pedalboard('highlightInputs', true, jack)
     },
 
+    // A tap on a plugin within GRID_CABLE_EDGE of its right side, where its outputs are,
+    // starts a cable from the first of them with nothing connected, or the first of them
+    // if every one is. Whether it did.
+    connectFromPlugin: function (instance, event) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        var rect = icon[0].getBoundingClientRect()
+        if (event.clientX < rect.right - Math.max(rect.width * GRID_CABLE_EDGE, 24)) {
+            return false
+        }
+        var origIndex = self.data('connectionManager').origIndex
+        var outputs = []
+        $.each(['audio', 'midi', 'cv'], function (i, type) {
+            outputs = outputs.concat(self.pedalboard('wirePorts', instance, type).output)
+        })
+        if (! outputs.length) {
+            return false
+        }
+        var free = $.grep(outputs, function (port) {
+            return ! Object.keys(origIndex[port] || {}).length
+        })
+        self.pedalboard('startConnection', self.find('[mod-port="' + (free[0] || outputs[0]) + '"]'))
+        return true
+    },
+
+    // Ends the cable being made from `jack` in `instance`, in the first of its inputs of
+    // the cable's kind that nothing of the cable's own plugin goes into yet. Into the
+    // plugin it comes from it does not go, and with no such input it says so
+    connectToPlugin: function (jack, instance) {
+        var self = $(this)
+        var output = jack.data('origin')
+        var port = output.attr('mod-port')
+        var source = port.substring(0, port.lastIndexOf('/'))
+        if (source == instance) {
+            return
+        }
+        var type = output.data('portType')
+        var destIndex = self.data('connectionManager').destIndex
+        var inputs = self.pedalboard('wirePorts', instance, type).input
+        for (var i = 0; i < inputs.length; i++) {
+            var fed = $.grep(Object.keys(destIndex[inputs[i]] || {}), function (from) {
+                return from.lastIndexOf(source + '/', 0) == 0
+            })
+            if (! fed.length) {
+                self.pedalboard('do_connect', jack, self.find('[mod-port="' + inputs[i] + '"]'))
+                return
+            }
+        }
+        var name = function (instance) {
+            var plugin = self.data('plugins')[instance]
+            var gui = plugin && plugin.data && plugin.data('gui')
+            return gui ? (gui.label || gui.effect.label || gui.effect.name) : instance
+        }
+        new Notification('warning', inputs.length
+                                    ? 'Every ' + type + ' input of ' + name(instance) + ' already comes from ' + name(source)
+                                    : name(instance) + ' has no ' + type + ' input', 3000)
+    },
+
     finishConnection: function () {
         var self = $(this)
         var connection = self.data('ongoingConnection')
@@ -6219,6 +6291,10 @@ JqueryClass('pedalboard', {
 // How far a teleport's stub runs from its port before it meets its box. Long enough to
 // read as a cable going somewhere, short enough that it is not the thing you notice.
 var TELEPORT_STUB = 44
+
+// How much of a plugin's width, from its right side, starts a cable from its outputs
+// when tapped in grid mode, rather than showing just the plugin. See connectFromPlugin.
+var GRID_CABLE_EDGE = 0.2
 
 // The key that splits a cable into a teleport, and joins it back up. A single lower-case
 // letter, matched case-insensitively with no modifier held. Named so a preference, if one

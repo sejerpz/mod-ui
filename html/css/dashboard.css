@@ -3097,3 +3097,64 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box .advanced-container {
     min-height: 0;
     overflow-y: auto;
 }
+
+/* Grid mode's cabling by touch: a tap on an output starts a cable, a tap on an input
+   ends it. Drawn at the board's zoom, the ports are a small target for a finger, so
+   each answers a tap some way around it, out into the gap beside its plugin */
+body.app-bar-mode .mod-pedal .mod-output::after,
+body.app-bar-mode .mod-pedal .mod-input::after {
+    content: '';
+    position: absolute;
+    top: -12px;
+    bottom: -12px;
+}
+
+body.app-bar-mode .mod-pedal .mod-output::after {
+    left: -10px;
+    right: -70px;
+}
+
+body.app-bar-mode .mod-pedal .mod-input::after {
+    left: -70px;
+    right: -10px;
+}
+
+/* While a cable is being made, the arrow every free input it can go to shows, bigger
+   and pulsing: a copy of just the arrow, cut out of the input's image beside the jack
+   it points at, grown out into the gap beside the plugin from its tip. Part of the
+   input, a tap on it ends the cable there too */
+body.app-bar-mode .mod-input.input-connecting:not(.input-connected)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 20px;
+    height: 100%;
+    background-repeat: no-repeat;
+    transform-origin: 100% 50%;
+    animation: mod-connect-pulse 0.8s ease-in-out infinite alternate;
+    cursor: pointer;
+}
+
+body.app-bar-mode .mod-audio-input.input-connecting:not(.input-connected)::before {
+    left: 52px;
+    background-image: url(../img/audio-input-connecting.png);
+    background-position: -52px 100%;
+}
+
+body.app-bar-mode .mod-midi-input.input-connecting:not(.input-connected)::before {
+    left: 38px;
+    background-image: url(../img/midi-input-connecting.png);
+    background-position: -38px 100%;
+}
+
+body.app-bar-mode .mod-cv-input.input-connecting:not(.input-connected)::before {
+    left: 40px;
+    background-image: url(../img/cv-input-connecting.png);
+    background-position: -40px 100%;
+}
+
+@keyframes mod-connect-pulse {
+    from { transform: scale(2.4); opacity: 0.7; }
+    to { transform: scale(3); opacity: 1; }
+}
+
