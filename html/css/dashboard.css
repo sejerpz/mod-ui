@@ -9,6 +9,8 @@
 }
 
 #pedalboard-dashboard {
+    /* fingers pan and pinch the board ourselves, see js/utils/touch.js */
+    touch-action: none;
     background:#111 url(../img/background.jpg) repeat;
     background-size: auto 1200px;
     position: absolute;
@@ -16,6 +18,10 @@
     left: 0;
     bottom: 45px;
     right: 0;
+}
+
+.ui-draggable {
+    touch-action: none;
 }
 
 #pedalboard-dashboard.dev_api:after {
