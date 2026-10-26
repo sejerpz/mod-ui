@@ -160,6 +160,8 @@ JqueryClass('effectBox', {
 
     unfold: function () {
         var self = $(this)
+        // bringing the library back means the plugin picked for tap-to-place was not wanted
+        self.data('pedalboard').pedalboard('hidePlacementGrid')
         //self.find('.js-effects-list').show()
         self.removeClass('folded')
         //self.find('.js-effects-fold').show()
@@ -388,6 +390,18 @@ JqueryClass('effectBox', {
         })
 
         rendered.click(function () {
+            // In grid mode a tap picks the plugin to place: the library gets out of the
+            // way and the board offers the free cells to put it in
+            if (self.data('pedalboard').pedalboard('gridMode')) {
+                var wasFolded = self.hasClass('folded')
+                self.effectBox('fold')
+                self.data('pedalboard').pedalboard('showPlacementGrid', rendered, function () {
+                    if (!wasFolded) {
+                        self.effectBox('unfold')
+                    }
+                })
+                return
+            }
             self.effectBox('showPluginInfo', plugin)
         })
 
