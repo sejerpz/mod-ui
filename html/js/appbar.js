@@ -71,6 +71,18 @@ JqueryClass('appBar', {
             }
         })
 
+        // the snapshot dialogs take the room the dock would cover: it slides away while
+        // one is up. They open and close with show() and hide(), whatever opened them
+        var makeRoom = function () {
+            self.toggleClass('away', options.snapshotDialogs.filter(':visible').length > 0)
+        }
+        options.snapshotDialogs.each(function () {
+            new MutationObserver(makeRoom).observe(this, {
+                attributes: true,
+                attributeFilter: ['style', 'class']
+            })
+        })
+
         tools.append(options.abCompare)
 
         // the header's save marks unsaved changes as 'unmodified-changes'

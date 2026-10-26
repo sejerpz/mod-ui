@@ -2230,9 +2230,16 @@ body.app-bar-mode .mod-placement-badge {
     background: rgba(17, 17, 17, 0.6);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     white-space: nowrap;
+    transition: transform 0.3s ease;
     color: #fff;
     font-size: 16px;
     user-select: none;
+}
+
+/* out of the way of a dialog, below the bottom of the screen */
+.mod-app-bar.away {
+    transform: translate(-50%, calc(100% + 24px));
+    pointer-events: none;
 }
 
 .mod-app-bar .mode,
