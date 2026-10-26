@@ -315,6 +315,8 @@ JqueryClass('pedalboard', {
         // Grid cells that plugins added into one are waiting to be fitted in, indexed by
         // instance. See addToCell
         self.data('pendingPlacements', {})
+        // how a plugin added into a cell is to be cabled, see addToCell
+        self.data('pendingWirings', {})
         self.data('placementGrid', null)
 
         // Hardware inputs and outputs, which have an instance of -1 and symbol as given by application
@@ -1056,6 +1058,7 @@ JqueryClass('pedalboard', {
             var instance = self.pedalboard('generateInstance', pluginData.uri)
             if (position.cell) {
                 self.data('pendingPlacements')[instance] = position.cell
+                self.data('pendingWirings')[instance] = position.wiring
             }
             waiter.startPlugin(instance, position)
             var pluginLoad = self.data('pluginLoad')
@@ -1072,6 +1075,7 @@ JqueryClass('pedalboard', {
                 function () {
                     self.data('replacementPlugin', null)
                     delete self.data('pendingPlacements')[instance]
+                    delete self.data('pendingWirings')[instance]
                     waiter.stopPlugin(instance, false)
                 })
         })
@@ -1486,10 +1490,12 @@ JqueryClass('pedalboard', {
         badge.appendTo(self.parent())
         grid.data('badge', badge)
 
-        self.pedalboard('renderPluginGhost', pluginData, function (icon) {
+        self.pedalboard('renderPluginGhost', pluginData, function (icon, plugin) {
             if (self.data('placementGrid') !== grid) {
                 return
             }
+            // with its ports known, which the library does not list
+            self.pedalboard('showInsertPoints', grid, element, plugin)
             icon.css({ visibility: 'hidden', 'transform-origin': '0 0' }).appendTo(preview)
             var children = icon.children()
             // Shown once it has a size, and sized again whenever that changes: the
@@ -1596,7 +1602,8 @@ JqueryClass('pedalboard', {
         return !! $(this).data('placementGrid')
     },
 
-    // The plugin's icon as it is drawn while dragged out of the bar, for `callback`.
+    // The plugin's icon as it is drawn while dragged out of the bar, for `callback`,
+    // along with the plugin's full description.
     renderPluginGhost: function (pluginData, callback) {
         var renderedVersion = [pluginData.builder,
                                pluginData.microVersion,
@@ -1613,7 +1620,9 @@ JqueryClass('pedalboard', {
                 new GUI(plugin, {
                     defaultIconTemplate: DEFAULT_ICON_TEMPLATE,
                     dummy: true,
-                }).renderDummyIcon(callback)
+                }).renderDummyIcon(function (icon) {
+                    callback(icon, plugin)
+                })
             },
             cache: !!pluginData.buildEnvironment,
             dataType: 'json'
@@ -1636,8 +1645,9 @@ JqueryClass('pedalboard', {
         }
     },
 
-    // Adds the plugin registered as `element` into `cell`.
-    addToCell: function (element, cell) {
+    // Adds the plugin registered as `element` into `cell`. It is cabled to its
+    // neighbours once it is there, see wirePlugin, or into the cables of `wiring`.
+    addToCell: function (element, cell, wiring) {
         var self = $(this)
         var rect = self.pedalboard('cellRect', cell)
         element.trigger('pluginAdded', {
@@ -1645,7 +1655,294 @@ JqueryClass('pedalboard', {
             y: rect.y,
             width: rect.width,
             height: rect.height,
-            cell: cell
+            cell: cell,
+            wiring: wiring
+        })
+    },
+
+    // Grid mode's cabling, of the plugins added into a cell and of the ones removed.
+    // Done by asking the host, like a cable drawn by hand: the cables appear on the
+    // board as it confirms them. Per kind of port, audio, MIDI and CV, each on its own.
+
+    // A plugin's ports of `type`, as {input: [...], output: [...]} lists of their
+    // mod-port names, in the plugin's order
+    wirePorts: function (instance, type) {
+        var plugin = $(this).data('plugins')[instance]
+        var ports = plugin && plugin.data && plugin.data('ports')
+        var names = function (list) {
+            return $.map(list || [], function (port) {
+                return instance + '/' + port.symbol
+            })
+        }
+        return {
+            input: names(ports && ports[type] && ports[type].input),
+            output: names(ports && ports[type] && ports[type].output)
+        }
+    },
+
+    // Which of the `outs` go to which of the `ins`, as [out, in] pairs: one by one, left
+    // to left and right to right, but a single one on either side to or from all of
+    // the other side's, so a mono plugin is fed by and feeds both sides of a stereo one
+    wirePairs: function (outs, ins) {
+        var pairs = []
+        for (var i = 0; i < Math.max(outs.length, ins.length); i++) {
+            var out = outs[outs.length == 1 ? 0 : i]
+            var inp = ins[ins.length == 1 ? 0 : i]
+            if (out !== undefined && inp !== undefined) {
+                pairs.push([out, inp])
+            }
+        }
+        return pairs
+    },
+
+    // The plugin a plugin in `cell` takes `type` from, on the 'left', or gives it to, on
+    // the 'right': the nearest one that way in the same row, else in the first row from
+    // the top that has one that way. Only plugins with the ports for it count.
+    wireNeighbour: function (instance, cell, side, type) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var byRow = {}
+        for (var other in plugins) {
+            var at = other != instance && plugins[other].data && plugins[other].data('gridCell')
+            if (! at || (side == 'left' ? at.col >= cell.col : at.col <= cell.col)) {
+                continue
+            }
+            var ports = self.pedalboard('wirePorts', other, type)
+            if (! (side == 'left' ? ports.output : ports.input).length) {
+                continue
+            }
+            var best = byRow[at.row]
+            if (! best || Math.abs(at.col - cell.col) < Math.abs(best.col - cell.col)) {
+                byRow[at.row] = { instance: other, col: at.col }
+            }
+        }
+        if (byRow[cell.row]) {
+            return byRow[cell.row].instance
+        }
+        var rows = $.map(Object.keys(byRow), Number).sort(function (a, b) { return a - b })
+        return rows.length ? byRow[rows[0]].instance : null
+    },
+
+    // Where the board's `type` comes in, for 'capture', or goes out, for 'playback',
+    // when no plugin is there to cable to. The main audio ins and outs, and every MIDI
+    // in. Not MIDI out, which could loop back in through the gear on it, nor CV, which
+    // drives whatever is plugged in.
+    wireHardware: function (direction, type) {
+        var self = $(this)
+        var elements = self.data(direction == 'capture' ? 'hwOutputs' : 'hwInputs') || []
+        var pattern = {
+            capture: { audio: /\/capture_\d+$/, midi: /\/(midi_merger_in|serial_midi_in|midi_capture_\d+)$/ },
+            playback: { audio: /\/playback_\d+$/ }
+        }[direction][type]
+        var found = $.map(elements, function (element) {
+            var port = $(element).attr('mod-port')
+            return pattern && pattern.test(port) ? port : null
+        }).sort()
+        // the merger already carries every MIDI in
+        if (type == 'midi' && found.indexOf('/graph/midi_merger_in') >= 0) {
+            return ['/graph/midi_merger_in']
+        }
+        return found
+    },
+
+    // Asks the host for the cable, unless it is there already
+    wireConnect: function (from, to) {
+        var self = $(this)
+        if (! self.data('connectionManager').connected(from, to)) {
+            self.data('portConnect')(from, to, function () {})
+        }
+    },
+
+    // Cables a plugin just added into `cell`: from its neighbour on the left, or the
+    // board's inputs, and to its neighbour on the right, or the board's outputs, in
+    // place of any cable straight from the one to the other. Or,
+    // added into the cables of `wiring` (see showInsertPoints), into those instead.
+    wirePlugin: function (instance, cell, wiring) {
+        var self = $(this)
+        var connect = function (pair) {
+            self.pedalboard('wireConnect', pair[0], pair[1])
+        }
+        if (wiring) {
+            var own = self.pedalboard('wirePorts', instance, wiring.type)
+            $.each(wiring.cables, function (i, cable) {
+                self.data('portDisconnect')(cable[0], cable[1], function () {})
+            })
+            $.each(self.pedalboard('wirePairs', wiring.from, own.input), function (i, pair) { connect(pair) })
+            $.each(self.pedalboard('wirePairs', own.output, wiring.to), function (i, pair) { connect(pair) })
+            return
+        }
+        var connMgr = self.data('connectionManager')
+        $.each(['audio', 'midi', 'cv'], function (i, type) {
+            var own = self.pedalboard('wirePorts', instance, type)
+            var outs = [], ins = []
+            if (own.input.length) {
+                var left = self.pedalboard('wireNeighbour', instance, cell, 'left', type)
+                outs = left ? self.pedalboard('wirePorts', left, type).output
+                            : self.pedalboard('wireHardware', 'capture', type)
+                $.each(self.pedalboard('wirePairs', outs, own.input), function (i, pair) { connect(pair) })
+            }
+            if (own.output.length) {
+                var right = self.pedalboard('wireNeighbour', instance, cell, 'right', type)
+                ins = right ? self.pedalboard('wirePorts', right, type).input
+                            : self.pedalboard('wireHardware', 'playback', type)
+                $.each(self.pedalboard('wirePairs', own.output, ins), function (i, pair) { connect(pair) })
+            }
+            // it goes in between: the cables from one side straight to the other are
+            // replaced by the ones through it
+            $.each(outs, function (j, from) {
+                $.each(ins, function (k, to) {
+                    if (connMgr.connected(from, to)) {
+                        self.data('portDisconnect')(from, to, function () {})
+                    }
+                })
+            })
+        })
+    },
+
+    // The cables to put back once `instance` is gone: what went into each of its inputs
+    // straight to where the matching output went, left to left and right to right, see
+    // wirePairs
+    bridgeCables: function (instance) {
+        var self = $(this)
+        var connMgr = self.data('connectionManager')
+        var bridges = []
+        var others = function (index, port) {
+            return $.grep(Object.keys(index[port] || {}), function (other) {
+                return other.lastIndexOf(instance + '/', 0) != 0
+            })
+        }
+        $.each(['audio', 'midi', 'cv'], function (i, type) {
+            var own = self.pedalboard('wirePorts', instance, type)
+            $.each(self.pedalboard('wirePairs', own.input, own.output), function (j, pair) {
+                $.each(others(connMgr.destIndex, pair[0]), function (k, from) {
+                    $.each(others(connMgr.origIndex, pair[1]), function (l, to) {
+                        bridges.push([from, to])
+                    })
+                })
+            })
+        })
+        return bridges
+    },
+
+    // Makes room for a plugin in column `col`, moving it and every column right of it
+    // one to the right
+    insertColumn: function (col) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        for (var instance in plugins) {
+            var cell = plugins[instance].data && plugins[instance].data('gridCell')
+            if (cell && cell.col >= col) {
+                self.pedalboard('fitInCell', instance, plugins[instance], { col: cell.col + 1, row: cell.row }, true)
+            }
+        }
+    },
+
+    // While a plugin waits to be placed: a point on each run of cables between two
+    // plugins (or a plugin and the board's ins or outs) that it could go into, halfway
+    // along the cables and level with the middle of the row it would go in. Tapping
+    // one puts it there, in a column of its own right after where the cables come from,
+    // fed by what fed them and feeding what they fed. The cables of one kind between
+    // the same two make one run, the left and right of a stereo pair together.
+    showInsertPoints: function (grid, element, pluginData) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var scale = self.data('scale')
+        var origin = self[0].getBoundingClientRect()
+        var instanceOf = function (port) {
+            return port.substring(0, port.lastIndexOf('/'))
+        }
+        var center = function (element) {
+            var r = element[0].getBoundingClientRect()
+            return {
+                x: (r.left + r.width / 2 - origin.left) / scale,
+                y: (r.top + r.height / 2 - origin.top) / scale
+            }
+        }
+        // the order of a port among its plugin's, or among the hardware's by name
+        var order = function (port) {
+            var instance = instanceOf(port)
+            var type = runs.types[port]
+            var ports = self.pedalboard('wirePorts', instance, type)
+            var index = ports.output.indexOf(port)
+            return index >= 0 ? index : ports.input.indexOf(port)
+        }
+
+        var runs = { list: {}, types: {} }
+        self.data('connectionManager').iterate(function (jack) {
+            // a teleported cable is not drawn across the board, there is nowhere to tap
+            if (jack.data('teleported')) {
+                return
+            }
+            var output = jack.data('origin')
+            var input = jack.data('destination')
+            var from = output.attr('mod-port'), to = input.attr('mod-port')
+            var type = (input.attr('mod-role') || '').split('-')[1]
+            var ports = pluginData.ports[type]
+            if (! ports || ! ports.input.length || ! ports.output.length) {
+                return
+            }
+            var key = instanceOf(from) + ' ' + instanceOf(to) + ' ' + type
+            var run = runs.list[key] = runs.list[key] || { type: type, cables: [], from: [], to: [], points: [] }
+            run.cables.push([from, to])
+            run.from.indexOf(from) < 0 && run.from.push(from)
+            run.to.indexOf(to) < 0 && run.to.push(to)
+            runs.types[from] = runs.types[to] = type
+            var a = center(output), b = center(jack)
+            // halfway along the cable: its curve is symmetric about there
+            run.points.push((a.x + b.x) / 2)
+        })
+
+        // right after the plugin the cables come from, in its row. From the board's
+        // inputs, where the plugin they go to is
+        var cellFor = function (run) {
+            var source = plugins[instanceOf(run.from[0])]
+            var target = plugins[instanceOf(run.to[0])]
+            var at = source && source.data && source.data('gridCell')
+            if (at) {
+                return { col: at.col + 1, row: at.row }
+            }
+            at = target && target.data && target.data('gridCell')
+            return at ? { col: at.col, row: at.row } : { col: 0, row: 0 }
+        }
+
+        var size = 36 / scale
+        $.each(runs.list, function (key, run) {
+            var sorted = function (ports) {
+                return ports.sort(function (a, b) {
+                    return instanceOf(a) == instanceOf(b) && order(a) >= 0 && order(b) >= 0
+                         ? order(a) - order(b) : (a < b ? -1 : 1)
+                })
+            }
+            sorted(run.from)
+            sorted(run.to)
+            var x = 0
+            $.each(run.points, function (i, point) {
+                x += point / run.points.length
+            })
+            var cell = cellFor(run)
+            var row = self.pedalboard('cellRect', cell)
+            $('<div class="mod-insert-point">').css({
+                left: x - size / 2,
+                top: row.y + row.height / 2 - size / 2,
+                width: size,
+                height: size,
+                'outline-width': 2 / scale,
+                'font-size': 16 / scale
+            }).click(function () {
+                if (Date.now() - (self.data('lastPanMove') || 0) < 300) {
+                    return false
+                }
+                self.pedalboard('insertColumn', cell.col)
+                self.pedalboard('flyToCell', cell)
+                self.pedalboard('hidePlacementGrid')
+                self.pedalboard('addToCell', element, cell, {
+                    type: run.type,
+                    cables: run.cables,
+                    from: run.from,
+                    to: run.to
+                })
+                return false
+            }).appendTo(grid)
         })
     },
 
@@ -3146,9 +3443,15 @@ JqueryClass('pedalboard', {
             // a plugin added into a cell went in at the cell's corner, its size unknown
             // until now
             var cell = self.data('pendingPlacements')[instance]
+            var wiring = self.data('pendingWirings')[instance]
             delete self.data('pendingPlacements')[instance]
+            delete self.data('pendingWirings')[instance]
             if (self.pedalboard('gridMode')) {
                 self.pedalboard('snapPlugin', instance, icon, cell)
+                // and cabled, when the user just put it there
+                if (cell) {
+                    self.pedalboard('wirePlugin', instance, cell, wiring)
+                }
             }
 
             // adjust position of cv out checkboxes if needed
@@ -3523,7 +3826,14 @@ JqueryClass('pedalboard', {
     removePlugin: function (instance, ports) {
         var self = $(this)
         var pluginRemove = self.data('pluginRemove')
+        // In grid mode the cables through it are joined up again, once it is gone. Not
+        // when another plugin is taking its place, which gets its cables instead
+        var bridges = self.pedalboard('gridMode') && ! self.data('replacementPlugin')
+                    ? self.pedalboard('bridgeCables', instance) : []
         pluginRemove(instance, function () {
+          $.each(bridges, function (i, bridge) {
+            self.pedalboard('wireConnect', bridge[0], bridge[1])
+          })
           // Remove plugin's cv output ports from harware manager
           if (ports && ports.cv && ports.cv.output) {
             for (var i = 0; i < ports.cv.output.length; i++) {

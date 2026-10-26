@@ -31,6 +31,40 @@
     top: 0;
 }
 
+/* where the plugin being placed can go into a run of cables, see showInsertPoints.
+   Drawn like a free cell, round, and pulsing to be told apart from the cables. Its
+   sizes are set for the board's zoom, the pulse in em */
+.mod-insert-point {
+    position: absolute;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.12);
+    outline-style: dashed;
+    outline-color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    animation: mod-insert-pulse 1.6s ease-out infinite;
+}
+
+.mod-insert-point:active {
+    background-color: rgba(136, 57, 150, 0.45);
+}
+
+.mod-insert-point::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 14v72M14 50h72' fill='none' stroke='white' stroke-opacity='0.6' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E") center / 55% no-repeat;
+    pointer-events: none;
+}
+
+@keyframes mod-insert-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35); }
+    100% { box-shadow: 0 0 0 1em rgba(255, 255, 255, 0); }
+}
+
 .mod-placement-cell {
     position: absolute;
     box-sizing: border-box;
