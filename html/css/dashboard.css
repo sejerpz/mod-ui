@@ -24,6 +24,53 @@
     touch-action: none;
 }
 
+/* grid mode, see gridMode in js/pedalboard.js */
+.mod-placement-grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.mod-placement-cell {
+    position: absolute;
+    box-sizing: border-box;
+    border: 12px solid transparent;
+    background-clip: padding-box;
+}
+
+.mod-placement-cell.free {
+    background-color: rgba(255, 255, 255, 0.12);
+    outline: 6px dashed rgba(255, 255, 255, 0.5);
+    outline-offset: -18px;
+    cursor: pointer;
+}
+
+.mod-placement-cell.free:active {
+    background-color: rgba(135, 76, 224, 0.45);
+}
+
+/* shown under a plugin being dragged, which must keep receiving the pointer */
+.mod-placement-grid.passive {
+    pointer-events: none;
+}
+
+.mod-placement-grid.passive .mod-placement-cell.free {
+    background-color: rgba(255, 255, 255, 0.05);
+    outline-color: rgba(255, 255, 255, 0.25);
+}
+
+.mod-placement-target {
+    position: absolute;
+    box-sizing: border-box;
+    border: 8px solid rgba(135, 76, 224, 0.9);
+    background-color: rgba(135, 76, 224, 0.2);
+}
+
+.mod-placement-target.blocked {
+    border-color: rgba(224, 76, 76, 0.9);
+    background-color: rgba(224, 76, 76, 0.2);
+}
+
 #pedalboard-dashboard.dev_api:after {
     content: "DEV API enabled";
     color: #555;

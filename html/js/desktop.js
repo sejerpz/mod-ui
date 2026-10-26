@@ -1656,6 +1656,10 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
         hardwareManager: self.hardwareManager,
         bottomMargin: effectBox.height(),
         cvAddressing: self.cvAddressing,
+        // isTouchDevice is only set once the desktop exists, hence asked every time
+        gridMode: function () {
+            return self.isTouchDevice
+        },
         pluginLoad: function (uri, instance, x, y, callback, errorCallback) {
             var firstTry = true
             var add = function () {

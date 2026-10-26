@@ -78,6 +78,12 @@ $.ui.intersect = function(draggable, droppable, toleranceMode) {
     }
 };
 
+// Size of a grid mode cell, in canvas units. Room for a typical pedal and its cables:
+// real plugins run from 90x155 to 780x480, and most are under 400 wide. A plugin
+// bigger than a cell is scaled down to keep PLACEMENT_PAD clear of the cell's edges.
+var PLACEMENT_CELL = { width: 420, height: 620 }
+var PLACEMENT_PAD = 20
+
 JqueryClass('pedalboard', {
     init: function (options) {
         var self = $(this)
@@ -266,6 +272,11 @@ JqueryClass('pedalboard', {
                 const isMonitored = Object.keys(vumeters).includes(port)
 
                 return isMonitored
+            },
+
+            // Whether plugins live in a grid of cells, see gridMode
+            gridMode: function () {
+                return false
             }
         }, options)
 
@@ -293,6 +304,11 @@ JqueryClass('pedalboard', {
 
         // Instances currently selected by shift-drag or shift-click, indexed by instance
         self.data('selected', {})
+
+        // Grid cells that plugins added into one are waiting to be fitted in, indexed by
+        // instance. See addToCell
+        self.data('pendingPlacements', {})
+        self.data('placementGrid', null)
 
         // Hardware inputs and outputs, which have an instance of -1 and symbol as given by application
         self.data('hwInputs', [])
@@ -644,12 +660,21 @@ JqueryClass('pedalboard', {
                 if (ui.helper.consumed)
                     return // TODO Check if this really necessary
                 var scale = self.data('scale')
-                ui.draggable.trigger('pluginAdded', {
+                var position = {
                     x: (ui.helper.offset().left - self.offset().left) / scale,
                     y: (ui.helper.offset().top - self.offset().top) / scale,
                     width: ui.helper.children().width(),
                     height: ui.helper.children().height()
-                })
+                }
+                if (self.pedalboard('gridMode')) {
+                    // into the cell under the middle of the dropped plugin, or the
+                    // nearest free one
+                    var cell = self.pedalboard('cellAt', position.x + position.width / 2,
+                                                         position.y + position.height / 2)
+                    self.pedalboard('addToCell', ui.draggable, self.pedalboard('nearestFreeCell', cell, null))
+                } else {
+                    ui.draggable.trigger('pluginAdded', position)
+                }
                 var uri = unescape(ui.draggable.attr('mod-uri'));
                 var count = self.find('.mod-actions').length;
                 _paq.push(['trackEvent', 'plugin', 'plugin-add', uri, count]);
@@ -1022,6 +1047,9 @@ JqueryClass('pedalboard', {
         element.bind('pluginAdded', function (e, position) {
             var waiter = self.data('wait')
             var instance = self.pedalboard('generateInstance', pluginData.uri)
+            if (position.cell) {
+                self.data('pendingPlacements')[instance] = position.cell
+            }
             waiter.startPlugin(instance, position)
             var pluginLoad = self.data('pluginLoad')
             pluginLoad(pluginData.uri, instance, position.x, position.y,
@@ -1036,6 +1064,7 @@ JqueryClass('pedalboard', {
                 },
                 function () {
                     self.data('replacementPlugin', null)
+                    delete self.data('pendingPlacements')[instance]
                     waiter.stopPlugin(instance, false)
                 })
         })
@@ -1161,6 +1190,303 @@ JqueryClass('pedalboard', {
         self.pedalboard('adapt', true)
 
         return true
+    },
+
+    // Grid mode lays the board out in PLACEMENT_CELL sized cells, for touch screens
+    // where placing a plugin to the pixel is fiddly. Every plugin sits in a cell, scaled
+    // down to fit it and centered, and every move lands in a free cell. A plugin's cell
+    // is kept on its icon as data('gridCell'), so the occupied cells are always just the
+    // plugins on the board. The cells start at the canvas origin rather than being
+    // fitted to the canvas, so a cell stays put while the canvas grows.
+    gridMode: function () {
+        return !! $(this).data('gridMode')()
+    },
+
+    cellRect: function (cell) {
+        return {
+            x: cell.col * PLACEMENT_CELL.width,
+            y: cell.row * PLACEMENT_CELL.height,
+            width: PLACEMENT_CELL.width,
+            height: PLACEMENT_CELL.height
+        }
+    },
+
+    // The cell a canvas point falls in. Nothing goes above or left of the origin.
+    cellAt: function (x, y) {
+        return {
+            col: Math.max(0, Math.floor(x / PLACEMENT_CELL.width)),
+            row: Math.max(0, Math.floor(y / PLACEMENT_CELL.height))
+        }
+    },
+
+    // Whether `cell` has no plugin in it other than `except` (an instance), and no
+    // hardware port across it.
+    cellFree: function (cell, except) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        for (var instance in plugins) {
+            if (instance == except || ! plugins[instance] || ! plugins[instance].data) {
+                continue
+            }
+            var taken = plugins[instance].data('gridCell')
+            if (taken && taken.col == cell.col && taken.row == cell.row) {
+                return false
+            }
+        }
+        var rect = self.pedalboard('cellRect', cell)
+        var ports = self.pedalboard('hardwarePortRects')
+        for (var i = 0; i < ports.length; i++) {
+            var t = ports[i]
+            if (t.x < rect.x + rect.width && rect.x < t.x + t.width &&
+                t.y < rect.y + rect.height && rect.y < t.y + t.height) {
+                return false
+            }
+        }
+        return true
+    },
+
+    // `cell` if it is free, otherwise the free cell closest to it, searching outwards
+    // ring by ring.
+    nearestFreeCell: function (cell, except) {
+        var self = $(this)
+        for (var ring = 0; ring < 64; ring++) {
+            var best = null, bestDistance = Infinity
+            for (var row = cell.row - ring; row <= cell.row + ring; row++) {
+                for (var col = cell.col - ring; col <= cell.col + ring; col++) {
+                    if (row < 0 || col < 0 ||
+                        Math.max(Math.abs(row - cell.row), Math.abs(col - cell.col)) != ring) {
+                        continue
+                    }
+                    var candidate = { col: col, row: row }
+                    var distance = Math.pow(col - cell.col, 2) + Math.pow(row - cell.row, 2)
+                    if (distance < bestDistance && self.pedalboard('cellFree', candidate, except)) {
+                        best = candidate
+                        bestDistance = distance
+                    }
+                }
+            }
+            if (best) {
+                return best
+            }
+        }
+        return cell
+    },
+
+    // The hardware ports as canvas-unit rects. Measured on screen and divided back by
+    // the scale, which is the same for every child of the canvas.
+    hardwarePortRects: function () {
+        var self = $(this)
+        var scale = self.data('scale')
+        var origin = self[0].getBoundingClientRect()
+        return self.data('hwInputs').concat(self.data('hwOutputs')).map(function (port) {
+            var r = port[0].getBoundingClientRect()
+            return {
+                x: (r.left - origin.left) / scale,
+                y: (r.top - origin.top) / scale,
+                width: r.width / scale,
+                height: r.height / scale
+            }
+        }).filter(function (r) {
+            return r.width > 0 && r.height > 0
+        })
+    },
+
+    // How much a port or jack is scaled by the plugin it sits in, on top of the board's
+    // own scale. 1 outside grid mode and for the hardware ports.
+    iconScale: function (element) {
+        return element.closest('[mod-instance]').data('gridScale') || 1
+    },
+
+    // Puts a plugin in `cell`: scaled down to fit inside PLACEMENT_PAD of the cell's
+    // edges, never up, and centered. The scale is a transform from the top left
+    // corner, so the plugin's left/top stay its saved position. `persist` saves the
+    // position, which a plugin merely being laid out on load does not.
+    fitInCell: function (instance, icon, cell, persist) {
+        var self = $(this)
+        var w = icon.width()
+        var h = icon.height()
+        var s = Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
+                            (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
+        var rect = self.pedalboard('cellRect', cell)
+        var x = Math.round(rect.x + (rect.width - w * s) / 2)
+        var y = Math.round(rect.y + (rect.height - h * s) / 2)
+
+        icon.data('gridCell', cell)
+        icon.data('gridScale', s)
+        icon.css({
+            left: x,
+            top: y,
+            transform: s == 1 ? '' : 'scale(' + s + ')',
+            'transform-origin': '0 0'
+        })
+        if (persist) {
+            self.data('pluginMove')(instance, x, y)
+        }
+        self.pedalboard('drawPluginJacks', icon)
+    },
+
+    // Lays out a plugin that just arrived on the board. Into `cell` when it was added
+    // by choosing one, otherwise into the cell under its middle, or the nearest free
+    // one: boards saved outside grid mode have plugins anywhere, overlapping cells and
+    // each other. Only shown, not saved, so opening a board does not modify it.
+    snapPlugin: function (instance, icon, cell, tries) {
+        var self = $(this)
+        // just appended, the gui may have no size until its stylesheet and images are in
+        tries = tries || 0
+        if (! $.contains(self[0], icon[0])) {
+            return
+        }
+        if ((icon.width() == 0 || icon.height() == 0) && tries < 60) {
+            setTimeout(function () {
+                self.pedalboard('snapPlugin', instance, icon, cell, tries + 1)
+            }, 50)
+            return
+        }
+        var persist = !! cell
+        if (! cell) {
+            var w = icon.width()
+            var h = icon.height()
+            var s = Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
+                                (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
+            cell = self.pedalboard('cellAt', parseInt(icon.css('left')) + w * s / 2,
+                                             parseInt(icon.css('top')) + h * s / 2)
+        }
+        cell = self.pedalboard('nearestFreeCell', cell, instance)
+        self.pedalboard('fitInCell', instance, icon, cell, persist)
+    },
+
+    // Draws the cells over the canvas, free ones marked. The grid lives inside the
+    // scaled canvas, so it is in canvas units and follows pan and zoom for free.
+    // `except` is an instance whose own cell counts as free.
+    buildGrid: function (except) {
+        var self = $(this)
+        var cols = Math.floor(self.width() / PLACEMENT_CELL.width)
+        var rows = Math.floor(self.height() / PLACEMENT_CELL.height)
+        var grid = $('<div class="mod-placement-grid ignore-arrive">')
+        grid.css({
+            width: cols * PLACEMENT_CELL.width,
+            height: rows * PLACEMENT_CELL.height,
+            'z-index': self.data('z_index') + 1000
+        })
+        for (var row = 0; row < rows; row++) {
+            for (var col = 0; col < cols; col++) {
+                var cell = { col: col, row: row }
+                var rect = self.pedalboard('cellRect', cell)
+                $('<div class="mod-placement-cell">')
+                    .addClass(self.pedalboard('cellFree', cell, except) ? 'free' : 'taken')
+                    .css({ left: rect.x, top: rect.y, width: rect.width, height: rect.height })
+                    .data('cell', cell)
+                    .appendTo(grid)
+            }
+        }
+        self.append(grid)
+        return grid
+    },
+
+    // Tap-to-place. `element` is a plugin registered with registerAvailablePlugin, and
+    // tapping a free cell adds it there. `done` is called once the grid goes away,
+    // whether a plugin was placed or not.
+    showPlacementGrid: function (element, done) {
+        var self = $(this)
+        self.pedalboard('hidePlacementGrid')
+        self.pedalboard('finishConnection')
+
+        var grid = self.pedalboard('buildGrid', null)
+
+        grid.on('click', '.mod-placement-cell', function () {
+            // the tail of a pan is not a choice
+            if (Date.now() - (self.data('lastPanMove') || 0) < 300) {
+                return false
+            }
+            var cell = $(this)
+            // a taken cell does nothing, the plugin stays picked for another try.
+            // Read before hiding, removing the grid drops its data
+            if (! cell.hasClass('free')) {
+                return false
+            }
+            var chosen = cell.data('cell')
+            self.pedalboard('hidePlacementGrid')
+            self.pedalboard('addToCell', element, chosen)
+            return false
+        })
+
+        $(document).on('keydown.placement', function (e) {
+            if (e.keyCode == 27) {
+                self.pedalboard('hidePlacementGrid')
+            }
+        })
+
+        grid.data('done', done)
+        self.data('placementGrid', grid)
+    },
+
+    hidePlacementGrid: function () {
+        var self = $(this)
+        var grid = self.data('placementGrid')
+        if (!grid) {
+            return
+        }
+        var done = grid.data('done')
+        grid.remove()
+        self.data('placementGrid', null)
+        $(document).off('keydown.placement')
+        if (done) {
+            done()
+        }
+    },
+
+    // Adds the plugin registered as `element` into `cell`.
+    addToCell: function (element, cell) {
+        var self = $(this)
+        var rect = self.pedalboard('cellRect', cell)
+        element.trigger('pluginAdded', {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            cell: cell
+        })
+    },
+
+    // While a plugin is dragged in grid mode: the grid, and the cell it would land in.
+    gridDrag: function (instance, icon) {
+        var self = $(this)
+        var grid = self.data('dragGrid')
+        if (! grid) {
+            grid = self.pedalboard('buildGrid', instance)
+            // under the plugins, the one being dragged included
+            grid.addClass('passive').css('z-index', 1)
+            $('<div class="mod-placement-target">').appendTo(grid)
+            self.data('dragGrid', grid)
+        }
+        var cell = self.pedalboard('gridDropCell', instance, icon)
+        var rect = self.pedalboard('cellRect', cell)
+        grid.find('.mod-placement-target')
+            .toggleClass('blocked', ! self.pedalboard('cellFree', cell, instance))
+            .css({ left: rect.x, top: rect.y, width: rect.width, height: rect.height })
+    },
+
+    // The cell under the middle of a plugin being dragged.
+    gridDropCell: function (instance, icon) {
+        var s = icon.data('gridScale') || 1
+        return $(this).pedalboard('cellAt', parseInt(icon.css('left')) + icon.width() * s / 2,
+                                            parseInt(icon.css('top')) + icon.height() * s / 2)
+    },
+
+    // A dragged plugin lands in the cell under it if that one is free, and goes back to
+    // its own otherwise.
+    gridDrop: function (instance, icon) {
+        var self = $(this)
+        var grid = self.data('dragGrid')
+        if (grid) {
+            grid.remove()
+            self.data('dragGrid', null)
+        }
+        var cell = self.pedalboard('gridDropCell', instance, icon)
+        if (! self.pedalboard('cellFree', cell, instance)) {
+            cell = icon.data('gridCell') || self.pedalboard('nearestFreeCell', cell, instance)
+        }
+        self.pedalboard('fitInCell', instance, icon, cell, true)
     },
 
     // Prevents dragging of whole dashboard when dragging of effect or jack starts
@@ -1365,6 +1691,7 @@ JqueryClass('pedalboard', {
             if (self.data('preventDrag'))
                 return
 
+            self.data('lastPanMove', Date.now())
             self.pedalboard('zoom', scale, canvasX, canvasY,
                 screenX + e.pageX - start.pageX,
                 screenY + e.pageY - start.pageY,
@@ -1933,7 +2260,10 @@ JqueryClass('pedalboard', {
                 obj.icon.addClass('dragging')
                 obj.icon.css({'z-index': self.data('z_index')+1})
                 self.data('z_index', self.data('z_index')+1)
-                self.pedalboard('startGroupDrag', instance)
+                // in grid mode a plugin moves alone, a group would need a free cell each
+                if (! self.pedalboard('gridMode')) {
+                    self.pedalboard('startGroupDrag', instance)
+                }
                 return true
             },
             drag: function (e, ui) {
@@ -1941,15 +2271,25 @@ JqueryClass('pedalboard', {
                 var scale = self.data('scale')
                 ui.position.left /= scale
                 ui.position.top /= scale
-                self.pedalboard('dragGroupTo', ui.position.left, ui.position.top)
+                if (self.pedalboard('gridMode')) {
+                    obj.icon.css({ left: ui.position.left, top: ui.position.top })
+                    self.pedalboard('gridDrag', instance, obj.icon)
+                } else {
+                    self.pedalboard('dragGroupTo', ui.position.left, ui.position.top)
+                }
                 self.trigger('modified')
                 self.pedalboard('drawPluginJacks', obj.icon)
             },
             dragStop: function (e, ui) {
                 self.trigger('pluginDragStop')
                 self.trigger('modified')
-                self.pedalboard('drawPluginJacks', obj.icon)
                 obj.icon.removeClass('dragging')
+                if (self.pedalboard('gridMode')) {
+                    self.pedalboard('gridDrop', instance, obj.icon)
+                    self.pedalboard('adapt', false)
+                    return
+                }
+                self.pedalboard('drawPluginJacks', obj.icon)
                 self.data('pluginMove')(instance, ui.position.left, ui.position.top)
                 self.pedalboard('finishGroupDrag')
                 self.pedalboard('adapt', false)
@@ -2270,6 +2610,14 @@ JqueryClass('pedalboard', {
                 left: x,
                 top: y
             }).appendTo(self)
+
+            // a plugin added into a cell went in at the cell's corner, its size unknown
+            // until now
+            var cell = self.data('pendingPlacements')[instance]
+            delete self.data('pendingPlacements')[instance]
+            if (self.pedalboard('gridMode')) {
+                self.pedalboard('snapPlugin', instance, icon, cell)
+            }
 
             // adjust position of cv out checkboxes if needed
             var lastCvPosY = -1, lastCvElem
@@ -3392,7 +3740,8 @@ JqueryClass('pedalboard', {
 
             },
             drag: function (e, ui) {
-                var scale = self.data('scale')
+                // the jack moves inside its plugin, which grid mode may have scaled too
+                var scale = self.data('scale') * self.pedalboard('iconScale', jack)
                 ui.position.top /= scale
                 ui.position.left /= scale
                 jack.css({ marginTop: 0 })
@@ -3520,8 +3869,11 @@ JqueryClass('pedalboard', {
         // P3 (xo, yo) - the destination point
         // P1 (xo - deltaX, yi) and P2 (xi + deltaX, yo): define the curve
         // Gets origin and destination coordinates
-        var xi = source.offset().left / scale - self.offset().left / scale + source.width()
-        var yi = source.offset().top / scale - self.offset().top / scale + source.height() / 2
+        // offset() already has any scaling of the plugins in it, width() and height() do not
+        var sourceScale = self.pedalboard('iconScale', source)
+        var jackScale = self.pedalboard('iconScale', jack)
+        var xi = source.offset().left / scale - self.offset().left / scale + source.width() * sourceScale
+        var yi = source.offset().top / scale - self.offset().top / scale + source.height() * sourceScale / 2
         var xo = jack.offset().left / scale - self.offset().left / scale
         var jackOffsetTop = jack.offset().top
 
@@ -3530,7 +3882,7 @@ JqueryClass('pedalboard', {
         if (!force && parseInt(jack.css('top')) === 0 && parseInt(jack.css('bottom')) === 0) {
           jackOffsetTop = jack.offset().top - jack.position().top
         }
-        var yo = jackOffsetTop / scale - self.offset().top / scale + jack.height() / 2
+        var yo = jackOffsetTop / scale - self.offset().top / scale + jack.height() * jackScale / 2
 
         return { xi: xi, yi: yi, xo: xo, yo: yo }
     },
@@ -4471,7 +4823,7 @@ JqueryClass('pedalboard', {
                 return
             setTimeout(function () {
                 var xi = output.offset().left / scale - self.offset().left / scale
-                var yi = output.offset().top / scale - self.offset().top / scale + output.height() / 2
+                var yi = output.offset().top / scale - self.offset().top / scale + output.height() * self.pedalboard('iconScale', output) / 2
                 var xo = (e.pageX - self.offset().left) / scale
                 var yo = (e.pageY - self.offset().top) / scale
 
