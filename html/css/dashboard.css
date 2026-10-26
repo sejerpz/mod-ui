@@ -2238,6 +2238,7 @@ body.app-bar-mode .mod-placement-badge {
 }
 
 .mod-app-bar .mode .segment,
+.mod-app-bar .snapshots .button,
 .mod-app-bar .save {
     min-width: 64px;
     height: 40px;
@@ -2294,6 +2295,51 @@ body.app-bar-mode .mod-placement-badge {
     position: relative;
     border: 1px solid #333;
     border-radius: 8px;
+}
+
+.mod-app-bar .snapshots {
+    position: relative;
+}
+
+.mod-app-bar .snapshots .button {
+    border: 1px solid #333;
+    border-radius: 8px;
+}
+
+.mod-app-bar .snapshots.open .button {
+    background: #883996;
+    border-color: #883996;
+}
+
+.mod-app-bar .snapshots .menu {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 180px;
+    margin: 0;
+    padding: 6px 0;
+    list-style: none;
+    border-radius: 12px;
+    border: 1px solid rgba(51, 51, 51, 0.6);
+    background: rgba(17, 17, 17, 0.92);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.mod-app-bar .snapshots.open .menu {
+    display: block;
+}
+
+.mod-app-bar .snapshots .menu li {
+    height: 44px;
+    line-height: 44px;
+    padding: 0 20px;
+    cursor: pointer;
+}
+
+.mod-app-bar .snapshots .menu li:active {
+    background: rgba(136, 57, 150, 0.45);
 }
 
 /* unsaved changes */

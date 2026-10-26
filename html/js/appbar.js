@@ -4,7 +4,8 @@
 // Grid mode's application bar, a dock floating at the bottom center of the screen,
 // where a thumb reaches on a tablet. It takes the place of the top and bottom bars, which are hidden, and grows
 // into the app's whole menu one function at a time. For now: the constructor and
-// performance switch, the A/B comparer, adding a plugin and saving the pedalboard.
+// performance switch, adding a plugin, the snapshots, the A/B comparer and saving the
+// pedalboard.
 // Every button drives the element that already does the job, so the app's own state
 // and handlers stay where they are.
 
@@ -36,6 +37,31 @@ JqueryClass('appBar', {
         $('<div class="add">').append(options.addButton).appendTo(self)
 
         var tools = $('<div class="tools">').appendTo(self)
+
+        // the header's snapshots menu, opening upwards
+        var snapshots = $('<div class="snapshots">').appendTo(tools)
+        var menu = $('<ul class="menu">').appendTo(snapshots)
+        var item = function (label, button) {
+            $('<li>').text(label).click(function () {
+                snapshots.removeClass('open')
+                button.click()
+                return false
+            }).appendTo(menu)
+        }
+        item('Save', options.snapshotSaveButton)
+        item('Save as', options.snapshotSaveAsButton)
+        item('Load / Manage', options.snapshotManageButton)
+        $('<div class="button">').text('Snapshots').click(function () {
+            snapshots.toggleClass('open')
+            return false
+        }).appendTo(snapshots)
+        // any other tap closes it
+        $(document).on('click', function (e) {
+            if (! $.contains(snapshots[0], e.target)) {
+                snapshots.removeClass('open')
+            }
+        })
+
         tools.append(options.abCompare)
 
         // the header's save marks unsaved changes as 'unmodified-changes'
