@@ -1070,6 +1070,8 @@ JqueryClass('pedalboard', {
         })
 
         element.attr('mod-io-type', pluginData.iotype)
+        // for the preview of the plugin waiting to be placed, in tap-to-place
+        element.data('pluginData', pluginData)
 
         var options = {
             defaultIconTemplate: DEFAULT_ICON_TEMPLATE,
@@ -1416,6 +1418,41 @@ JqueryClass('pedalboard', {
             }
         })
 
+        // The plugin being added waits in the bottom right corner of the board, labelled,
+        // until a cell is chosen. Outside the scaled canvas, so it keeps its size.
+        var pluginData = element.data('pluginData')
+        var badge = $('<div class="mod-placement-badge ignore-arrive">')
+        var preview = $('<div class="preview">').appendTo(badge)
+        $('<div class="label">').text('Adding').appendTo(badge)
+        $('<div class="name">').text(pluginData.label || pluginData.name || '').appendTo(badge)
+        badge.appendTo(self.parent())
+        grid.data('badge', badge)
+
+        self.pedalboard('renderPluginGhost', pluginData, function (icon) {
+            if (self.data('placementGrid') !== grid) {
+                return
+            }
+            icon.css('visibility', 'hidden').appendTo(preview)
+            var settle = function (tries) {
+                var w = icon.children().width()
+                var h = icon.children().height()
+                if ((! w || ! h) && tries < 60) {
+                    setTimeout(function () { settle(tries + 1) }, 50)
+                    return
+                }
+                icon.width(w).height(h)
+                var s = Math.min(preview.width() / w, preview.height() / h)
+                icon.css({
+                    transform: 'scale(' + s + ')',
+                    'transform-origin': '0 0',
+                    left: (preview.width() - w * s) / 2,
+                    top: (preview.height() - h * s) / 2,
+                    visibility: 'visible'
+                })
+            }
+            settle(0)
+        })
+
         grid.data('done', done)
         self.data('placementGrid', grid)
     },
@@ -1425,6 +1462,30 @@ JqueryClass('pedalboard', {
         return !! $(this).data('placementGrid')
     },
 
+    // The plugin's icon as it is drawn while dragged out of the bar, for `callback`.
+    renderPluginGhost: function (pluginData, callback) {
+        var renderedVersion = [pluginData.builder,
+                               pluginData.microVersion,
+                               pluginData.minorVersion,
+                               pluginData.release].join('_')
+        $.ajax({
+            url: '/effect/get',
+            data: {
+                uri: pluginData.uri,
+                version: VERSION,
+                plugin_version: renderedVersion,
+            },
+            success: function (plugin) {
+                new GUI(plugin, {
+                    defaultIconTemplate: DEFAULT_ICON_TEMPLATE,
+                    dummy: true,
+                }).renderDummyIcon(callback)
+            },
+            cache: !!pluginData.buildEnvironment,
+            dataType: 'json'
+        })
+    },
+
     hidePlacementGrid: function () {
         var self = $(this)
         var grid = self.data('placementGrid')
@@ -1432,6 +1493,7 @@ JqueryClass('pedalboard', {
             return
         }
         var done = grid.data('done')
+        grid.data('badge').remove()
         grid.remove()
         self.data('placementGrid', null)
         $(document).off('keydown.placement')
