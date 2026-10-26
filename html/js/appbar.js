@@ -53,8 +53,9 @@ JqueryClass('appBar', {
 
         self.appendTo('body')
 
-        // the board lost its bars: it runs under the see-through title and the dock
-        options.pedalboard.pedalboard('setMargins', 0, 0)
+        // the board lost its bars: it runs under the see-through title and the dock, and
+        // grid mode's zoom keeps the cells above the dock
+        options.pedalboard.pedalboard('setMargins', 0, 0, $(window).height() - self.offset().top + 12)
 
         return self
     },
