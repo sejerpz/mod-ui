@@ -71,6 +71,46 @@
     background-color: rgba(224, 76, 76, 0.2);
 }
 
+/* the plugin waiting for a cell in tap-to-place, see showPlacementGrid */
+.mod-placement-badge {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 8;
+    width: 150px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #883996;
+    background: rgba(17, 17, 17, 0.9);
+    color: #fff;
+    text-align: center;
+    pointer-events: none;
+}
+
+.mod-placement-badge .preview {
+    position: relative;
+    height: 160px;
+    /* or the plugin's own absolutely placed body shifts to the middle of the icon */
+    text-align: left;
+}
+
+.mod-placement-badge .preview > * {
+    position: absolute;
+}
+
+.mod-placement-badge .label {
+    margin-top: 8px;
+    color: #c79bd0;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.mod-placement-badge .name {
+    font-size: 14px;
+    font-weight: bold;
+}
+
 #pedalboard-dashboard.dev_api:after {
     content: "DEV API enabled";
     color: #555;
