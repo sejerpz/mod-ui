@@ -2162,6 +2162,11 @@ body.app-bar-mode #wrapper {
     min-width: 0;
 }
 
+/* no double tap zoom on the page, see js/appbar.js: Safari ignores user-scalable=no */
+body.app-bar-mode {
+    touch-action: manipulation;
+}
+
 /* the logo and the title float over the board's top left corner, like the dock */
 body.app-bar-mode header#pedalboard-actions {
     top: 12px;

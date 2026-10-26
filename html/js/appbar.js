@@ -16,6 +16,15 @@ JqueryClass('appBar', {
         self.addClass('mod-app-bar')
         $('body').addClass('app-bar-mode')
 
+        // the page itself never zooms: a double tap used to zoom it in with no way back,
+        // since the board takes pinches for its own zoom. Still laid out 980 wide, as
+        // mobile browsers do with no viewport given, which the dock fits in
+        var viewport = $('meta[name=viewport]')
+        if (! viewport.length) {
+            viewport = $('<meta name="viewport">').appendTo('head')
+        }
+        viewport.attr('content', 'width=980, user-scalable=no')
+
         // Edit is the constructor, Live the performance view: two states of one switch
         var mode = $('<div class="mode">').appendTo(self)
         var edit = $('<div class="segment">').text('Edit').click(function () {
