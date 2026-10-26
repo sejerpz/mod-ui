@@ -255,21 +255,25 @@ JqueryClass('appBar', {
             ['Load / Manage', options.snapshotManageButton],
         ]}]).appendTo(tools)
 
-        // the snapshot dialogs take the room the dock would cover: it slides away while
-        // one is up. They open and close with show() and hide(), whatever opened them
-        // and so do the windows of a plugin the board shows alone, see below
+        // The snapshot dialogs take the room the dock would cover: it slides away while
+        // one is up. They open and close with show() and hide(), whatever opened them,
+        // and so do the plugins' CPU usage, see below, and the MIDI ports. So do the
+        // bindings and the CV ports, which are added to the page while open, and the
+        // windows of a plugin the board shows alone, see below
         var dialogs = $()
-        // as does the plugins' CPU usage, see below
+        var shown = options.snapshotDialogs.add(options.cpuLoadWindow).add(options.midiPortsWindow)
         var makeRoom = function () {
-            self.toggleClass('away', options.snapshotDialogs.add(options.cpuLoadWindow).filter(':visible').length > 0 ||
+            self.toggleClass('away', shown.filter(':visible').length > 0 ||
+                                     $('body > .mod-pedal-settings-address').length > 0 ||
                                      dialogs.length > 0)
         }
-        options.snapshotDialogs.add(options.cpuLoadWindow).each(function () {
+        shown.each(function () {
             new MutationObserver(makeRoom).observe(this, {
                 attributes: true,
                 attributeFilter: ['style', 'class']
             })
         })
+        new MutationObserver(makeRoom).observe(document.body, { childList: true })
 
         // The A/B comparer as one button: A/B, on black, until there is a snapshot to
         // compare with. A tap takes one, which goes to B, and from then on switches
