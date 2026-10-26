@@ -126,6 +126,9 @@ JqueryClass('effectBox', {
 
         // CATEGORY SCROLL
         self.on('DOMMouseScroll mousewheel', function ( event ) {
+            // the grid library scrolls natively, up and down
+            if (self.hasClass('grid-library'))
+                return
             if( event.originalEvent.detail > 0 || event.originalEvent.wheelDelta < 0 )
                 self.effectBox('shiftNext');
             else
@@ -149,6 +152,64 @@ JqueryClass('effectBox', {
         self.mouseenter(function () { self.effectBox('mouseEnter'); });
         $("#main-menu").mouseenter(function () { self.trigger("mouseenter") });
         return self
+    },
+
+    // Grid mode's library: instead of the bar, an "Add plugin +" tab centered at the
+    // bottom, which slides the library up to the title bar. Every category is listed one
+    // under the other, in a grid, scrolling vertically. Picking a plugin closes it and
+    // starts tap-to-place.
+    setGridLibrary: function (on) {
+        var self = $(this)
+        if (! on || self.hasClass('grid-library')) {
+            return
+        }
+        self.addClass('grid-library')
+        // animated only from now on, or it is seen sliding away as the page loads
+        setTimeout(function () {
+            self.addClass('grid-library-ready')
+        }, 50)
+        // fingers scroll the list, see js/utils/touch.js
+        self.attr('data-touch-native', '')
+
+        // each category is titled after its tab, without the count
+        self.find('.plugins-wrapper').each(function () {
+            var category = this.id.replace(/^effect-content-/, '')
+            var tab = self.find('#effect-tab-' + category)
+            var title = tab.length ? $.trim(tab.contents().first().text()) : category
+            $(this).attr('data-title', title)
+        })
+
+        var header = $('<div class="grid-library-header">')
+        $('<span class="title">').text('Add plugin').appendTo(header)
+        header.append(self.find('#plugins-library-settings-window'))
+        $('<span class="close">&times;</span>').click(function () {
+            self.effectBox('closeLibrary')
+        }).appendTo(header)
+        self.prepend(header)
+
+        var tab = $('<div id="plugins-library-tab" class="ignore-arrive">Add plugin +</div>')
+        tab.click(function () {
+            if (self.data('pedalboard').pedalboard('placing')) {
+                self.data('pedalboard').pedalboard('hidePlacementGrid')
+            } else {
+                self.effectBox('openLibrary')
+            }
+        }).appendTo('body')
+        self.data('gridTab', tab)
+    },
+
+    openLibrary: function () {
+        var self = $(this)
+        // a plugin picked earlier and not placed yet is dropped
+        self.data('pedalboard').pedalboard('hidePlacementGrid')
+        self.addClass('open')
+        self.data('gridTab').addClass('hidden')
+    },
+
+    closeLibrary: function () {
+        var self = $(this)
+        self.removeClass('open')
+        self.data('gridTab').removeClass('hidden')
     },
 
     fold: function () {
@@ -179,7 +240,7 @@ JqueryClass('effectBox', {
 
     mouseEnter: function (e) {
         var self = $(this);
-        if (self.hasClass('auto')) {
+        if (self.hasClass('auto') && ! self.hasClass('grid-library')) {
             self.one("mouseleave", function () { self.effectBox('fold'); });
             self.effectBox('unfold');
         }
@@ -338,9 +399,13 @@ JqueryClass('effectBox', {
                 self.effectBox('renderPlugin', plugin, self.find('#effect-content-Favorites'))
             }
 
-            if (category && category != 'All') {
-                self.effectBox('renderPlugin', plugin, self.find('#effect-content-' + category))
+            // a category with no tab of its own, or none at all, goes under Other, which
+            // only the grid library shows
+            var wrapper = (category && category != 'All') ? self.find('#effect-content-' + category) : $()
+            if (wrapper.length == 0) {
+                wrapper = self.find('#effect-content-Other')
             }
+            self.effectBox('renderPlugin', plugin, wrapper)
 
             renderedIndex += 1
             setTimeout(renderNextPlugin, 1);
@@ -393,12 +458,12 @@ JqueryClass('effectBox', {
             // In grid mode a tap picks the plugin to place: the library gets out of the
             // way and the board offers the free cells to put it in
             if (self.data('pedalboard').pedalboard('gridMode')) {
-                var wasFolded = self.hasClass('folded')
-                self.effectBox('fold')
+                var tab = self.data('gridTab')
+                self.effectBox('closeLibrary')
+                // while the plugin is being placed, the tab is how a finger gives up
+                tab.text('Cancel \u00d7')
                 self.data('pedalboard').pedalboard('showPlacementGrid', rendered, function () {
-                    if (!wasFolded) {
-                        self.effectBox('unfold')
-                    }
+                    tab.text('Add plugin +')
                 })
                 return
             }
