@@ -149,11 +149,12 @@ JqueryClass('appBar', {
         // one is up. They open and close with show() and hide(), whatever opened them
         // and so do the windows of a plugin the board shows alone, see below
         var dialogs = $()
+        // as does the plugins' CPU usage, see below
         var makeRoom = function () {
-            self.toggleClass('away', options.snapshotDialogs.filter(':visible').length > 0 ||
+            self.toggleClass('away', options.snapshotDialogs.add(options.cpuLoadWindow).filter(':visible').length > 0 ||
                                      dialogs.length > 0)
         }
-        options.snapshotDialogs.each(function () {
+        options.snapshotDialogs.add(options.cpuLoadWindow).each(function () {
             new MutationObserver(makeRoom).observe(this, {
                 attributes: true,
                 attributeFilter: ['style', 'class']
@@ -174,6 +175,37 @@ JqueryClass('appBar', {
             attributeFilter: ['class']
         })
         showModified()
+
+        // The bottom bar's CPU and RAM meters, as two bars side by side, red for a while
+        // after an xrun. Tapping them opens the plugins' CPU usage, as the bar's CPU
+        // meter does. Read off the bar's texts, which host.js keeps up to date
+        var meter = $('<div class="meter">').click(function () {
+            options.cpuButton.click()
+        }).appendTo(tools)
+        var cpu = $('<div class="fill">').appendTo($('<div class="bar">').appendTo(meter))
+        var ram = $('<div class="fill">').appendTo($('<div class="bar">').appendTo(meter))
+        var percent = function (text) {
+            var value = parseFloat((text.text().match(/[\d.]+/) || ['0'])[0])
+            return Math.max(0, Math.min(100, value))
+        }
+        var showLoad = function () {
+            var c = percent(options.cpuText), r = percent(options.ramText)
+            cpu.css('height', c + '%')
+            ram.css('height', r + '%')
+            meter.attr('title', 'CPU ' + c + '% / RAM ' + r + '%')
+        }
+        options.cpuText.add(options.ramText).each(function () {
+            new MutationObserver(showLoad).observe(this, { childList: true, characterData: true, subtree: true })
+        })
+        showLoad()
+        var xrun = null
+        new MutationObserver(function () {
+            meter.addClass('xrun')
+            clearTimeout(xrun)
+            xrun = setTimeout(function () {
+                meter.removeClass('xrun')
+            }, 2000)
+        }).observe(options.xruns[0], { childList: true, characterData: true, subtree: true })
 
         // the library's tab, see effectBox's setGridLibrary, last. While a plugin is
         // being added it is the way out of it, and the dock folds down to just it
