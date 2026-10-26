@@ -1325,6 +1325,7 @@ JqueryClass('pedalboard', {
 
         icon.data('gridCell', cell)
         icon.data('gridScale', s)
+        icon.data('gridSize', { width: w, height: h })
         icon.css({
             left: x,
             top: y,
@@ -1364,6 +1365,24 @@ JqueryClass('pedalboard', {
         }
         cell = self.pedalboard('nearestFreeCell', cell, instance)
         self.pedalboard('fitInCell', instance, icon, cell, persist)
+
+        // having a size is not having its final one: the gui keeps growing as its
+        // stylesheet and images come in, which leaves it off its cell's center
+        if (! icon.data('gridRefit')) {
+            icon.data('gridRefit', true)
+            icon.children().resize(function () {
+                if (! $.contains(self[0], icon[0]) || ! icon.data('gridCell') ||
+                    icon.hasClass('ui-draggable-dragging') || ! self.pedalboard('gridMode')) {
+                    return
+                }
+                // some children change size with every fit, the plugin itself does not
+                var size = icon.data('gridSize')
+                if (size && size.width == icon.width() && size.height == icon.height()) {
+                    return
+                }
+                self.pedalboard('fitInCell', instance, icon, icon.data('gridCell'), persist)
+            })
+        }
     },
 
     // Draws the cells over the canvas, free ones marked. The grid lives inside the
