@@ -3815,9 +3815,12 @@ JqueryClass('pedalboard', {
         })
         $('.hasSVG.cable-connected').filter(function(e) {!(e in myjacks)}).css({'z-index': 0})
 
+        // over the other plugins, unless the board shows just one: then under the
+        // backdrop that hides the rest of it, see showPlugin
+        var z = self.data('pluginView') ? 0 : self.data("z_index")-1
         connMgr.iterateInstance(plugin.data('instance'), function (jack) {
             self.pedalboard('drawJack', jack)
-            $(jack.data('svg')._container).css({ 'z-index': self.data("z_index")-1, 'pointer-events': 'none'})
+            $(jack.data('svg')._container).css({ 'z-index': z, 'pointer-events': 'none'})
         })
     },
 
