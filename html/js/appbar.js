@@ -97,28 +97,80 @@ JqueryClass('appBar', {
         }).appendTo(self)
 
         // Edit is the constructor, Live the performance view: two states of one switch.
-        // The performance view fades in as it opens, and out before it closes when Edit
-        // closes it
+        // Going from one to the other fades the one out and then the other in: the
+        // board, then the performance view as it opens, or the performance view, then
+        // the board once it has closed. Animated from script, which starts over every
+        // time, where an animation set by a class may not
+        var FADE = 250
+        // `done` once it has, or a little later at the latest: a page in the background
+        // does not run animations, and the switch must still happen
+        var fade = function (element, from, to, done) {
+            var finished = false
+            var finish = function () {
+                if (! finished) {
+                    finished = true
+                    done && done()
+                    animation && animation.cancel()
+                }
+            }
+            var animation = element[0].animate && element[0].animate([{ opacity: from }, { opacity: to }],
+                                                                     { duration: FADE, easing: 'ease', fill: 'forwards' })
+            if (animation) {
+                animation.onfinish = finish
+            }
+            setTimeout(finish, animation ? FADE + 100 : 0)
+        }
+        // The board stays faded out (by its style, once its animation is over) for as
+        // long as the performance view is fading in or out over it
+        var board = options.pedalboard.parent()
+        var boardIn = function () {
+            fade(board, 0, 1, function () {
+                board.css('opacity', '')
+            })
+        }
+        var switching = false
         var mode = $('<div class="mode">').appendTo(self)
         var edit = $('<div class="segment">').text('Edit').click(function () {
             var view = options.performanceBox
-            if (! view.is(':visible') || options.places.filter(':visible').length) {
+            if (switching) {
+                return
+            }
+            if (options.places.filter(':visible').length) {
                 options.constructorTrigger.click()
+                boardIn()
                 return
             }
-            if (view.hasClass('leaving')) {
+            if (! view.is(':visible')) {
                 return
             }
+            switching = true
             edit.addClass('selected')
             live.removeClass('selected')
-            view.addClass('leaving')
-            setTimeout(function () {
-                view.removeClass('leaving')
+            board.css('opacity', 0)
+            fade(view, 1, 0, function () {
+                switching = false
                 options.constructorTrigger.click()
-            }, 250)
+                boardIn()
+            })
         }).appendTo(mode)
         var live = $('<div class="segment">').text('Live').click(function () {
-            options.performanceTrigger.click()
+            var view = options.performanceBox
+            if (switching || view.is(':visible')) {
+                return
+            }
+            // from one of the places the menu leads to, the board is not showing
+            if (options.places.filter(':visible').length) {
+                options.performanceTrigger.click()
+                return
+            }
+            switching = true
+            edit.removeClass('selected')
+            live.addClass('selected')
+            fade(board, 1, 0, function () {
+                board.css('opacity', 0)
+                switching = false
+                options.performanceTrigger.click()
+            })
         }).appendTo(mode)
         // In one of the places the menu leads to, like the plugin store, the board and
         // its tools are not there: the dock folds down to the way back to the mode the
@@ -137,9 +189,9 @@ JqueryClass('appBar', {
         }
         options.performanceBox.add(options.places).on('windowopen windowclose', showMode)
         options.performanceBox.on('windowopen', function () {
-            var view = options.performanceBox.removeClass('entering')
-            view[0].getBoundingClientRect()
-            view.addClass('entering')
+            fade(options.performanceBox, 0, 1, function () {
+                board.css('opacity', '')
+            })
         })
         showMode()
 

@@ -2774,25 +2774,6 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     transition: background-color 0.25s ease;
 }
 
-/* the switch between the board and the performance view, see js/appbar.js */
-body.app-bar-mode #performance.entering {
-    animation: mod-view-in 0.3s ease;
-}
-
-body.app-bar-mode #performance.leaving {
-    animation: mod-view-out 0.25s ease forwards;
-}
-
-@keyframes mod-view-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes mod-view-out {
-    from { opacity: 1; }
-    to { opacity: 0; }
-}
-
 #plugins-library-tab {
     height: 40px;
     line-height: 40px;
