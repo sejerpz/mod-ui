@@ -2536,6 +2536,35 @@ body.app-bar-mode.plugin-view > .mod-settings .js-close {
     display: none;
 }
 
+/* Going from the viewed plugin to its settings and back flips the board over to them,
+   see js/appbar.js: the face going away turns and fades out as the other turns and
+   fades in. Run backwards to go back */
+.mod-flip-away {
+    animation: mod-flip-face 0.35s ease-in-out forwards;
+}
+
+.mod-flip-back {
+    animation: mod-flip-face 0.35s ease-in-out reverse both;
+}
+
+body > .mod-settings.mod-flip-in {
+    animation: mod-flip-other-face 0.35s ease-in-out both;
+}
+
+body > .mod-settings.mod-flip-out {
+    animation: mod-flip-other-face 0.35s ease-in-out reverse forwards;
+}
+
+@keyframes mod-flip-face {
+    from { transform: perspective(1200px) rotateY(0); opacity: 1; }
+    to { transform: perspective(1200px) rotateY(90deg); opacity: 0; }
+}
+
+@keyframes mod-flip-other-face {
+    from { transform: perspective(1200px) rotateY(-90deg); opacity: 0; }
+    to { transform: perspective(1200px) rotateY(0); opacity: 1; }
+}
+
 /* the title makes room for the columns */
 body.app-bar-mode.plugin-view header#pedalboard-actions {
     opacity: 0;

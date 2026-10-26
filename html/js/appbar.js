@@ -218,17 +218,65 @@ JqueryClass('appBar', {
         // Its settings take the whole screen above the dock, which folds down to the way
         // back to the plugin, in place of the window's own close. Its other windows, like
         // the info, have the dock slide away. Wherever they were opened from
+        // The plugin and its settings are the two faces of a card: going from one to the
+        // other flips it, the face going away fading out as the other fades in. The
+        // plugin's face is the whole board, under its own scale
         var settings = null
+        var front = options.pedalboard.parent()
+        var FLIP = 350
+        var flipBack = function () {
+            if (! front.hasClass('mod-flip-away')) {
+                return
+            }
+            front.removeClass('mod-flip-away').addClass('mod-flip-back')
+            setTimeout(function () {
+                front.removeClass('mod-flip-back')
+            }, FLIP)
+        }
+        var closeSettings = function () {
+            if (! settings || settings.hasClass('mod-flip-out')) {
+                return
+            }
+            var closing = settings.removeClass('mod-flip-in').addClass('mod-flip-out')
+            flipBack()
+            setTimeout(function () {
+                closing.removeClass('mod-flip-out').window('close')
+            }, FLIP)
+        }
         var dialog = $('<div class="dialog">').appendTo(self)
-        $('<div>').text('‹ Back').click(function () {
-            settings && settings.window('close')
-        }).appendTo(dialog)
+        $('<div>').text('‹ Back').click(closeSettings).appendTo(dialog)
+        // A double tap on the settings' background goes back too: not on a control,
+        // nor where a finger scrolls
+        var down = null, tapped = 0
+        var controls = 'input, select, textarea, button, a, li, img, [mod-role], [mod-widget], [class*=icon-]'
+        var settingsDown = function (e) {
+            down = e.originalEvent
+        }
+        var settingsUp = function (e) {
+            var ev = e.originalEvent
+            if (! down || down.pointerId != ev.pointerId ||
+                Math.abs(ev.clientX - down.clientX) > 10 || Math.abs(ev.clientY - down.clientY) > 10 ||
+                $(ev.target).closest(controls).length) {
+                down = null
+                return
+            }
+            down = null
+            if (Date.now() - tapped < 350) {
+                tapped = 0
+                closeSettings()
+            } else {
+                tapped = Date.now()
+            }
+        }
         $(document).on('windowopen', function (e) {
             if (! viewed) {
                 return
             }
             if ($(e.target).is('.mod-settings')) {
                 settings = $(e.target)
+                settings.on('pointerdown.appbar', settingsDown).on('pointerup.appbar', settingsUp)
+                settings.removeClass('mod-flip-out').addClass('mod-flip-in')
+                front.removeClass('mod-flip-back').addClass('mod-flip-away')
                 setState('dialog', true)
             } else {
                 dialogs = dialogs.add(e.target)
@@ -237,7 +285,10 @@ JqueryClass('appBar', {
         })
         $(document).on('windowclose', function (e) {
             if (settings && settings[0] == e.target) {
+                settings.off('.appbar').removeClass('mod-flip-in mod-flip-out')
                 settings = null
+                // closed some other way than ours, all at once
+                flipBack()
                 setState('dialog', false)
             }
             dialogs = dialogs.not(e.target)
