@@ -2230,7 +2230,8 @@ body.app-bar-mode .mod-placement-badge {
     user-select: none;
 }
 
-.mod-app-bar .mode {
+.mod-app-bar .mode,
+.mod-app-bar .js-ab-compare {
     display: flex;
     border: 1px solid #333;
     border-radius: 8px;
@@ -2238,7 +2239,7 @@ body.app-bar-mode .mod-placement-badge {
 }
 
 .mod-app-bar .mode .segment,
-.mod-app-bar .snapshots .button,
+.mod-app-bar .snapshots .toggle,
 .mod-app-bar .save {
     min-width: 64px;
     height: 40px;
@@ -2247,6 +2248,12 @@ body.app-bar-mode .mod-placement-badge {
     box-sizing: border-box;
     text-align: center;
     cursor: pointer;
+}
+
+.mod-app-bar .mode .segment {
+    /* inside the border of the group, 40px with it like the other buttons */
+    height: 38px;
+    line-height: 38px;
 }
 
 .mod-app-bar .mode .segment.selected {
@@ -2280,15 +2287,20 @@ body.app-bar-mode .mod-placement-badge {
     gap: 12px;
 }
 
+/* the header's comparer, drawn like the Edit / Live group. Its markup has an inline
+   margin to center it in the header */
 .mod-app-bar .js-ab-compare {
-    margin: 0;
+    float: none;
+    margin: 0 !important;
 }
 
 .mod-app-bar .js-ab-compare-snapshot {
     width: 44px;
-    height: 40px;
+    height: 38px;
     line-height: 38px;
     font-size: 16px;
+    border: 0;
+    border-radius: 0;
 }
 
 .mod-app-bar .save {
@@ -2301,12 +2313,12 @@ body.app-bar-mode .mod-placement-badge {
     position: relative;
 }
 
-.mod-app-bar .snapshots .button {
+.mod-app-bar .snapshots .toggle {
     border: 1px solid #333;
     border-radius: 8px;
 }
 
-.mod-app-bar .snapshots.open .button {
+.mod-app-bar .snapshots.open .toggle {
     background: #883996;
     border-color: #883996;
 }

@@ -51,7 +51,7 @@ JqueryClass('appBar', {
         item('Save', options.snapshotSaveButton)
         item('Save as', options.snapshotSaveAsButton)
         item('Load / Manage', options.snapshotManageButton)
-        $('<div class="button">').text('Snapshots').click(function () {
+        $('<div class="toggle">').text('Snapshots').click(function () {
             snapshots.toggleClass('open')
             return false
         }).appendTo(snapshots)
