@@ -2091,10 +2091,14 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     display: inline-block !important;
 }
 
-/* a single category, the one whose tab is picked; under All every category, one under
-   the other, and the All list itself would only repeat them */
-#plugins-library.grid-library:not(.show-all) #plugins-list .plugins-wrapper:not(.selected),
-#plugins-library.grid-library.show-all #plugins-list #effect-content-Favorites {
+/* a single category, the one whose tab is picked. Under All every category, one under
+   the other, and the All and Favorites lists themselves would only repeat them. Under
+   Favorites the same, keeping only the favorites and the categories that have some */
+#plugins-library.grid-library:not(.show-all):not(.show-favorites) #plugins-list .plugins-wrapper:not(.selected),
+#plugins-library.grid-library.show-all #plugins-list #effect-content-Favorites,
+#plugins-library.grid-library.show-favorites #plugins-list #effect-content-Favorites,
+#plugins-library.grid-library.show-favorites #plugins-list .plugins-wrapper:not(.has-favorites),
+#plugins-library.grid-library.show-favorites #plugins-list .plugins-wrapper .plugin:not(.is-favorite) {
     display: none;
 }
 
@@ -2125,6 +2129,16 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     padding: 16px 0 6px;
     border-bottom: 3px solid #883996;
     margin-bottom: 4px;
+}
+
+/* a title is only worth having where the list mixes categories, under All and
+   Favorites. A single category is named by its tab */
+#plugins-library.grid-library:not(.show-all):not(.show-favorites) #plugins-list .plugins-wrapper {
+    padding-top: 16px;
+}
+
+#plugins-library.grid-library:not(.show-all):not(.show-favorites) #plugins-list .plugins-wrapper::before {
+    display: none;
 }
 
 #plugins-library.grid-library #plugins-list .plugins-wrapper .plugin {

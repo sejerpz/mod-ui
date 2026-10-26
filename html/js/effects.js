@@ -165,7 +165,7 @@ JqueryClass('effectBox', {
             return
         }
         self.addClass('grid-library')
-        self.toggleClass('show-all', self.data('category') == 'All')
+        self.effectBox('gridView')
         self.find('#effect-tab-Other').show()
         // animated only from now on, or it is seen sliding away as the page loads
         setTimeout(function () {
@@ -199,6 +199,33 @@ JqueryClass('effectBox', {
             }
         }).appendTo('body')
         self.data('gridTab', tab)
+    },
+
+    // What the grid library lists for the picked tab, see dashboard.css. All and
+    // Favorites list every category one under the other, titled, Favorites keeping only
+    // the favorite plugins and the categories that have some. Any other tab just its own
+    // plugins, which its tab already names.
+    gridView: function () {
+        var self = $(this)
+        var category = self.data('category')
+        self.toggleClass('show-all', category == 'All')
+        self.toggleClass('show-favorites', category == 'Favorites')
+        if (category != 'Favorites') {
+            return
+        }
+        var favorites = {}
+        for (var i = 0; i < FAVORITES.length; i++) {
+            favorites[escape(FAVORITES[i])] = true
+        }
+        self.find('.plugins-wrapper').each(function () {
+            var any = false
+            $(this).children('.plugin').each(function () {
+                var favorite = !! favorites[$(this).attr('mod-uri')]
+                $(this).toggleClass('is-favorite', favorite)
+                any = any || favorite
+            })
+            $(this).toggleClass('has-favorites', any)
+        })
     },
 
     openLibrary: function () {
@@ -256,10 +283,9 @@ JqueryClass('effectBox', {
         self.find('#effect-tab-' + category).addClass('selected')
         self.find('#effect-content-' + category).addClass("selected");
         self.data('category', category)
-        // the grid library shows every category under All, see dashboard.css, and
-        // starts a newly picked one from its top
-        self.toggleClass('show-all', category == 'All')
+        // the grid library starts a newly picked tab from its top
         if (self.hasClass('grid-library')) {
+            self.effectBox('gridView')
             self.find('#plugins-list').scrollTop(0)
         }
         self.effectBox('unfold')
@@ -608,6 +634,9 @@ JqueryClass('effectBox', {
                             }
 
                             self.find('#effect-tab-Favorites').find('.count').text('(' + FAVORITES.length + ')')
+                            if (self.hasClass('grid-library')) {
+                                self.effectBox('gridView')
+                            }
                         },
                         cache: false,
                         dataType: 'json'
