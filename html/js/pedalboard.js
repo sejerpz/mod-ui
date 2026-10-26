@@ -81,7 +81,15 @@ $.ui.intersect = function(draggable, droppable, toleranceMode) {
 // Size of a grid mode cell, in canvas units. Room for a typical pedal and its cables:
 // real plugins run from 90x155 to 780x480, and most are under 400 wide. A plugin
 // bigger than a cell is scaled down to keep PLACEMENT_PAD clear of the cell's edges.
+// Plugins are saved where they would be in cells of this size, whatever size they are
+// drawn in, so a board opens with every plugin in the same cell on any screen
+var PLACEMENT_SAVED_CELL = { width: 420, height: 620 }
+// The size they are drawn in, see fitCellToScreen: as saved, or tighter from
+// PLACEMENT_WIDE_SCREEN wide up, where there is room to show the plugins bigger with
+// less space around them
 var PLACEMENT_CELL = { width: 420, height: 620 }
+var PLACEMENT_WIDE_SCREEN = 1280
+var PLACEMENT_WIDE_CELL = { width: 320, height: 480 }
 var PLACEMENT_PAD = 20
 // How big a plugin is drawn in a cell, against the biggest that fits it
 var PLACEMENT_ICON_SCALE = 0.75
@@ -1195,6 +1203,8 @@ JqueryClass('pedalboard', {
     fitToWindow: function () {
         var self = $(this)
 
+        self.pedalboard('fitCellToScreen')
+
         var old = {
             width: self.width(),
             height: self.height()
@@ -1242,6 +1252,49 @@ JqueryClass('pedalboard', {
             y: cell.row * PLACEMENT_CELL.height,
             width: PLACEMENT_CELL.width,
             height: PLACEMENT_CELL.height
+        }
+    },
+
+    // Grid mode's cells as big as the screen calls for, see PLACEMENT_WIDE_SCREEN.
+    // Every plugin is laid out again when that changes, nothing saved.
+    fitCellToScreen: function () {
+        var self = $(this)
+        var size = $(window).width() >= PLACEMENT_WIDE_SCREEN ? PLACEMENT_WIDE_CELL : PLACEMENT_SAVED_CELL
+        if (size.width == PLACEMENT_CELL.width && size.height == PLACEMENT_CELL.height) {
+            return
+        }
+        PLACEMENT_CELL.width = size.width
+        PLACEMENT_CELL.height = size.height
+        if (! self.data('plugins') || ! self.pedalboard('gridMode')) {
+            return
+        }
+        var plugins = self.data('plugins')
+        for (var instance in plugins) {
+            var cell = plugins[instance].data && plugins[instance].data('gridCell')
+            if (cell) {
+                self.pedalboard('fitInCell', instance, plugins[instance], cell, false)
+            }
+        }
+    },
+
+    // Where a plugin w x h in `cell` is saved, and the cell a saved plugin is in, see
+    // PLACEMENT_SAVED_CELL. Laid out in a cell of that size the same way as in
+    // fitInCell, so a board saved on a screen of either size reads the same
+    savedPosition: function (cell, w, h) {
+        var s = PLACEMENT_ICON_SCALE * Math.min(1, (PLACEMENT_SAVED_CELL.width - 2 * PLACEMENT_PAD) / w,
+                                                   (PLACEMENT_SAVED_CELL.height - 2 * PLACEMENT_PAD) / h)
+        return {
+            x: Math.round(cell.col * PLACEMENT_SAVED_CELL.width + (PLACEMENT_SAVED_CELL.width - w * s) / 2),
+            y: Math.round(cell.row * PLACEMENT_SAVED_CELL.height + (PLACEMENT_SAVED_CELL.height - h * s) / 2),
+            scale: s
+        }
+    },
+
+    savedCell: function (x, y, w, h) {
+        var s = $(this).pedalboard('savedPosition', { col: 0, row: 0 }, w, h).scale
+        return {
+            col: Math.max(0, Math.floor((x + w * s / 2) / PLACEMENT_SAVED_CELL.width)),
+            row: Math.max(0, Math.floor((y + h * s / 2) / PLACEMENT_SAVED_CELL.height))
         }
     },
 
@@ -1361,7 +1414,8 @@ JqueryClass('pedalboard', {
             'transform-origin': '0 0'
         })
         if (persist) {
-            self.data('pluginMove')(instance, x, y)
+            var saved = self.pedalboard('savedPosition', cell, w, h)
+            self.data('pluginMove')(instance, saved.x, saved.y)
         }
         self.pedalboard('drawPluginJacks', icon)
         // the cells in use may have grown or shrunk, and the zoom with them
@@ -1386,12 +1440,10 @@ JqueryClass('pedalboard', {
             return
         }
         var persist = !! cell
+        // where it was saved, see PLACEMENT_SAVED_CELL
         if (! cell) {
-            var w = icon.width()
-            var h = icon.height()
-            var s = self.pedalboard('cellFitScale', w, h)
-            cell = self.pedalboard('cellAt', parseInt(icon.css('left')) + w * s / 2,
-                                             parseInt(icon.css('top')) + h * s / 2)
+            cell = self.pedalboard('savedCell', parseInt(icon.css('left')), parseInt(icon.css('top')),
+                                   icon.width(), icon.height())
         }
         cell = self.pedalboard('nearestFreeCell', cell, instance)
         self.pedalboard('fitInCell', instance, icon, cell, persist)
@@ -6058,6 +6110,12 @@ JqueryClass('pedalboard', {
         var self = $(this)
         var plugins = self.data('plugins');
         var plugin = plugins[instance];
+        // moved from another window: into the cell it was saved in, see savedCell
+        if (self.pedalboard('gridMode') && plugin.data && plugin.data('gridCell')) {
+            var cell = self.pedalboard('savedCell', x, y, plugin.width(), plugin.height())
+            self.pedalboard('fitInCell', instance, plugin, self.pedalboard('nearestFreeCell', cell, instance), false)
+            return
+        }
         plugin.css({ top: y, left: x })
         self.pedalboard('fitToWindow')
         self.pedalboard('drawPluginJacks', plugin)
