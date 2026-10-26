@@ -136,8 +136,11 @@ JqueryClass('appBar', {
 
         // the snapshot dialogs take the room the dock would cover: it slides away while
         // one is up. They open and close with show() and hide(), whatever opened them
+        // and so do the windows of a plugin the board shows alone, see below
+        var dialogs = $()
         var makeRoom = function () {
-            self.toggleClass('away', options.snapshotDialogs.filter(':visible').length > 0)
+            self.toggleClass('away', options.snapshotDialogs.filter(':visible').length > 0 ||
+                                     dialogs.length > 0)
         }
         options.snapshotDialogs.each(function () {
             new MutationObserver(makeRoom).observe(this, {
@@ -170,6 +173,47 @@ JqueryClass('appBar', {
         new MutationObserver(fold).observe(options.addButton[0], {
             attributes: true,
             attributeFilter: ['class']
+        })
+
+        // What a plugin can do, while the board shows just it, see the pedalboard's
+        // showPlugin: the dock folds down to these and the way back to the whole board.
+        // They are the plugin's own action icons
+        var plugin = $('<div class="plugin">').appendTo(self)
+        var viewed = null
+        var action = function (label, name, handler) {
+            $('<div>').addClass(name).text(label).click(handler || function () {
+                var icon = options.pedalboard.data('plugins')[viewed]
+                icon && icon.find('.mod-' + name).click()
+            }).appendTo(plugin)
+        }
+        action('‹ Board', 'board', function () {
+            options.pedalboard.pedalboard('leavePluginView')
+        })
+        action('Info', 'information')
+        action('Settings', 'settings')
+        // asked first: on a phone it is a finger away from Settings, and there is no undo
+        action('Remove', 'remove', function () {
+            var icon = options.pedalboard.data('plugins')[viewed]
+            var gui = icon && icon.data('gui')
+            var name = gui && gui.effect ? (gui.effect.label || gui.effect.name) : 'this plugin'
+            if (icon && confirm('Remove ' + name + ' from the pedalboard?')) {
+                icon.find('.mod-remove').click()
+            }
+        })
+        options.pedalboard.on('pluginview', function (e, instance) {
+            viewed = instance
+            setState('viewing', !! instance)
+        })
+        // its settings and info, wherever they were opened from
+        $(document).on('windowopen', function (e) {
+            if (viewed) {
+                dialogs = dialogs.add(e.target)
+                makeRoom()
+            }
+        })
+        $(document).on('windowclose', function (e) {
+            dialogs = dialogs.not(e.target)
+            makeRoom()
         })
 
         self.appendTo('body')
