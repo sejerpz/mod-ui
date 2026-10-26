@@ -359,6 +359,17 @@ $('document').ready(function() {
         desktop.isMobile = (navigator?.userAgentData?.mobile ?? false) || mobileCheck();
         desktop.isTouchDevice = desktop.isMobile || touchCheck();
         desktop.effectBox.effectBox('setGridLibrary', desktop.pedalboard.pedalboard('gridMode'));
+        if (desktop.pedalboard.pedalboard('gridMode')) {
+            $('<div id="app-bar">').appBar({
+                constructorTrigger: $('#main-menu #mod-plugins'),
+                performanceTrigger: $('#main-menu #performance-trigger'),
+                performanceBox: desktop.performanceBox,
+                pedalboard: desktop.pedalboard,
+                addButton: desktop.effectBox.data('gridTab'),
+                abCompare: $('#pedalboard-info .js-ab-compare'),
+                saveButton: $('#pedalboard-info .js-save'),
+            });
+        }
 
         if (desktop.isMobile) {
             $('body').addClass('mobile');
@@ -404,6 +415,7 @@ $('document').ready(function() {
 <script type="text/javascript" src="js/file_manager.js?v={{version}}"></script>
 <script type="text/javascript" src="js/banks.js?v={{version}}"></script>
 <script type="text/javascript" src="js/effects.js?v={{version}}"></script>
+<script type="text/javascript" src="js/appbar.js?v={{version}}"></script>
 <script type="text/javascript" src="js/cloudplugin.js?v={{version}}"></script>
 <script type="text/javascript" src="js/mididevices.js?v={{version}}"></script>
 <script type="text/javascript" src="js/snapshot.js?v={{version}}"></script>

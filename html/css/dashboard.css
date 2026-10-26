@@ -2147,22 +2147,157 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     touch-action: pan-y;
 }
 
-#plugins-library-tab {
-    position: absolute;
-    bottom: 45px;
+/* grid mode's application bar, a dock floating at the bottom center, see js/appbar.js.
+   It replaces the top and bottom bars:
+   the top one keeps only the logo and the title, see-through over the board */
+body.app-bar-mode #main-menu,
+body.app-bar-mode #pedalboard-info .actions,
+body.app-bar-mode #zoom-controllers {
+    display: none !important;
+}
+
+/* the logo and the title float over the board's top left corner, like the dock */
+body.app-bar-mode header#pedalboard-actions {
+    top: 12px;
+    left: 12px;
+    right: auto;
+    max-width: calc(100% - 24px);
+    height: 44px;
+    line-height: 44px;
+    box-sizing: border-box;
+    padding-right: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(51, 51, 51, 0.6);
+    background-color: rgba(17, 17, 17, 0.6);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+
+body.app-bar-mode #pedalboard-info {
+    position: static;
+    display: block;
+}
+
+body.app-bar-mode #pedalboard-info > h1 {
+    max-width: 100%;
+    margin: 0;
+    line-height: 42px;
+}
+
+/* what would end under the dock ends above it, the board runs under it */
+body.app-bar-mode #performance {
+    bottom: 80px;
+}
+
+body.app-bar-mode #plugins-library.grid-library {
+    bottom: 80px;
+    transform: translateY(calc(100% + 80px));
+}
+
+body.app-bar-mode #plugins-library.grid-library.open {
+    transform: none;
+}
+
+body.app-bar-mode .mod-placement-badge {
+    bottom: 80px;
+}
+
+.mod-app-bar {
+    position: fixed;
     left: 50%;
-    z-index: 8;
+    bottom: 12px;
     transform: translateX(-50%);
-    padding: 8px 28px;
-    border-radius: 8px 8px 0 0;
+    height: 56px;
+    z-index: 1001;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    border-radius: 16px;
+    border: 1px solid #333;
+    background: rgba(17, 17, 17, 0.92);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    color: #fff;
+    font-size: 16px;
+    user-select: none;
+}
+
+.mod-app-bar .mode {
+    display: flex;
+    border: 1px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.mod-app-bar .mode .segment,
+.mod-app-bar .save {
+    min-width: 64px;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    text-align: center;
+    cursor: pointer;
+}
+
+.mod-app-bar .mode .segment.selected {
+    background: #883996;
+}
+
+/* adding a plugin is the constructor's main action, in the middle */
+.mod-app-bar .add {
+    display: flex;
+}
+
+.mod-app-bar.performing .add {
+    display: none;
+}
+
+#plugins-library-tab {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 28px;
+    border-radius: 20px;
     background: #883996;
     color: #fff;
     cursor: pointer;
-    font-size: 16px;
     font-weight: bold;
     white-space: nowrap;
 }
 
-#plugins-library-tab.hidden {
-    display: none;
+.mod-app-bar .tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mod-app-bar .js-ab-compare {
+    margin: 0;
+}
+
+.mod-app-bar .js-ab-compare-snapshot {
+    width: 44px;
+    height: 40px;
+    line-height: 38px;
+    font-size: 16px;
+}
+
+.mod-app-bar .save {
+    position: relative;
+    border: 1px solid #333;
+    border-radius: 8px;
+}
+
+/* unsaved changes */
+.mod-app-bar .save.modified::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #883996;
 }

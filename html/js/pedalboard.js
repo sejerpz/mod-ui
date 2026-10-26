@@ -1161,6 +1161,15 @@ JqueryClass('pedalboard', {
     },
 
     // Resize pedalboard size to fit whole window
+    // Gives the board the window's height less `top` and `bottom` pixels, for when the
+    // bars around it are not the ones its css was laid out for, see js/appbar.js
+    setMargins: function (top, bottom) {
+        var self = $(this)
+        self.parent().css('top', top)
+        self.data('vmargins', top + bottom)
+        self.pedalboard('fitToWindow')
+    },
+
     // This is a bit buggy, because if window size is reduced, a plugin may get out of the pedalboard
     // area and become unreacheble. To correct this, scaling must also be considered when calculating
     // dimensions

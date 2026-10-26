@@ -154,8 +154,8 @@ JqueryClass('effectBox', {
         return self
     },
 
-    // Grid mode's library: instead of the bar, an "Add plugin +" tab centered at the
-    // bottom, which slides the library up to the title bar. The category tabs head it,
+    // Grid mode's library: instead of the bar, an "Add plugin +" button in the app bar,
+    // which slides the library up to the title bar. The category tabs head it,
     // and the plugins are in a grid scrolling vertically: All lists every category one
     // under the other, any other tab just its own. Picking a plugin closes it and starts
     // tap-to-place.
@@ -190,14 +190,17 @@ JqueryClass('effectBox', {
         }).appendTo(header)
         self.prepend(header)
 
+        // the app bar takes it in, see js/appbar.js
         var tab = $('<div id="plugins-library-tab" class="ignore-arrive">Add plugin +</div>')
         tab.click(function () {
             if (self.data('pedalboard').pedalboard('placing')) {
                 self.data('pedalboard').pedalboard('hidePlacementGrid')
+            } else if (self.hasClass('open')) {
+                self.effectBox('closeLibrary')
             } else {
                 self.effectBox('openLibrary')
             }
-        }).appendTo('body')
+        })
         self.data('gridTab', tab)
     },
 
@@ -233,13 +236,13 @@ JqueryClass('effectBox', {
         // a plugin picked earlier and not placed yet is dropped
         self.data('pedalboard').pedalboard('hidePlacementGrid')
         self.addClass('open')
-        self.data('gridTab').addClass('hidden')
+        self.data('gridTab').text('Close \u00d7')
     },
 
     closeLibrary: function () {
         var self = $(this)
         self.removeClass('open')
-        self.data('gridTab').removeClass('hidden')
+        self.data('gridTab').text('Add plugin +')
     },
 
     fold: function () {
