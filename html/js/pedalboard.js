@@ -83,6 +83,8 @@ $.ui.intersect = function(draggable, droppable, toleranceMode) {
 // bigger than a cell is scaled down to keep PLACEMENT_PAD clear of the cell's edges.
 var PLACEMENT_CELL = { width: 420, height: 620 }
 var PLACEMENT_PAD = 20
+// How big a plugin is drawn in a cell, against the biggest that fits it
+var PLACEMENT_ICON_SCALE = 0.65
 // How big the plugin waiting to be placed is drawn, against its size in a cell
 var PLACEMENT_BADGE_SCALE = 0.5
 
@@ -1301,17 +1303,17 @@ JqueryClass('pedalboard', {
         return element.closest('[mod-instance]').data('gridScale') || 1
     },
 
-    // The scale a w x h plugin is drawn at in a cell: down to fit inside PLACEMENT_PAD
-    // of the cell's edges, never up.
+    // The scale a w x h plugin is drawn at in a cell: PLACEMENT_ICON_SCALE of its size,
+    // or of the size that fits inside PLACEMENT_PAD of the cell's edges if smaller.
     cellFitScale: function (w, h) {
-        return Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
-                           (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
+        return PLACEMENT_ICON_SCALE * Math.min(1, (PLACEMENT_CELL.width - 2 * PLACEMENT_PAD) / w,
+                                                  (PLACEMENT_CELL.height - 2 * PLACEMENT_PAD) / h)
     },
 
-    // Puts a plugin in `cell`: scaled down to fit inside PLACEMENT_PAD of the cell's
-    // edges, never up, and centered. The scale is a transform from the top left
-    // corner, so the plugin's left/top stay its saved position. `persist` saves the
-    // position, which a plugin merely being laid out on load does not.
+    // Puts a plugin in `cell`: scaled by cellFitScale and centered. The scale is a
+    // transform from the top left corner, so the plugin's left/top stay its saved
+    // position. `persist` saves the position, which a plugin merely being laid out on
+    // load does not.
     fitInCell: function (instance, icon, cell, persist) {
         var self = $(this)
         var w = icon.width()
