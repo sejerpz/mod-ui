@@ -2979,6 +2979,44 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     border-color: #883996;
 }
 
+/* the dock's buttons slightly embossed: light on the top edge, shade on the bottom one
+   and a soft shadow below, all as shadows so the backgrounds stay theirs. Pressed, they
+   sink */
+.mod-app-bar .mode,
+.mod-app-bar .mode .segment.selected,
+.mod-app-bar .js-ab-compare,
+.mod-app-bar .save,
+.mod-app-bar .popup .toggle,
+.mod-app-bar .meter,
+.mod-app-bar .perf .actions > *,
+.mod-app-bar > .back > div,
+.mod-app-bar > .dialog > div,
+.mod-app-bar .plugin > div,
+#plugins-library-tab {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+                inset 0 14px 12px -10px rgba(255, 255, 255, 0.05),
+                inset 0 -14px 12px -10px rgba(0, 0, 0, 0.05),
+                0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.mod-app-bar .mode .segment.selected {
+    /* inside the group, which already casts the shadow */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+                inset 0 14px 12px -10px rgba(255, 255, 255, 0.05);
+}
+
+.mod-app-bar .save:active,
+.mod-app-bar .popup .toggle:active,
+.mod-app-bar .perf .actions > :active,
+.mod-app-bar > .back > div:active,
+.mod-app-bar > .dialog > div:active,
+.mod-app-bar .plugin > div:active,
+#plugins-library-tab:active {
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
 /* The plugin info where the screen is too narrow for the plugin and its description
    side by side, as on a phone, where the page is 980 wide. Rather than the plugin on
    top of the description, pushing it off the screen, the description starts at the top
