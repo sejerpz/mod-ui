@@ -123,10 +123,9 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M18 36h60M62 20l16 16-16 16M82 64H22M38 48 22 64l16 16' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-/* while a plugin is dragged over the grid, an arrow into a tray, without the pulse */
+/* while a plugin is dragged over the grid, an arrow into a tray */
 .mod-placement-grid.passive .mod-placement-cell.free::after {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 16v46M30 42l20 20 20-20M20 66v14h60V66' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    animation: none;
     opacity: 0.6;
 }
 
@@ -144,11 +143,15 @@
     opacity: 0.6;
 }
 
+/* the cell a dragged plugin would land in, lit over the cut of a free cell: as far in
+   from the cell's edge as its border, as round, its border as wide as the cut */
 .mod-placement-target {
     position: absolute;
     box-sizing: border-box;
-    border: 8px solid rgba(136, 57, 150, 0.9);
+    border: 14px solid rgba(136, 57, 150, 0.9);
+    border-radius: 28px;
     background-color: rgba(136, 57, 150, 0.2);
+    background-clip: padding-box;
 }
 
 .mod-placement-target.blocked {

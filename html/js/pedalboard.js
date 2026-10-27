@@ -2116,9 +2116,12 @@ JqueryClass('pedalboard', {
         }
         var cell = self.pedalboard('gridDropCell', instance, icon)
         var rect = self.pedalboard('cellRect', cell)
+        // over the cut of a free cell, inside its border, see dashboard.css
+        var inset = 12
         grid.find('.mod-placement-target')
             .toggleClass('blocked', ! self.pedalboard('cellFree', cell, instance))
-            .css({ left: rect.x, top: rect.y, width: rect.width, height: rect.height })
+            .css({ left: rect.x + inset, top: rect.y + inset,
+                   width: rect.width - 2 * inset, height: rect.height - 2 * inset })
     },
 
     // The cell under the middle of a plugin being dragged.
@@ -2141,7 +2144,22 @@ JqueryClass('pedalboard', {
         if (! self.pedalboard('cellFree', cell, instance)) {
             cell = icon.data('gridCell') || self.pedalboard('nearestFreeCell', cell, instance)
         }
+        var from = { left: parseInt(icon.css('left')), top: parseInt(icon.css('top')) }
         self.pedalboard('fitInCell', instance, icon, cell, true)
+        // and glides there from where it was let go, as one being added flies into its
+        // cell, see flyToCell, its cables following
+        var to = { left: parseInt(icon.css('left')), top: parseInt(icon.css('top')) }
+        if (from.left != to.left || from.top != to.top) {
+            icon.stop(true).css(from).animate(to, {
+                duration: 400,
+                progress: function () {
+                    self.pedalboard('drawPluginJacks', icon)
+                },
+                complete: function () {
+                    self.pedalboard('drawPluginJacks', icon)
+                }
+            })
+        }
     },
 
     // Prevents dragging of whole dashboard when dragging of effect or jack starts
