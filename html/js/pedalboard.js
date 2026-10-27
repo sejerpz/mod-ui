@@ -6099,7 +6099,8 @@ JqueryClass('pedalboard', {
     },
 
     // What a cable starting from `output` comes from, for the dock: { label, port, type,
-    // thumbnail }, the thumbnail being for a plugin's output only, not the board's
+    // thumbnail }, the thumbnail being for a plugin's output only, not the board's. The
+    // same for an input, what a cable goes into
     connectionSource: function (output) {
         var self = $(this)
         var port = output.attr('mod-port')
@@ -6115,7 +6116,7 @@ JqueryClass('pedalboard', {
         var effect = gui.effect
         var ports = plugin.data('ports')[type]
         var name = symbol
-        $.each((ports && ports.output) || [], function (i, each) {
+        $.each(((ports && ports.output) || []).concat((ports && ports.input) || []), function (i, each) {
             if (each.symbol == symbol) {
                 name = each.name || symbol
             }
@@ -6195,7 +6196,8 @@ JqueryClass('pedalboard', {
     },
 
     // Starts a cable from the outputs of `instance`: from its only one, or from the one
-    // picked in pickPort. Whether it has any.
+    // picked in pickPort, which lists under each the cables going out of it to be
+    // unplugged one by one. Whether it has any.
     connectFromOutputs: function (instance) {
         var self = $(this)
         var origIndex = self.data('connectionManager').origIndex
@@ -6209,13 +6211,20 @@ JqueryClass('pedalboard', {
         var start = function (port) {
             self.pedalboard('startConnection', self.find('[mod-port="' + port + '"]'))
         }
-        if (outputs.length == 1) {
+        var choices = $.map(outputs, function (output) {
+            var cables = $.map(Object.keys(origIndex[output] || {}), function (to) {
+                return { from: output, to: to, label: self.pedalboard('cableEnd', to) }
+            })
+            return { port: output, connected: cables.length > 0, cables: cables }
+        })
+        // with no cable to offer to unplug, a single output is the one to start from
+        if (outputs.length == 1 && ! choices[0].connected) {
             start(outputs[0])
             return true
         }
-        self.pedalboard('pickPort', instance, 'output', $.map(outputs, function (port) {
-            return { port: port, connected: Object.keys(origIndex[port] || {}).length > 0 }
-        }), start)
+        self.pedalboard('pickPort', instance, 'output', choices, start, function (from, to) {
+            self.data('portDisconnect')(from, to, function () {})
+        })
         return true
     },
 
@@ -6231,8 +6240,7 @@ JqueryClass('pedalboard', {
         var any = false
         var choices = $.map(inputs, function (input) {
             var cables = $.map(Object.keys(destIndex[input] || {}), function (from) {
-                var source = self.pedalboard('connectionSource', self.find('[mod-port="' + from + '"]'))
-                return { from: from, label: source.port ? source.label + ' · ' + source.port : source.label }
+                return { from: from, to: input, label: self.pedalboard('cableEnd', from) }
             })
             any = any || cables.length > 0
             return { port: input, connected: cables.length > 0, cables: cables }
@@ -6244,6 +6252,12 @@ JqueryClass('pedalboard', {
             self.data('portDisconnect')(from, to, function () {})
         })
         return true
+    },
+
+    // The other end of a cable listed in pickPort, the plugin and the name of `port`
+    cableEnd: function (port) {
+        var end = $(this).pedalboard('connectionSource', $(this).find('[mod-port="' + port + '"]'))
+        return end.port ? end.label + ' · ' + end.port : end.label
     },
 
     // Ends the cable being made from `jack` in `instance`: in its only input of the
@@ -6293,8 +6307,8 @@ JqueryClass('pedalboard', {
     // says, for `done`: an overlay by the plugin with their jacks spread out, each with
     // its name. Each choice is { port, connected, disabled, cables }; one that is
     // disabled is shown but cannot be picked. With no `done` none can, the overlay
-    // being for the `cables` listed under each, { from, label }, which a tap on their
-    // trash hands to `unplug`. A tap anywhere else closes it, picking nothing.
+    // being for the `cables` listed under each, { from, to, label }, which a tap on
+    // their x hands to `unplug`. A tap anywhere else closes it, picking nothing.
     pickPort: function (instance, dir, ports, done, unplug) {
         var self = $(this)
         var plugin = self.data('plugins')[instance]
@@ -6338,13 +6352,17 @@ JqueryClass('pedalboard', {
             } else if (! done) {
                 row.addClass('static')
             }
+            var plugged = (choice.cables || []).length
             $.each(choice.cables || [], function (j, cable) {
                 var line = $('<div class="mod-port-picker-cable">').appendTo(panel)
                 $('<div class="mod-port-picker-from">').text(cable.label).appendTo(line)
                 $('<div class="mod-port-picker-unplug">').on('click', function () {
-                    unplug(cable.from, choice.port)
+                    unplug(cable.from, cable.to)
                     line.remove()
-                    if (! panel.find('.mod-port-picker-cable').length) {
+                    plugged -= 1
+                    row.toggleClass('connected', plugged > 0)
+                    // with nothing left to unplug, nor a port to pick, it has done its job
+                    if (! done && ! panel.find('.mod-port-picker-cable').length) {
                         overlay.remove()
                     }
                     return false
