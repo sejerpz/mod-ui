@@ -100,6 +100,36 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 10v54M28 42l22 22 22-22M16 68v18h68V68' fill='none' stroke='white' stroke-opacity='0.3' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
+/* a plugin the one being placed can take the place of, see markSwapCells: a round
+   button in the middle of it, with two arrows going opposite ways */
+.mod-placement-cell.swap {
+    cursor: pointer;
+}
+
+.mod-placement-cell.swap::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120px;
+    height: 120px;
+    margin: -60px 0 0 -60px;
+    border-radius: 50%;
+    border: 6px dashed rgba(255, 255, 255, 0.6);
+    box-sizing: border-box;
+    background: rgba(17, 17, 17, 0.75) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M18 36h60M62 20l16 16-16 16M82 64H22M38 48 22 64l16 16' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 60% no-repeat;
+    animation: mod-insert-pulse 1.6s ease-out infinite;
+    font-size: 40px;
+}
+
+.mod-placement-cell.swap:active::after {
+    background-color: rgba(136, 57, 150, 0.85);
+}
+
+.mod-placement-grid.passive .mod-placement-cell.swap::after {
+    display: none;
+}
+
 /* shown under a plugin being dragged, which must keep receiving the pointer */
 .mod-placement-grid.passive {
     pointer-events: none;

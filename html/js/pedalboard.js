@@ -1523,12 +1523,20 @@ JqueryClass('pedalboard', {
                 return false
             }
             var cell = $(this)
-            // a taken cell does nothing, the plugin stays picked for another try.
+            var chosen = cell.data('cell')
+            // a plugin it can take the place of, see markSwapCells
+            if (cell.hasClass('swap')) {
+                var instance = cell.data('swap')
+                self.pedalboard('flyToCell', chosen)
+                self.pedalboard('hidePlacementGrid')
+                self.pedalboard('swapInCell', element, chosen, instance)
+                return false
+            }
+            // another taken cell does nothing, the plugin stays picked for another try.
             // Read before hiding, removing the grid drops its data
             if (! cell.hasClass('free')) {
                 return false
             }
-            var chosen = cell.data('cell')
             // before hiding, which takes the badge away
             self.pedalboard('flyToCell', chosen)
             self.pedalboard('hidePlacementGrid')
@@ -1559,6 +1567,7 @@ JqueryClass('pedalboard', {
             }
             // with its ports known, which the library does not list
             self.pedalboard('showInsertPoints', grid, element, plugin)
+            self.pedalboard('markSwapCells', grid, plugin)
             icon.css({ visibility: 'hidden', 'transform-origin': '0 0' }).appendTo(preview)
             var children = icon.children()
             // Shown once it has a size, and sized again whenever that changes: the
@@ -1658,6 +1667,40 @@ JqueryClass('pedalboard', {
         setTimeout(function () {
             flyer.remove()
         }, 5000)
+    },
+
+    // The cells of the plugins the one waiting to be placed, `pluginData`, can take the
+    // place of, keeping their cables, see replaceable. Marked to be swapped, see
+    // swapInCell.
+    markSwapCells: function (grid, pluginData) {
+        var self = $(this)
+        var plugins = self.data('plugins')
+        var swappable = {}
+        for (var instance in plugins) {
+            var at = plugins[instance].data && plugins[instance].data('gridCell')
+            if (at && self.pedalboard('replaceable', instance, pluginData)) {
+                swappable[at.col + ' ' + at.row] = instance
+            }
+        }
+        grid.find('.mod-placement-cell.taken').each(function () {
+            var cell = $(this).data('cell')
+            var instance = swappable[cell.col + ' ' + cell.row]
+            if (instance) {
+                $(this).addClass('swap').data('swap', instance)
+            }
+        })
+    },
+
+    // Puts the plugin registered as `element` in the place of `instance`, in its `cell`:
+    // the one goes, the other comes in with its cables, see replacementFor.
+    swapInCell: function (element, cell, instance) {
+        var self = $(this)
+        var plugin = self.data('plugins')[instance]
+        self.data('replacementPlugin', self.pedalboard('replacementFor', instance))
+        // once it has gone, for the cell to be free
+        self.pedalboard('removePlugin', instance, plugin.data('ports'), function () {
+            self.pedalboard('addToCell', element, cell, { swap: true })
+        })
     },
 
     // Whether a plugin picked from the library is waiting to be placed.
@@ -1822,6 +1865,10 @@ JqueryClass('pedalboard', {
     // added into the cables of `wiring` (see showInsertPoints), into those instead.
     wirePlugin: function (instance, cell, wiring) {
         var self = $(this)
+        // in the place of another, it takes its cables instead, see swapInCell
+        if (wiring && wiring.swap) {
+            return
+        }
         var connect = function (pair) {
             self.pedalboard('wireConnect', pair[0], pair[1])
         }
@@ -3430,8 +3477,13 @@ JqueryClass('pedalboard', {
 
             icon.attr('mod-io-type', pluginData.iotype)
 
+            // a plugin of the same kind takes its place, a mono effect a stereo one's too
+            // and the other way round, see replacementFor
+            var accepted = pluginData.iotype == 1 || pluginData.iotype == 2 ? [1, 2] : [pluginData.iotype]
             icon.droppable({
-                accept: '[mod-role=available-plugin][mod-io-type="'+pluginData.iotype+'"]',
+                accept: $.map(accepted, function (iotype) {
+                    return '[mod-role=available-plugin][mod-io-type="' + iotype + '"]'
+                }).join(','),
                 tolerance: 'custom-replace',
                 activeClass: 'possible-replaceable-drop',
                 drop: function (event, ui) {
@@ -3443,56 +3495,7 @@ JqueryClass('pedalboard', {
                     ui.helper.data('overIcons', []);
 
                     var instance = event.target.getAttribute('mod-instance')
-                    var connMgr = self.data('connectionManager')
-                    var replacement = {
-                        'instance': instance,
-                        'audio': [],
-                        'midi': [],
-                    }
-
-                    connMgr.iterateInstance(instance, function (jack) {
-                        var input   = jack.data('destination')
-                        var inport  = input.attr('mod-port')
-                        var output  = jack.data('origin')
-                        var outport = output.attr('mod-port')
-                        // Captured here because this is the last moment it exists: removing
-                        // the plugin below destroys these jacks, and the lifetime rule then
-                        // drops the name. close() puts both back when it recreates the cable.
-                        var teleport = jack.data('teleported')
-                                     ? self.pedalboard('teleportName', output) : null
-                        var type
-                        if (input.hasClass('mod-audio-input')) {
-                            type = 'audio'
-                        } else if (input.hasClass('mod-midi-input')) {
-                            type = 'midi'
-                        } else {
-                            return
-                        }
-                        if (startsWith(inport, instance+'/')) {
-                            var symbol = inport.slice(instance.length+1)
-                            console.log(symbol, pluginData.ports[type]['input'])
-                            for (var i = 0; i < pluginData.ports[type]['input'].length; i++) {
-                                if (pluginData.ports[type]['input'][i].symbol == symbol) {
-                                    inport = i
-                                    break;
-                                }
-                            }
-                        }
-                        if (startsWith(outport, instance+'/')) {
-                            var symbol = outport.slice(instance.length+1)
-                            console.log(symbol, pluginData.ports[type]['output'])
-                            for (var i = 0; i < pluginData.ports[type]['output'].length; i++) {
-                                if (pluginData.ports[type]['output'][i].symbol == symbol) {
-                                    outport = i
-                                    break;
-                                }
-                            }
-                        }
-                        replacement[type].push([inport, outport, teleport])
-                    })
-
-                    console.log(replacement)
-
+                    var replacement = self.pedalboard('replacementFor', instance)
                     self.data('replacementPlugin', replacement)
                     self.pedalboard('removePlugin', instance, pluginData.ports)
                 },
@@ -3607,9 +3610,84 @@ JqueryClass('pedalboard', {
         self.data('replacementPlugin', null)
 
         if (replacementPlugin) {
+            var counts = replacementPlugin.counts
+            // its own ports for one of the replaced plugin's, see replacementFor: the
+            // same one, or where it has more or fewer of them, from mono to stereo and
+            // back, the last of the fewer stands for all the extra ones of the others
+            var ownPorts = function (end, dir) {
+                if (typeof end === 'string') {
+                    return [end]
+                }
+                var list = (pluginData.ports[end.type] && pluginData.ports[end.type][dir]) || []
+                var count = counts[end.type][dir]
+                return $.map(list, function (port, k) {
+                    return Math.min(k, count - 1) == end.index || Math.min(end.index, list.length - 1) == k
+                         ? instance + '/' + port.symbol : null
+                })
+            }
+            // The cables of each of its ports to each other plugin, together: the new
+            // plugin's ports for that one are paired with the other's they went to, in
+            // order, so a mono one's two cables into a stereo plugin come from the
+            // left and the right of a stereo one taking its place, not both from each.
+            // The last of the fewer on either side takes all the extra ones
+            var cables = [], seen = {}
+            var connect = function (from, to, teleport) {
+                // two cables of a stereo one into the same port of the mono one's are
+                // one, when they came from the same port
+                if (! seen[from + ' ' + to]) {
+                    seen[from + ' ' + to] = true
+                    cables.push([from, to, teleport || null])
+                }
+            }
+            var groups = {}, order = []
+            $.each(replacementPlugin.cables, function (i, cable) {
+                // from it to itself
+                if (typeof cable[0] !== 'string' && typeof cable[1] !== 'string') {
+                    $.each(ownPorts(cable[0], 'output'), function (j, from) {
+                        $.each(ownPorts(cable[1], 'input'), function (k, to) {
+                            connect(from, to)
+                        })
+                    })
+                    return
+                }
+                var out = typeof cable[0] !== 'string'
+                var own = out ? cable[0] : cable[1]
+                var other = out ? cable[1] : cable[0]
+                var key = out + ' ' + own.type + ' ' + own.index + ' ' + other.substring(0, other.lastIndexOf('/'))
+                if (! groups[key]) {
+                    groups[key] = { out: out, own: own, others: [], teleports: {} }
+                    order.push(key)
+                }
+                groups[key].others.push(other)
+                groups[key].teleports[other] = cable[2]
+            })
+            $.each(order, function (i, key) {
+                var group = groups[key]
+                var mine = ownPorts(group.own, group.out ? 'output' : 'input')
+                // theirs in their plugin's order, the board's by name
+                var at = group.others[0].substring(0, group.others[0].lastIndexOf('/'))
+                var listed = self.pedalboard('wirePorts', at, group.own.type)
+                listed = group.out ? listed.input : listed.output
+                var others = group.others.sort(function (a, b) {
+                    return listed.indexOf(a) >= 0 && listed.indexOf(b) >= 0
+                         ? listed.indexOf(a) - listed.indexOf(b) : (a < b ? -1 : 1)
+                })
+                for (var j = 0; j < Math.max(mine.length, others.length); j++) {
+                    var port = mine[Math.min(j, mine.length - 1)]
+                    var other = others[Math.min(j, others.length - 1)]
+                    if (port !== undefined) {
+                        if (group.out) {
+                            connect(port, other, group.teleports[other])
+                        } else {
+                            connect(other, port, group.teleports[other])
+                        }
+                    }
+                }
+            })
+
             var hasConnectionsErrors = 0,
                 connectionsDone = 0,
-                connectionsToDo = replacementPlugin.audio.length + replacementPlugin.midi.length;
+                connectionsToDo = cables.length;
 
             function finalizeConnection(ok) {
                 hasConnectionsErrors |= !ok;
@@ -3619,58 +3697,98 @@ JqueryClass('pedalboard', {
                 }
             }
 
-            for (var i in replacementPlugin.audio) {
-                var ports = replacementPlugin.audio[i]
-                var inport, outport
-                if (typeof(ports[0]) === 'number') {
-                    inport = pluginData.ports['audio']['input'][ports[0]]
-                    if (inport === undefined) {
-                        continue
-                    }
-                    inport = instance+'/'+inport.symbol
-                } else {
-                    inport = replacementPlugin.audio[i][0]
-                }
-                if (typeof(ports[1]) === 'number') {
-                    outport = pluginData.ports['audio']['output'][ports[1]]
-                    if (outport === undefined) {
-                        continue
-                    }
-                    outport = instance+'/'+outport.symbol
-                } else {
-                    outport = replacementPlugin.audio[i][1]
-                }
+            $.each(cables, function (i, cable) {
+                var teleportKey = self.pedalboard('restoreReplacedTeleport', cable[2], cable[0], cable[1])
+                self.data('portConnect')(cable[0], cable[1], self.pedalboard('replacedConnectionDone', teleportKey, finalizeConnection))
+            })
+        }
+    },
 
-                var teleportKey = self.pedalboard('restoreReplacedTeleport', ports[2], outport, inport)
-                self.data('portConnect')(outport, inport, self.pedalboard('replacedConnectionDone', teleportKey, finalizeConnection))
+    // What the plugin taking the place of `instance` is to get back of its cables, see
+    // addPlugin: each as [from, to, teleport], where an end on `instance` itself is
+    // {type, index}, the index of the port among its own ports of that kind, ins or
+    // outs, and how many of those it has, so the new plugin's can be matched to them
+    // even when it has more or fewer. Taken before `instance` is removed, which takes
+    // the cables away
+    replacementFor: function (instance) {
+        var self = $(this)
+        var ports = self.data('plugins')[instance].data('ports')
+        var replacement = { instance: instance, counts: {}, cables: [] }
+        $.each(['audio', 'midi', 'cv'], function (i, type) {
+            replacement.counts[type] = {
+                input: ((ports[type] && ports[type].input) || []).length,
+                output: ((ports[type] && ports[type].output) || []).length
             }
-
-            for (var i in replacementPlugin.midi) {
-                var ports = replacementPlugin.midi[i]
-                var inport, outport
-                if (typeof(ports[0]) === 'number') {
-                    inport = pluginData.ports['midi']['input'][ports[0]]
-                    if (inport === undefined) {
-                        continue
-                    }
-                    inport = instance+'/'+inport.symbol
-                } else {
-                    inport = replacementPlugin.midi[i][0]
+        })
+        var end = function (element, dir) {
+            var port = element.attr('mod-port')
+            if (! startsWith(port, instance + '/')) {
+                return port
+            }
+            var symbol = port.slice(instance.length + 1)
+            var type = (element.attr('mod-role') || '').split('-')[1]
+            var list = (ports[type] && ports[type][dir]) || []
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].symbol == symbol) {
+                    return { type: type, index: i }
                 }
-                if (typeof(ports[1]) === 'number') {
-                    outport = pluginData.ports['midi']['output'][ports[1]]
-                    if (outport === undefined) {
-                        continue
-                    }
-                    outport = instance+'/'+outport.symbol
-                } else {
-                    outport = replacementPlugin.midi[i][1]
-                }
+            }
+            return null
+        }
+        self.data('connectionManager').iterateInstance(instance, function (jack) {
+            var output = jack.data('origin')
+            var from = end(output, 'output')
+            var to = end(jack.data('destination'), 'input')
+            if (! from || ! to) {
+                return
+            }
+            // Captured here because this is the last moment it exists: removing the
+            // plugin destroys these jacks, and the lifetime rule then drops the name.
+            // addPlugin puts both back when it recreates the cable.
+            var teleport = jack.data('teleported') ? self.pedalboard('teleportName', output) : null
+            replacement.cables.push([from, to, teleport])
+        })
+        return replacement
+    },
 
-                var teleportKey = self.pedalboard('restoreReplacedTeleport', ports[2], outport, inport)
-                self.data('portConnect')(outport, inport, self.pedalboard('replacedConnectionDone', teleportKey, finalizeConnection))
+    // Whether the plugin `pluginData` describes, its ports listed, can take the place of
+    // `instance` and its cables, see replacementFor: with audio and MIDI ins and outs
+    // where it has them, and only there, however many, a mono plugin for a stereo one
+    // too. CV where it has cables on it.
+    replaceable: function (instance, pluginData) {
+        var self = $(this)
+        var plugin = self.data('plugins')[instance]
+        var ports = plugin && plugin.data && plugin.data('ports')
+        if (! ports || ! pluginData.ports) {
+            return false
+        }
+        var connMgr = self.data('connectionManager')
+        var list = function (ports, type, dir) {
+            return (ports[type] && ports[type][dir]) || []
+        }
+        var types = ['audio', 'midi', 'cv'], dirs = ['input', 'output']
+        for (var i = 0; i < types.length; i++) {
+            for (var j = 0; j < dirs.length; j++) {
+                var own = list(ports, types[i], dirs[j])
+                var theirs = list(pluginData.ports, types[i], dirs[j])
+                if (types[i] != 'cv') {
+                    if (! own.length != ! theirs.length) {
+                        return false
+                    }
+                    continue
+                }
+                if (theirs.length) {
+                    continue
+                }
+                var index = dirs[j] == 'input' ? connMgr.destIndex : connMgr.origIndex
+                for (var k = 0; k < own.length; k++) {
+                    if (Object.keys(index[instance + '/' + own[k].symbol] || {}).length) {
+                        return false
+                    }
+                }
             }
         }
+        return true
     },
 
     // Remove "Trial" watermark from all instances of a plugin
@@ -3954,7 +4072,7 @@ JqueryClass('pedalboard', {
 
     // Removes a plugin from pedalboard. (from the system?)
     // Calls application removal function with proper removal callback
-    removePlugin: function (instance, ports) {
+    removePlugin: function (instance, ports, done) {
         var self = $(this)
         var pluginRemove = self.data('pluginRemove')
         // In grid mode the cables through it are joined up again, once it is gone. Not
@@ -3965,6 +4083,9 @@ JqueryClass('pedalboard', {
           $.each(bridges, function (i, bridge) {
             self.pedalboard('wireConnect', bridge[0], bridge[1])
           })
+          if (done) {
+            done()
+          }
           // Remove plugin's cv output ports from harware manager
           if (ports && ports.cv && ports.cv.output) {
             for (var i = 0; i < ports.cv.output.length; i++) {
