@@ -40,9 +40,8 @@ JqueryClass('appBar', {
         $(window).on('orientationchange resize', fitViewport)
 
         // A phone, by the short side of its screen, which the page's 980 wide layout does
-        // not change: too small for the action icons above each plugin, see
-        // dashboard.css. Tapping a plugin leads to its actions there. A screen of no
-        // known size is not one
+        // not change, for what a phone's screen is too small for. A screen of no known
+        // size is not one
         var side = Math.min(screen.width, screen.height)
         $('body').toggleClass('phone', side > 0 && side < 600)
 
