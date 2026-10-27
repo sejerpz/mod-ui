@@ -673,6 +673,16 @@ JqueryClass('pedalboard', {
 
         self.pedalboard('initGestures')
 
+        // In grid mode a plugin's whole cell takes taps for it, not just the plugin,
+        // which is drawn much smaller, see cellTap. The plugin takes its own
+        self.on('click', function (event) {
+            if (! self.pedalboard('gridMode') || self.data('pluginView') || self.data('placementGrid') ||
+                $(event.target).closest('.mod-pedal').length) {
+                return
+            }
+            self.pedalboard('cellTap', event, null)
+        })
+
         // To add plugins to pedalboard, user drags and drops a plugin element,
         // one that has been registered with registerAvailablePlugin
         self.droppable({
@@ -3301,14 +3311,14 @@ JqueryClass('pedalboard', {
                     self.pedalboard('connectToPlugin', connection.jack, instance)
                     return
                 }
-                // in grid mode, a tap on its background by its outputs starts a cable from
-                // them, see connectFromPlugin, by its inputs shows the cables into them, see
-                // unplugAtPlugin, and further in shows just the plugin
+                // in grid mode, a tap on its background on the side of its outputs or its
+                // inputs is for them, see cellTap, and further in shows just the plugin
                 if (! connection && self.pedalboard('gridMode') && ! self.data('pluginView') &&
-                    $(event.target).hasClass('mod-drag-handle') &&
-                    (self.pedalboard('connectFromPlugin', instance, event) ||
-                     self.pedalboard('unplugAtPlugin', instance, event))) {
-                    return
+                    $(event.target).hasClass('mod-drag-handle')) {
+                    var zone = self.pedalboard('cellZone', event)
+                    if (zone && zone.side != 'plugin' && self.pedalboard('cellTap', event, null)) {
+                        return
+                    }
                 }
                 if (event.shiftKey) {
                     // A port has its own shift-click, which toggles its vu meter, and the
@@ -6031,8 +6041,14 @@ JqueryClass('pedalboard', {
         canvas.data('pathCable', svg.createPath())
         canvas.data('pathLight', svg.createPath())
 
-        canvas.click(function () {
-            self.pedalboard('finishConnection')
+        // in grid mode a tap in a plugin's cell ends the cable there, see cellTap,
+        // anywhere else it drops it
+        canvas.click(function (event) {
+            var connection = self.data('ongoingConnection')
+            if (! (self.pedalboard('gridMode') && self.pedalboard('cellTap', event, connection))) {
+                self.pedalboard('finishConnection')
+            }
+            return false
         })
         var moveHandler = function (e) {
             if ($(e.target).is('input')) { // cv addressing input
@@ -6097,16 +6113,67 @@ JqueryClass('pedalboard', {
         }
     },
 
-    // A tap on a plugin within GRID_CABLE_EDGE of its right side, where its outputs are,
-    // starts a cable from them, see connectFromOutputs. Whether it did.
-    connectFromPlugin: function (instance, event) {
+    // The plugin in grid mode whose cell takes a tap at `event`, and the side of it the
+    // tap is on: { instance, side }, the side being 'inputs' left of the plugin,
+    // 'outputs' right of it, 'plugin' on it. Either side takes CELL_TAP_SIDE of the cell
+    // at least, into a plugin as wide as that. Not within PLACEMENT_PAD of the cell's
+    // border, nor in a cell with no plugin: null.
+    cellZone: function (event) {
         var self = $(this)
-        var icon = self.data('plugins')[instance]
-        var rect = icon[0].getBoundingClientRect()
-        if (event.clientX < rect.right - Math.max(rect.width * GRID_CABLE_EDGE, 24)) {
+        var scale = self.data('scale')
+        var board = self[0].getBoundingClientRect()
+        var x = (event.clientX - board.left) / scale
+        var y = (event.clientY - board.top) / scale
+        var cell = { col: Math.floor(x / PLACEMENT_CELL.width), row: Math.floor(y / PLACEMENT_CELL.height) }
+        var rect = self.pedalboard('cellRect', cell)
+        if (x < rect.x + PLACEMENT_PAD || x > rect.x + rect.width - PLACEMENT_PAD ||
+            y < rect.y + PLACEMENT_PAD || y > rect.y + rect.height - PLACEMENT_PAD) {
+            return null
+        }
+        var plugins = self.data('plugins')
+        for (var instance in plugins) {
+            var at = plugins[instance].data && plugins[instance].data('gridCell')
+            if (! at || at.col != cell.col || at.row != cell.row) {
+                continue
+            }
+            var body = plugins[instance][0].getBoundingClientRect()
+            var left = Math.max(body.left, board.left + (rect.x + rect.width * CELL_TAP_SIDE) * scale)
+            var right = Math.min(body.right, board.left + (rect.x + rect.width * (1 - CELL_TAP_SIDE)) * scale)
+            return {
+                instance: instance,
+                side: event.clientX < left ? 'inputs' : event.clientX > right ? 'outputs' : 'plugin'
+            }
+        }
+        return null
+    },
+
+    // A tap in grid mode in a plugin's cell, see cellZone: it ends `connection` in the
+    // plugin, see connectToPlugin. With none, on the side of its outputs it starts a
+    // cable from them, see connectFromOutputs, on the side of its inputs it shows the
+    // cables into them, see showInputCables, and otherwise, or with no outputs or
+    // cables there, it shows just the plugin. Whether it was in a plugin's cell.
+    cellTap: function (event, connection) {
+        var self = $(this)
+        // the tail of a pan is not a tap
+        if (Date.now() - (self.data('lastPanMove') || 0) < 300) {
             return false
         }
-        return self.pedalboard('connectFromOutputs', instance)
+        var zone = self.pedalboard('cellZone', event)
+        if (! zone) {
+            return false
+        }
+        if (connection) {
+            self.pedalboard('connectToPlugin', connection.jack, zone.instance)
+            return true
+        }
+        if (zone.side == 'outputs' && self.pedalboard('connectFromOutputs', zone.instance)) {
+            return true
+        }
+        if (zone.side == 'inputs' && self.pedalboard('showInputCables', zone.instance)) {
+            return true
+        }
+        self.pedalboard('showPlugin', zone.instance)
+        return true
     },
 
     // Starts a cable from the outputs of `instance`: from its only one, or from the one
@@ -6132,18 +6199,6 @@ JqueryClass('pedalboard', {
             return { port: port, connected: Object.keys(origIndex[port] || {}).length > 0 }
         }), start)
         return true
-    },
-
-    // A tap on a plugin within GRID_CABLE_EDGE of its left side, where its inputs are,
-    // shows the cables into them, see showInputCables. Whether it did.
-    unplugAtPlugin: function (instance, event) {
-        var self = $(this)
-        var icon = self.data('plugins')[instance]
-        var rect = icon[0].getBoundingClientRect()
-        if (event.clientX > rect.left + Math.max(rect.width * GRID_CABLE_EDGE, 24)) {
-            return false
-        }
-        return self.pedalboard('showInputCables', instance)
     },
 
     // The inputs of `instance` in pickPort, each with the cables coming into it to be
@@ -6624,9 +6679,9 @@ JqueryClass('pedalboard', {
 // read as a cable going somewhere, short enough that it is not the thing you notice.
 var TELEPORT_STUB = 44
 
-// How much of a plugin's width, from its right side, starts a cable from its outputs
-// when tapped in grid mode, rather than showing just the plugin. See connectFromPlugin.
-var GRID_CABLE_EDGE = 0.2
+// How much of a cell, from either side, is at least for the outputs or the inputs of its
+// plugin when tapped in grid mode, even where the plugin is: see cellZone
+var CELL_TAP_SIDE = 0.25
 
 // The key that splits a cable into a teleport, and joins it back up. A single lower-case
 // letter, matched case-insensitively with no modifier held. Named so a preference, if one

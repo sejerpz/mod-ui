@@ -169,6 +169,23 @@
     transition: left 0.4s ease-in-out, top 0.4s ease-in-out, transform 0.4s ease-in-out;
 }
 
+/* In grid mode the board shows plugins too small for their controls: a tap on a knob
+   or a footswitch goes through to the plugin under it, which shows just the plugin,
+   where they can be used. Its ports and actions still take their own taps */
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal * {
+    pointer-events: none;
+}
+
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal .mod-drag-handle,
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-audio-port],
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-audio-port] *,
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-midi-port],
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-midi-port] *,
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-cv-port],
+body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-cv-port] * {
+    pointer-events: auto;
+}
+
 /* the ports of a plugin spread out for a tap, see pickPort */
 .mod-port-picker {
     position: fixed;

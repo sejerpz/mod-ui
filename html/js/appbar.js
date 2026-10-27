@@ -403,7 +403,7 @@ JqueryClass('appBar', {
         })
 
         // Something waiting for a tap on the board: a cable being made by taps, see the
-        // pedalboard's connectFromPlugin, or a plugin being added, see its
+        // pedalboard's cellTap, or a plugin being added, see its
         // showPlacementGrid. The dock folds down to what it is about, under a title
         // floating above, and the way to drop it
         var task = $('<div class="task">').appendTo(self)
