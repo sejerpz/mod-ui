@@ -79,9 +79,23 @@
     cursor: pointer;
 }
 
-/* a free cell still shows as a cell */
-.mod-placement-cell.free {
-    background-color: rgba(255, 255, 255, 0.06);
+/* a free cell still shows as a cell: a faint rounded tile, slowly breathing */
+.mod-placement-cell.free::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 28px;
+    background-color: rgba(255, 255, 255, 0.07);
+    animation: mod-cell-breathe 3.2s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+@keyframes mod-cell-breathe {
+    from { opacity: 0.55; }
+    to { opacity: 1; }
 }
 
 .mod-placement-cell.free::after,
@@ -122,8 +136,9 @@
     pointer-events: none;
 }
 
-.mod-placement-grid.passive .mod-placement-cell.free {
-    background-color: rgba(255, 255, 255, 0.04);
+.mod-placement-grid.passive .mod-placement-cell.free::before {
+    animation: none;
+    opacity: 0.6;
 }
 
 .mod-placement-target {
