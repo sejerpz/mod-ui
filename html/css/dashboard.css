@@ -2640,11 +2640,22 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     border-bottom: 1px solid #333;
 }
 
-#plugins-library.grid-library .grid-library-header .title {
+/* the title, and under it how a plugin is picked and how its info is shown */
+#plugins-library.grid-library .grid-library-header .heading {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#plugins-library.grid-library .grid-library-header .title {
     color: #fff;
     font-size: 18px;
     font-weight: bold;
+}
+
+#plugins-library.grid-library .grid-library-header .tip {
+    color: #999;
+    font-size: 13px;
 }
 
 #plugins-library.grid-library .grid-library-header .close {
@@ -3770,13 +3781,15 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     }
 }
 
-/* the viewed plugin's info: the dock has the way back, see js/appbar.js, and the end of
-   the info scrolls up from under it */
-body.app-bar-mode.plugin-view .plugin-info span.js-close {
+/* the viewed plugin's info, or one from the library: the dock has the way back, see
+   js/appbar.js, and the end of the info scrolls up from under it */
+body.app-bar-mode.plugin-view .plugin-info span.js-close,
+body.app-bar-mode.library-open .plugin-info span.js-close {
     display: none;
 }
 
-body.app-bar-mode.plugin-view .plugin-info .box {
+body.app-bar-mode.plugin-view .plugin-info .box,
+body.app-bar-mode.library-open .plugin-info .box {
     margin-bottom: 96px;
 }
 
