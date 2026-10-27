@@ -450,14 +450,16 @@ JqueryClass('appBar', {
         var sourceLabel = $('<div class="label">').appendTo(names)
         var sourcePort = $('<div class="port">').appendTo(names)
         var cancel = null
-        $('<div class="cancel">').text('Cancel').click(function () {
+        // the help mode lets taps on it through, see desktop's helpClickHandler
+        var cancelButton = $('<div class="cancel mod-help-exit">').click(function () {
             cancel && cancel()
             return false
         }).appendTo(task)
         // `what` has a title, a label and a port, either of them empty, and a thumbnail or
-        // a preview to show
+        // a preview to show. Its way out says Cancel, or `what.cancel`
         var startTask = function (what, onCancel) {
             title.text(what.title)
+            cancelButton.text(what.cancel || 'Cancel')
             thumbnail.toggle(!! what.thumbnail).attr('src', what.thumbnail || '')
             holder.empty().toggle(!! what.preview).append(what.preview || null)
             sourceLabel.text(what.label || '').toggle(!! what.label)
@@ -480,6 +482,20 @@ JqueryClass('appBar', {
             })
         })
         options.pedalboard.on('connectionend placementend', endTask)
+        // Help mode waits for a tap too, on anything at all, which shows its help
+        // rather than doing what it does. Its button is active while it is on
+        new MutationObserver(function () {
+            if (options.helpButton.hasClass('active')) {
+                startTask({ title: 'Help mode active', port: 'Tap anything to see its help', cancel: 'Exit' }, function () {
+                    options.helpButton.click()
+                })
+            } else {
+                endTask()
+            }
+        }).observe(options.helpButton[0], {
+            attributes: true,
+            attributeFilter: ['class']
+        })
 
         // What a plugin can do, while the board shows just it, see the pedalboard's
         // showPlugin: the dock folds down to these and the way back to the whole board.

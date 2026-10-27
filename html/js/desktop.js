@@ -1530,8 +1530,9 @@ function Desktop(elements) {
         if (ev.target == elements.helpButton[0])
             return // let the click propagate and toggle help window
 
-        // check if the target is inside the help window, if so, do nothing
-        if ($(ev.target).closest('.mod-help-overlay').length > 0) {
+        // check if the target is inside the help window, or is a way out of help mode
+        // other than its button, as the app bar's, if so, do nothing
+        if ($(ev.target).closest('.mod-help-overlay, .mod-help-exit').length > 0) {
             return
         }
 
