@@ -1320,6 +1320,8 @@ function GUI(effect, options) {
                 .attr('title', '')
                 .val(selectedPort)
         }
+        // val() says nothing, for what shows the choice, see touchSettings
+        monitorPortDropdown.trigger('valueset')
         self.changePortsMonitoring(selectedPort != 'off')
     }
 
@@ -1520,12 +1522,22 @@ function GUI(effect, options) {
             templateData.presets = presets
             var totalPresetCount = self.effect.presets.length
 
-            self.settings.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            // with the app bar, on a touch screen of any size, every plugin has the same settings,
+            // laid out for a finger, see touchSettings: a plugin's own are not used
+            var touch = $('body').hasClass('app-bar-mode')
+            var settingsTemplate = (! touch && effect.gui.settingsTemplate) || options.defaultSettingsTemplate
+
+            self.settings.html(Mustache.render(settingsTemplate, templateData))
             // add to template data that this is the performaceView so the UI can adapt
             templateData['isPerformanceView'] = true;
-            self.settingsPerformance.html(Mustache.render(effect.gui.settingsTemplate || options.defaultSettingsTemplate, templateData))
+            self.settingsPerformance.html(Mustache.render(settingsTemplate, templateData))
             // remove to mantain the templateData as clean as possible
             delete templateData['isPerformanceView'];
+
+            if (touch) {
+                self.touchSettings(self.settings, templateData.effect)
+                self.touchSettings(self.settingsPerformance, templateData.effect)
+            }
 
             self.assignControlFunctionality(self.settings, false)
             self.assignControlFunctionality(self.settingsPerformance, false)
@@ -2132,6 +2144,274 @@ function GUI(effect, options) {
         }
     }
 
+    // The default settings laid out for a finger, with the app bar, see dashboard.css:
+    // in columns, the plugin's switch and presets in the first, then one for each
+    // group of ports under its name, and one for the controls of no group between
+    // them. Upright, the columns are sections one under the other, a control a row.
+    // A group's controls leave its name out of theirs: "Kick Steps" is "Steps" under
+    // "Kick". Knobs are sliders, see touchSlider, and a choice among a few is a row
+    // of buttons. Before the controls are set up, which picks their widgets
+    this.touchSettings = function (element, effect) {
+        var groups = {}
+        $.each(effect.ports.control.input, function (i, port) {
+            if (port.group) {
+                groups[port.symbol] = port.group.name || port.group.symbol || ''
+            }
+        })
+        var list = element.find('.mod-control-group')
+        var controls = list.children().get()
+        var main = $('<div class="mod-touch-column mod-touch-main">').prependTo(list)
+        var column = null, inside = null
+        $.each(controls, function (i, control) {
+            control = $(control)
+            if (control.is('.bypass, .mod-presets')) {
+                main.append(control)
+                return
+            }
+            var name = control.hasClass('mod-group') &&
+                       groups[control.find('[mod-port-symbol]').attr('mod-port-symbol')] || ''
+            if (! column || name != column.data('group') || control.hasClass('mod-group-start')) {
+                column = $('<div class="mod-touch-column">').data('group', name).appendTo(list)
+                if (name) {
+                    $('<div class="mod-group-header">').text(name).appendTo(column)
+                    // tinted with the group's color, see dashboard.css
+                    var color = /\bmod-group-(\d+)\b/.exec(control.attr('class'))
+                    if (color) {
+                        column.addClass('mod-touch-group')
+                        column[0].style.setProperty('--group-color', 'var(--group-' + color[1] + '-color)')
+                    }
+                }
+                inside = $('<div class="mod-touch-controls">').appendTo(column)
+            }
+            inside.append(control)
+            var title = control.find('.mod-group-item-title')
+            var text = $.trim(title.text())
+            if (name && text.toLowerCase().indexOf(name.toLowerCase() + ' ') == 0 && text.length > name.length + 1) {
+                title.text(text.substring(name.length + 1))
+            }
+        })
+        // The plugin's A/B comparer as one button, which the dock takes while these
+        // are open, see js/appbar.js, as its own: a tap takes a snapshot, or once there
+        // is one switches between A and B, and a long press shows the whole comparer
+        var compare = element.find('.js-ab-compare')
+        var compareA = compare.find('.js-ab-compare-snapshot-a')
+        var compareB = compare.find('.js-ab-compare-snapshot-b')
+        if (compare.length) {
+            var abToggle = $('<div class="mod-ab-toggle">').insertBefore(compare)
+            // 'A' or 'B' as selected, 'init' with a snapshot but neither, null with none
+            var compared = function () {
+                if (compareA.hasClass('js-ab-compare-snapshot-selected')) {
+                    return 'A'
+                }
+                if (compareB.hasClass('js-ab-compare-snapshot-selected')) {
+                    return 'B'
+                }
+                return compareA.hasClass('js-ab-compare-snapshot-disabled') ? null : 'init'
+            }
+            var showCompared = function () {
+                var status = compared()
+                abToggle.text(status == 'A' || status == 'B' ? status : 'A/B')
+                        .toggleClass('compare-none', ! status)
+            }
+            compareA.add(compareB).each(function () {
+                new MutationObserver(showCompared).observe(this, {
+                    attributes: true,
+                    attributeFilter: ['class']
+                })
+            })
+            showCompared()
+            // as long as the dock's, see AB_LONG_PRESS
+            var abPress = null, abLongPressed = false
+            abToggle.on('pointerdown', function () {
+                abLongPressed = false
+                clearTimeout(abPress)
+                abPress = setTimeout(function () {
+                    abLongPressed = true
+                    compare.toggleClass('open')
+                }, 500)
+            }).on('pointerup pointercancel pointerleave', function () {
+                clearTimeout(abPress)
+            }).on('contextmenu', false).click(function () {
+                if (abLongPressed) {
+                    abLongPressed = false
+                    return false
+                }
+                if (compare.hasClass('open')) {
+                    compare.removeClass('open')
+                    return false
+                }
+                var status = compared()
+                if (! status) {
+                    compare.find('.js-ab-compare-snapshot-take').click()
+                } else {
+                    (status == 'B' ? compareA : compareB).click()
+                }
+                return false
+            })
+            // a choice made in the whole comparer puts it away
+            compare.on('click', function () {
+                compare.removeClass('open')
+            })
+        }
+
+        // The monitor goes in the title, after the plugin's name, or under it where
+        // there is no room, see dashboard.css. Not in the performance view's, which has
+        // neither. Its choice of outputs a list a finger can pick from, as the plugin's
+        // own choices: the select's options, which the plugin reads, see changePortsMonitoring
+        var monitors = element.find('.mod-monitors')
+        if (monitors.length && ! monitors.parent().hasClass('mod-hidden')) {
+            monitors.insertAfter(element.find('header h1'))
+            var select = monitors.find('select.mod-monitors-ports-dropdown')
+            var dropdown = $('<div class="mod-dropdown">').insertAfter(select)
+            var chosen = $('<div class="mod-dropdown-button">').appendTo(dropdown)
+            var choices = $('<div class="mod-dropdown-list">').appendTo(dropdown)
+            // the plugin picks one itself when the settings open, see setupMonitorVUMeter
+            var showChosen = function () {
+                var option = select.find('option:selected')
+                chosen.text(option.text())
+                choices.children().each(function () {
+                    $(this).toggleClass('selected', $(this).data('value') == select.val())
+                })
+            }
+            select.children('option').each(function () {
+                var value = $(this).val()
+                $('<div class="mod-dropdown-option">').text($(this).text()).data('value', value).click(function () {
+                    dropdown.removeClass('open')
+                    if (select.val() != value) {
+                        select.val(value).change()
+                    }
+                    return false
+                }).appendTo(choices)
+            })
+            chosen.click(function () {
+                showChosen()
+                dropdown.toggleClass('open')
+                return false
+            })
+            select.on('change valueset', showChosen)
+            element.on('click', function () {
+                dropdown.removeClass('open')
+            })
+            showChosen()
+        }
+
+        // The presets' buttons are a menu, behind a button by their title
+        var presets = element.find('.mod-presets').has('footer')
+        if (presets.length) {
+            $('<div class="mod-presets-menu">').click(function () {
+                presets.toggleClass('menu-open')
+                return false
+            }).appendTo(presets)
+            element.on('click', function (e) {
+                if (! $(e.target).closest('.mod-presets-menu').length) {
+                    presets.removeClass('menu-open')
+                }
+            })
+        }
+
+        // A long press on a control brings up what else it takes, see touchControlSheet,
+        // wherever its own buttons are, or are not, see dashboard.css. The tap it ends in
+        // does nothing more, as on a switch, which would switch
+        element.find('.mod-touch-controls > div, .mod-touch-main > .bypass').each(function () {
+            var row = $(this)
+            var press = null, pressedAt = null, pressed = false
+            row.on('pointerdown', function (e) {
+                pressed = false
+                clearTimeout(press)
+                if ($(e.target).closest('.mod-address, .mod-knob-snapshot-status').length) {
+                    return
+                }
+                pressedAt = { x: e.originalEvent.clientX, y: e.originalEvent.clientY }
+                // as long as the dock's, see AB_LONG_PRESS
+                press = setTimeout(function () {
+                    press = null
+                    pressed = true
+                    self.touchControlSheet(row)
+                }, 500)
+            }).on('pointermove', function (e) {
+                // a finger that wanders off, as along a slider, is not pressing
+                if (press && (Math.abs(e.originalEvent.clientX - pressedAt.x) > 10 ||
+                              Math.abs(e.originalEvent.clientY - pressedAt.y) > 10)) {
+                    clearTimeout(press)
+                    press = null
+                }
+            }).on('pointerup pointercancel', function () {
+                clearTimeout(press)
+                press = null
+            }).on('contextmenu', false)
+            this.addEventListener('click', function (e) {
+                if (pressed) {
+                    pressed = false
+                    e.stopPropagation()
+                    e.preventDefault()
+                }
+            }, true)
+        })
+
+        // a finger scrolls them, see js/utils/touch.js, the sliders taking their own
+        element.attr('data-touch-native', '')
+        element.find('.mod-knob-image').attr('mod-widget', 'slider')
+        element.find('.mod-enumerated:not(.mod-presets):not(.mod-file-list) .mod-enumerated-list').each(function () {
+            $(this).toggleClass('mod-segmented', $(this).children().length <= 4)
+        })
+    }
+
+    // What a control in the touch settings takes besides its value, see touchSettings: a
+    // sheet from the bottom of the screen, with whether snapshots take it, its bindings
+    // and its default back, those it has. Each does what the control's own button would.
+    // A tap anywhere else puts it away
+    this.touchControlSheet = function (row) {
+        $('.mod-touch-sheet').remove()
+        var snapshot = row.children('.mod-knob-snapshot-status')
+        // not for an expensive port, whose bindings are hidden, see assignControlFunctionality,
+        // nor in the performance view, whose template hides them all
+        var address = row.children('.mod-address').filter(function () {
+            return this.style.display != 'none' && ! $(this).hasClass('mod-hidden') &&
+                   ! $(this).closest('#performance').length
+        })
+        var control = row.find('[mod-role=input-control-port], [mod-role=input-parameter]').first()
+        var title = $.trim(row.children('[class$=-title]').first().text())
+        var group = row.closest('.mod-touch-column').data('group')
+
+        var sheet = $('<div class="mod-touch-sheet">')
+        var panel = $('<div class="panel">').appendTo(sheet)
+        $('<div class="title">').text(group ? group + ' \u00b7 ' + title : title).appendTo(panel)
+        var item = function (kind, label, state, action) {
+            // the snapshot's camera as the control's, see settings.html
+            var icon = $('<i>').toggleClass('icon-camera', kind == 'snapshot')
+            $('<div class="item">').addClass(kind)
+                .append(icon, $('<span>').text(label), $('<span class="state">').text(state))
+                .click(function () {
+                    sheet.remove()
+                    action()
+                    return false
+                }).appendTo(panel)
+        }
+        if (snapshot.length) {
+            item('snapshot', 'Include in snapshots', snapshot.hasClass('active') ? 'On' : 'Off', function () {
+                snapshot.click()
+            })
+        }
+        if (address.length) {
+            item('bindings', 'Bindings\u2026', address.hasClass('addressed') ? 'Assigned' : '', function () {
+                address.click()
+            })
+        }
+        if (control.length && control.data('default') !== undefined && ! control.data('trigger')) {
+            item('reset', 'Reset to default', '', function () {
+                control.controlWidget('setValue', control.data('default'), false)
+            })
+        }
+        if (panel.children('.item').length == 0) {
+            return
+        }
+        sheet.click(function (e) {
+            if (e.target == sheet[0]) {
+                sheet.remove()
+            }
+        }).appendTo('body')
+    }
+
     this.assignControlFunctionality = function (element, onlySetValues) {
         var instance = element.attr('mod-instance')
 
@@ -2686,6 +2966,7 @@ function JqueryClass() {
             'string': 'stringWidget',
             'custom-select': 'customSelect',
             'custom-select-path': 'customSelectPath',
+            'slider': 'touchSlider',
         }
         var name = self.attr('mod-widget') || 'film'
         name = widgets[name]
@@ -3248,6 +3529,85 @@ JqueryClass('film', baseWidget, {
         var bgShift = rotation * -self.data('size')
         bgShift += 'px 0px'
         self.css('background-position', bgShift)
+    }
+})
+
+// A knob as a slider, for a finger, see touchSettings: across, or upright when the
+// settings are in columns side by side, see dashboard.css. Dragged by as much as the
+// finger moves along it, wherever it lands on it, and left alone when the finger goes
+// the other way, which scrolls the settings. A tap does nothing: a double tap anywhere
+// on the settings goes back to the board, see js/appbar.js
+JqueryClass('touchSlider', baseWidget, {
+    init: function (options) {
+        var self = $(this)
+        // as many steps as a continuous port takes, see config
+        self.data('filmSteps', 1000)
+        self.touchSlider('config', options)
+        self.data('position', 0)
+        $('<div class="mod-slider-fill">').appendTo(self)
+        $('<div class="mod-slider-thumb">').appendTo(self)
+        self.touchSlider('setValue', options.port.ranges.default, true)
+
+        var start = null
+        self.on('pointerdown', function (e) {
+            var ev = e.originalEvent
+            if (! self.data('enabled')) {
+                return self.touchSlider('prevent', ev)
+            }
+            var rect = this.getBoundingClientRect()
+            start = { x: ev.clientX, y: ev.clientY, id: ev.pointerId, position: self.data('position'),
+                      upright: rect.height > rect.width, moved: false }
+        }).on('pointermove', function (e) {
+            var ev = e.originalEvent
+            if (! start || ev.pointerId != start.id) {
+                return
+            }
+            var along = start.upright ? start.y - ev.clientY : ev.clientX - start.x
+            if (! start.moved) {
+                // a finger that lands is not a drag yet, see touch.js
+                if (Math.abs(along) < 6) {
+                    return
+                }
+                start.moved = true
+                // a pointer gone already, as a synthetic one, has nothing to capture
+                try {
+                    this.setPointerCapture(ev.pointerId)
+                } catch (err) {}
+            }
+            var rect = this.getBoundingClientRect()
+            var length = start.upright ? rect.height : rect.width
+            self.touchSlider('moveTo', start.position + along / length * self.data('portSteps'))
+        }).on('pointerup pointercancel', function () {
+            start = null
+        })
+        return self
+    },
+
+    moveTo: function (position) {
+        var self = $(this)
+        position = Math.min(self.data('portSteps'), Math.max(0, position))
+        self.data('position', position)
+        self.touchSlider('draw')
+        self.trigger('valuechange', self.touchSlider('valueFromSteps', position))
+    },
+
+    setValue: function (value, only_gui) {
+        var self = $(this)
+        self.data('position', self.touchSlider('stepsFromValue', value))
+        self.touchSlider('draw')
+        if (!only_gui) {
+            self.trigger('valuechange', value)
+        }
+    },
+
+    draw: function () {
+        var self = $(this)
+        var position = self.data('position')
+        if (self.data('integer') || self.data('enumeration')) {
+            position = Math.round(position)
+        }
+        // across or upright, see dashboard.css
+        self[0].style.setProperty('--slider-at', position / self.data('portSteps') * 100 + '%')
     }
 })
 

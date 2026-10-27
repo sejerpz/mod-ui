@@ -38,15 +38,21 @@ JqueryClass('appBar', {
             if (viewport.attr('content') != content) {
                 viewport.attr('content', content)
             }
+            // what undoes that for what is sized for a finger, as the dock and the plugin
+            // settings: its zoom, see dashboard.css
+            document.documentElement.style.setProperty('--touch-zoom', across >= 980 ? 1 : 980 / across)
+            // Across a screen too narrow for the whole dock at that size, it is compact,
+            // see dashboard.css: what has a name has an icon instead, Edit and Live are
+            // one button to the other, and the CPU meter is in the menu
+            self.toggleClass('compact', across < 760)
         }
         fitViewport()
         $(window).on('orientationchange resize', fitViewport)
 
-        // A phone, by the short side of its screen, which the page's 980 wide layout does
-        // not change, for what a phone's screen is too small for. A screen of no known
-        // size is not one
+        // A small screen, by its short side under 600, which the page's 980 wide layout
+        // does not change, for what does not fit one. A screen of no known size is not
         var side = Math.min(screen.width, screen.height)
-        $('body').toggleClass('phone', side > 0 && side < 600)
+        $('body').toggleClass('small-screen', side > 0 && side < 600)
 
         // A button opening a menu upwards. `sections` are lists of [label, element]
         // pairs, the element being clicked when its label is, each list under its title
@@ -104,8 +110,11 @@ JqueryClass('appBar', {
             }, 300)
         }
 
-        // the gateway to whatever the hidden bars had and the dock has no room for
-        popup('main', 'Menu', options.menu).appendTo(self)
+        // the gateway to whatever the hidden bars had and the dock has no room for. Its
+        // name and that of the snapshots are left out of the compact dock, see
+        // dashboard.css, which has their icons
+        var main = popup('main', 'Menu', options.menu).appendTo(self)
+        main.children('.toggle').empty().append($('<span class="name">').text('Menu'))
 
         // CV ports is a mode rather than a place: it shows a box on every plugin's CV
         // output, which offers it to the bindings. Its entry is ticked while it is on,
@@ -272,7 +281,8 @@ JqueryClass('appBar', {
             ['Save', options.snapshotSaveButton],
             ['Save as', options.snapshotSaveAsButton],
             ['Load / Manage', options.snapshotManageButton],
-        ]}]).appendTo(tools)
+        ]}]).appendTo(tools).children('.toggle').empty()
+            .append($('<span class="name">').text('Snapshots'), $('<i class="icon-camera">'))
 
         // The snapshot dialogs take the room the dock would cover: it slides away while
         // one is up. They open and close with show() and hide(), whatever opened them,
@@ -403,6 +413,16 @@ JqueryClass('appBar', {
         }).appendTo(tools)
         var cpu = $('<div class="fill">').appendTo($('<div class="bar">').appendTo(meter))
         var ram = $('<div class="fill">').appendTo($('<div class="bar">').appendTo(meter))
+        // the compact dock has them in the menu instead, the last section's last entry,
+        // see dashboard.css
+        var meterEntry = $('<li class="meter-entry">').text('CPU and RAM').click(function () {
+            main.removeClass('open')
+            options.cpuButton.click()
+            return false
+        }).appendTo(main.find('.section ul').last())
+        var meterBars = $('<span class="meter">').appendTo(meterEntry)
+        cpu = cpu.add($('<span class="fill">').appendTo($('<span class="bar">').appendTo(meterBars)))
+        ram = ram.add($('<span class="fill">').appendTo($('<span class="bar">').appendTo(meterBars)))
         var percent = function (text) {
             var value = parseFloat((text.text().match(/[\d.]+/) || ['0'])[0])
             return Math.max(0, Math.min(100, value))
@@ -418,11 +438,13 @@ JqueryClass('appBar', {
         })
         showLoad()
         var xrun = null
+        // and the compact dock's menu button with it, which has the meter
+        var xrunShown = meter.add(meterEntry).add(main.children('.toggle'))
         new MutationObserver(function () {
-            meter.addClass('xrun')
+            xrunShown.addClass('xrun')
             clearTimeout(xrun)
             xrun = setTimeout(function () {
-                meter.removeClass('xrun')
+                xrunShown.removeClass('xrun')
             }, 2000)
         }).observe(options.xruns[0], { childList: true, characterData: true, subtree: true })
 
@@ -563,6 +585,26 @@ JqueryClass('appBar', {
             }, FLIP)
         }
         var dialog = $('<div class="dialog">').appendTo(self)
+        // A plugin's settings are renamed from here rather than by their title, see
+        // dashboard.css: the title's own button, out of sight. Their global snapshot
+        // too, its camera here showing whether all of the plugin, some or none is in
+        // snapshots as the title's does, which the plugin keeps up to date. And their A/B
+        // comparer, whose one button, see touchSettings in modgui.js, comes here while
+        // they are open and goes back after, the whole comparer staying with them
+        $('<div class="rename">').text('Rename').click(function () {
+            settings && settings.find('.mod-edit').click()
+        }).appendTo(dialog)
+        var snapshotOf = $()
+        var snapshot = $('<div class="snapshot icon-camera">').click(function () {
+            snapshotOf.click()
+        }).appendTo(dialog)
+        var showSnapshot = function () {
+            snapshot.toggleClass('active', snapshotOf.hasClass('active'))
+                    .toggleClass('mixed', snapshotOf.hasClass('mixed'))
+        }
+        var snapshotWatch = new MutationObserver(showSnapshot)
+        var compare = $('<div class="compare">').appendTo(dialog)
+        var compareHome = null
         $('<div>').text('‹ Back').click(function () {
             if (settings) {
                 closeSettings()
@@ -571,7 +613,8 @@ JqueryClass('appBar', {
             } else if (options.transportWindow.is(':visible')) {
                 options.transportButton.click()
             }
-        }).appendTo(dialog)
+        // first, the plugin's tools after it
+        }).prependTo(dialog)
 
         // The transport, from the menu, folds the dock down to the same way back. It is
         // no window, its button shows and hides it
@@ -582,10 +625,14 @@ JqueryClass('appBar', {
             attributes: true,
             attributeFilter: ['style', 'class']
         })
-        // A double tap on the settings' background goes back too: not on a control,
-        // nor where a finger scrolls
+        // A double tap anywhere on the settings goes back too, sliders and choices
+        // included, see touchSettings in js/modgui.js: not where a tap switches
+        // something, presses a button or types a value, nor where a finger scrolls
         var down = null, tapped = 0
-        var controls = 'input, select, textarea, button, a, li, img, [mod-role], [mod-widget], [class*=icon-]'
+        var controls = 'input, select, textarea, button, a, [contenteditable=true], .mod-switch-image, ' +
+                       '.mod-footswitch-image, .js-ab-compare, .mod-ab-toggle, .mod-presets-menu, .mod-dropdown, .mod-edit, ' +
+                       '.mod-address, ' +
+                       '[class*=icon-]'
         var settingsDown = function (e) {
             down = e.originalEvent
         }
@@ -624,6 +671,15 @@ JqueryClass('appBar', {
             }
             if (viewed && settings && settings[0] == e.target) {
                 settings.on('pointerdown.appbar', settingsDown).on('pointerup.appbar', settingsUp)
+                dialog.addClass('for-settings').toggleClass('with-rename', settings.find('.mod-edit').length > 0)
+                snapshotOf = settings.find('h1 .plugin-global-snapshot')
+                dialog.toggleClass('with-snapshot', snapshotOf.length > 0)
+                if (snapshotOf.length) {
+                    snapshotWatch.observe(snapshotOf[0], { attributes: true, attributeFilter: ['class'] })
+                    showSnapshot()
+                }
+                compareHome = settings.find('.mod-toolbar')
+                compare.append(compareHome.children('.mod-ab-toggle'))
                 setState('dialog', true)
             } else if ((viewed || $('body').hasClass('library-open')) && target.is('.plugin-info')) {
                 // Back closes it onto the library it came from, still open under it
@@ -641,6 +697,14 @@ JqueryClass('appBar', {
                 settings = null
                 // closed some other way than ours, all at once
                 flipBack()
+                dialog.removeClass('for-settings with-rename with-snapshot')
+                snapshotWatch.disconnect()
+                snapshotOf = $()
+                if (compareHome) {
+                    compareHome.prepend(compare.children())
+                    compareHome.children('.js-ab-compare').removeClass('open')
+                    compareHome = null
+                }
                 setState('dialog', false)
             }
             if (info && info[0] == e.target) {
@@ -654,8 +718,15 @@ JqueryClass('appBar', {
         self.appendTo('body')
 
         // the board lost its bars: it runs under the see-through title and the dock, and
-        // grid mode's zoom keeps the cells above the dock
-        options.pedalboard.pedalboard('setMargins', 0, 0, $(window).height() - self.offset().top + 12)
+        // grid mode's zoom keeps the cells above the dock. Again as the screen turns, the
+        // dock's size changing with its zoom
+        var fitBoard = function () {
+            options.pedalboard.pedalboard('setMargins', 0, 0, $(window).height() - self.offset().top + 12)
+        }
+        fitBoard()
+        $(window).on('orientationchange resize', function () {
+            setTimeout(fitBoard, 0)
+        })
 
         return self
     },

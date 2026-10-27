@@ -2414,9 +2414,10 @@ body.app-bar-mode #pedalboard-info > h1 {
     line-height: 42px;
 }
 
-/* what would end under the dock ends above it, the board runs under it */
+/* what would end under the dock ends above it, the board runs under it. The dock is
+   as big as its zoom makes it, see .mod-app-bar */
 body.app-bar-mode #performance {
-    bottom: 80px;
+    bottom: calc(80px * var(--touch-zoom, 1));
 }
 
 /* The performance view's title floats over it like the board's, its actions are in
@@ -2448,20 +2449,23 @@ body.app-bar-mode #performance header h1 {
 
 body.app-bar-mode #performance .remote {
     top: 0;
-    bottom: 80px;
+    bottom: calc(80px * var(--touch-zoom, 1));
 }
 
 body.app-bar-mode #plugins-library.grid-library {
     top: 0;
-    bottom: 80px;
-    transform: translateY(calc(100% + 80px));
+    bottom: calc(80px * var(--touch-zoom, 1));
+    transform: translateY(calc(100% + 80px * var(--touch-zoom, 1)));
 }
 
 body.app-bar-mode #plugins-library.grid-library.open {
     transform: none;
 }
 
+/* sized for a finger however wide the page is laid out, see --touch-zoom in
+   js/appbar.js */
 .mod-app-bar {
+    zoom: var(--touch-zoom, 1);
     position: fixed;
     left: 50%;
     bottom: 12px;
@@ -2715,6 +2719,83 @@ body.app-bar-mode #plugins-library.grid-library.open {
 .mod-app-bar > .dialog {
     max-width: 640px;
     transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+/* the way back from a plugin's settings or info, the dock growing around it */
+.mod-app-bar.dialog {
+    height: auto;
+    min-height: 56px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+
+.mod-app-bar > .dialog {
+    display: flex;
+    gap: 8px;
+}
+
+/* after it, renaming the plugin whose settings these are, and their A/B comparer as
+   one button, see js/appbar.js */
+.mod-app-bar > .dialog > .rename,
+.mod-app-bar > .dialog > .compare {
+    display: none;
+    border: 1px solid #333;
+    background: none;
+}
+
+.mod-app-bar > .dialog.with-rename > .rename {
+    display: block;
+}
+
+.mod-app-bar > .dialog.for-settings > .compare:not(:empty) {
+    display: block;
+    position: relative;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+}
+
+.mod-app-bar > .dialog .mod-ab-toggle {
+    min-width: 56px;
+    height: 40px;
+    line-height: 38px;
+    box-sizing: border-box;
+    border: 1px solid #555;
+    border-radius: 8px;
+    background: #333;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+    -webkit-touch-callout: none;
+}
+
+.mod-app-bar > .dialog .mod-ab-toggle.compare-none {
+    border-color: #333;
+    background: #000;
+}
+
+/* the global snapshot's camera, in the colors of the title's, see pedals.css */
+.mod-app-bar > .dialog > .snapshot {
+    display: none;
+    width: 48px;
+    padding: 0;
+    border: 1px solid #333;
+    background: none;
+    color: #555;
+    font-size: 20px;
+    text-align: center;
+}
+
+.mod-app-bar > .dialog.with-snapshot > .snapshot {
+    display: block;
+}
+
+.mod-app-bar > .dialog > .snapshot.active {
+    color: ghostwhite;
+}
+
+.mod-app-bar > .dialog > .snapshot.mixed {
+    color: #d9534f;
 }
 
 .mod-app-bar > .dialog > div {
@@ -3005,11 +3086,983 @@ body.app-bar-mode .mod-pedal .mod-actions {
 
 /* the viewed plugin's settings take the whole screen above the dock, which has the way
    back in place of the window's close */
+/* under its zoom, see the plugin settings below */
 body.app-bar-mode.plugin-view > .mod-settings .mod-pedal-settings {
+    top: calc(12px / var(--touch-zoom, 1));
+    right: calc(16px / var(--touch-zoom, 1));
+    /* above the dock, sized for a finger too, see .mod-app-bar */
+    bottom: 80px;
+    left: calc(16px / var(--touch-zoom, 1));
+}
+
+/* The plugin settings with the app bar, see touchSettings in js/modgui.js: sized for a
+   finger however wide the page is laid out, see --touch-zoom in js/appbar.js. One
+   control a row, a group of ports a section under its name. Knobs are sliders, see
+   the touchSlider widget, switches sit at the end of their row, and a choice is a
+   list, or a row of buttons among a few. Bindings and snapshots are on the name's row
+   upright, under the control sideways where there is room, and in the sheet a long
+   press brings up, see touchControlSheet */
+body.app-bar-mode .mod-settings .mod-pedal-settings {
+    zoom: var(--touch-zoom, 1);
+    touch-action: pan-y;
+    /* a finger held on a name picks nothing, only what takes a value typed in does */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings [contenteditable=true],
+body.app-bar-mode .mod-settings .mod-pedal-settings input,
+body.app-bar-mode .mod-settings .mod-pedal-settings textarea {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings h1 {
+    font-size: 20px;
+}
+
+/* The title: the plugin's name, then its monitor, see touchSettings, which goes under
+   it where there is no room, as on a narrow screen held upright */
+body.app-bar-mode .mod-settings .mod-pedal-settings header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings header::before,
+body.app-bar-mode .mod-settings .mod-pedal-settings header::after {
+    display: none;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings header > * {
+    float: none;
+}
+
+/* turned sideways, on a screen that is not small, see small-screen in js/appbar.js, a
+   little more room between the title and the controls */
+@media (orientation: landscape) {
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings header {
+        margin-bottom: 6px;
+    }
+}
+
+/* its buttons are in the dock, or hidden, see js/appbar.js: it takes no room of its own,
+   the meter going to the right edge */
+body.app-bar-mode .mod-settings .mod-pedal-settings header > .mod-toolbar {
+    display: contents;
+}
+
+/* the performance view's settings have neither name nor buttons, see settings.html:
+   no title at all, nor the performance view's floating one, whose rules also catch it */
+body.app-bar-mode .mod-settings .mod-pedal-settings header > .mod-hidden {
+    display: none !important;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings header:not(:has(> :not(.mod-hidden))) {
+    display: none !important;
+}
+
+/* and what it leaves comes down a little from the top, under the floating one: more
+   where the screen is not small, see small-screen in js/appbar.js */
+body.app-bar-mode #performance .mod-settings .mod-pedal-settings {
+    padding-top: 24px;
+}
+
+body.app-bar-mode:not(.small-screen) #performance .mod-settings .mod-pedal-settings {
+    padding-top: 48px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings header .mod-monitors {
+    flex: 1 1 280px;
+    align-items: center;
+    /* its choice of outputs and its meter as one control, see below */
+    gap: 0;
+    height: auto;
+    padding: 0;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitors-ports {
+    position: relative;
+    min-width: 0;
+    flex: none;
+    /* level with the name, without the bottom margin of the form group it is, nor
+       the gap around its clearfix's pseudo elements, which a flex box counts */
+    align-items: center;
+    gap: 0;
+    margin: 0;
+    font-size: 14px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitors-ports > label,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitors-ports select {
+    display: none;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitors .mod-controls {
+    width: auto;
+    font-size: 14px;
+}
+
+/* a choice that opens a list of its options under it, styled as the plugin's own */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-dropdown-button {
+    min-width: 120px;
+    height: 32px;
+    padding: 0 32px 0 12px;
+    box-sizing: border-box;
+    border: 1px solid #444;
+    border-radius: 8px;
+    background: #2c2c2c;
+    color: #fff;
+    line-height: 30px;
+    white-space: nowrap;
+    cursor: pointer;
+    position: relative;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-dropdown-button::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    top: 11px;
+    border: 5px solid transparent;
+    border-top-color: #c79bd0;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-dropdown-list {
+    display: none;
+    position: absolute;
+    top: 40px;
+    left: 0;
+    z-index: 6;
+    min-width: 100%;
+    padding: 4px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    background: #222;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-dropdown.open .mod-dropdown-list {
+    display: block;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-dropdown-option {
+    height: 44px;
+    margin-bottom: 1px;
+    padding: 0 14px;
+    border-radius: 6px;
+    background: #2c2c2c;
+    color: #fff;
+    line-height: 44px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-dropdown-option.selected {
+    background: #883996;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitors .mod-monitor-container {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid #444;
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+    background: #2c2c2c;
+}
+
+/* the choice of outputs and the meter touch, square where they do */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitors .mod-dropdown-button {
+    border-radius: 8px 0 0 8px;
+}
+
+/* the meter fills its box, which it draws itself at, see js/vumeter.js */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitor-container .mod-vumeter-wrapper {
+    gap: 0;
+    height: 100%;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-monitor-container canvas.mod-vumeter {
+    height: 30px !important;
+}
+
+/* renamed and put in snapshots from the dock, see js/appbar.js */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-edit,
+body.app-bar-mode .mod-settings .mod-pedal-settings h1 .plugin-global-snapshot {
+    display: none;
+}
+
+/* the A/B comparer, whose one button the dock has: the whole of it, when a long press
+   on that brings it up, just above the dock */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-toolbar .js-ab-compare {
+    display: none !important;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-toolbar .js-ab-compare.open {
+    display: inline-flex !important;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    z-index: 5;
+    transform: translateX(-50%);
+    margin: 0 !important;
+    padding: 6px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    background: #222;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-control-group {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-string {
+    float: none;
+    position: relative;
+    width: auto !important;
+    height: auto;
+    min-height: 52px;
+    margin: 0;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    border-bottom: 1px solid #262626;
+    background: none;
+    text-align: left;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob > span.mod-knob-title,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch > span.mod-switch-title,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated > span.mod-enumerated-title,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-string > span.mod-string-title {
+    height: auto;
+    padding: 0;
+    font-size: 15px;
+    font-weight: normal;
+    line-height: 28px;
+    text-align: left;
+    text-transform: none;
+}
+
+/* its section says which group it is in, not a colored line over its name */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-group-item-title {
+    border-top: none;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-group-header {
+    padding: 20px 16px 6px;
+    border-bottom: 1px solid #383838;
+    color: #c79bd0;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob-background,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch-background,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob-min-value,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob-max-value,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-address,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob-snapshot-status,
+body.app-bar-mode .mod-settings .mod-pedal-settings .bypass .mod-light {
+    display: none;
+}
+
+/* the value, at the end of the row, tapped to type one */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob > span.mod-knob-current-value {
+    position: absolute;
     top: 12px;
     right: 16px;
-    bottom: 80px;
-    left: 16px;
+    left: auto;
+    bottom: auto;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #c79bd0;
+    font-size: 15px;
+    font-weight: normal;
+    line-height: 28px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob .mod-knob-image {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: auto;
+    /* what takes the finger, the thumb drawn smaller */
+    height: 48px;
+    /* room for the thumb at either end */
+    margin: 0 14px;
+    overflow: visible;
+    background: none !important;
+    touch-action: pan-y;
+    user-select: none;
+    cursor: ew-resize;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob .mod-knob-image::before,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-slider-fill {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 22px;
+    height: 4px;
+    border-radius: 2px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-knob .mod-knob-image::before {
+    right: 0;
+    margin: 0 -14px;
+    background: #333;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-slider-fill {
+    width: var(--slider-at, 0);
+    margin-left: -14px;
+    padding-left: 14px;
+    background: #883996;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-slider-thumb {
+    position: absolute;
+    left: var(--slider-at, 0);
+    top: 10px;
+    width: 28px;
+    height: 28px;
+    margin-left: -14px;
+    border-radius: 50%;
+    background: #fff;
+}
+
+/* in a group, the slider's thumb and fill are in the group's color, see .mod-touch-group */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group .mod-slider-thumb {
+    box-sizing: border-box;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    background: var(--group-color);
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group .mod-slider-fill {
+    background: var(--group-color);
+}
+
+/* the plugin's own switch, purple while it is on, that is not bypassed, see
+   bypassWidget in js/modgui.js */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch.bypass .mod-switch-image {
+    width: 52px;
+    height: 30px;
+    margin-top: -15px;
+    border-radius: 15px;
+    background: #444 !important;
+    transition: background-color 0.15s;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch.bypass .mod-switch-image.off {
+    background: #883996 !important;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch.bypass .mod-switch-image::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    transition: left 0.15s;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch.bypass .mod-switch-image.off::after {
+    left: 25px;
+}
+
+/* a switch, or a trigger's footswitch, at the end of its row */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch .mod-switch-image,
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch .mod-footswitch-image {
+    left: auto;
+    right: 16px;
+    top: 50%;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch .mod-switch-image {
+    width: 64px;
+    height: 32px;
+    margin-top: -16px;
+    background-size: auto 32px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-switch .mod-footswitch-image {
+    width: 40px;
+    height: 40px;
+    margin-top: -20px;
+    background-size: auto 40px;
+}
+
+/* a choice: its options under its name, each big enough for a finger */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated .mod-enumerated-list {
+    height: auto;
+    max-height: 264px;
+    margin-top: 4px;
+    border-radius: 8px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated .mod-enumerated-list > div {
+    height: 44px;
+    margin: 0 0 1px;
+    padding: 0 14px;
+    font-weight: normal;
+    font-size: 15px;
+    line-height: 44px;
+}
+
+/* a group of ports, its section or its column, tinted with its color as the alabs
+   plugins tint theirs, see touchSettings in js/modgui.js, its name in that color */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-column.mod-touch-group {
+    border: 1px solid color-mix(in srgb, var(--group-color) 22%, #181818);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--group-color) 12%, #181818);
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group .mod-group-header {
+    color: color-mix(in srgb, var(--group-color) 70%, #fff);
+    border-bottom-color: color-mix(in srgb, var(--group-color) 22%, #181818);
+}
+
+/* upright, its sections one under the other with some room between */
+@media (orientation: portrait) {
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group {
+        margin: 12px 8px 0;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group .mod-touch-controls > div:last-child {
+        border-bottom: none;
+    }
+}
+
+/* Turned sideways, the settings are columns side by side, scrolling across: the
+   plugin's switch and its presets, then a column for each group of ports, see
+   touchSettings in js/modgui.js, whose sliders stand upright. Out of their way, the
+   title is one line */
+@media (orientation: landscape) {
+    body.app-bar-mode .mod-settings .mod-pedal-settings {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings header {
+        flex: none;
+        padding: 6px 12px;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-toolbar .js-ab-compare {
+        margin-top: 0 !important;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-controls {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-control-group {
+        flex: 1;
+        display: flex;
+        gap: 10px;
+        max-width: none;
+        margin: 0;
+        padding: 0 12px 4px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        touch-action: pan-x;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-column {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-radius: 10px;
+        background: #181818;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main {
+        width: 240px;
+    }
+
+    /* the presets take what the switch leaves, their list scrolling */
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .mod-presets {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-bottom: none;
+    }
+
+    /* their menu over their list rather than under its button, which the columns would
+       cut short: scrolling, if it has to */
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .mod-enumerated.mod-presets footer {
+        left: 12px;
+        right: 12px;
+        bottom: 8px;
+        min-width: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        touch-action: pan-y;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .mod-presets > .mod-enumerated-list {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        touch-action: pan-y;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-column .mod-group-header {
+        flex: none;
+        padding: 10px 12px 2px;
+        border-bottom: none;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 0;
+        padding: 8px 4px;
+        border-bottom: none;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div > span[class$=-title] {
+        flex: none;
+        max-width: 100%;
+        font-size: 12px;
+        line-height: 15px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* an upright slider, its name over it and its value under it */
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob {
+        width: 76px !important;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob .mod-knob-image {
+        order: 1;
+        flex: 1;
+        /* the whole width of its column takes the finger */
+        align-self: stretch;
+        width: auto;
+        height: auto;
+        margin: 20px 0 20px;
+        touch-action: pan-x;
+        cursor: ns-resize;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob .mod-knob-image::before,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob .mod-slider-fill {
+        left: calc(50% - 2px);
+        right: auto;
+        top: auto;
+        bottom: 0;
+        width: 4px;
+        margin: 0 0 -14px;
+        padding: 0;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob .mod-knob-image::before {
+        top: 0;
+        height: auto;
+        margin-top: -14px;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob .mod-slider-fill {
+        height: var(--slider-at, 0);
+        padding-bottom: 14px;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob .mod-slider-thumb {
+        left: calc(50% - 14px);
+        top: auto;
+        bottom: var(--slider-at, 0);
+        margin: 0 0 -14px;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob > span.mod-knob-current-value {
+        order: 2;
+        position: static;
+        flex: none;
+        font-size: 12px;
+        line-height: 15px;
+    }
+
+    /* a switch in the middle of its column, a choice its options one under the other */
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-switch {
+        width: 88px !important;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-switch .mod-switch-image,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-switch .mod-footswitch-image {
+        position: relative;
+        right: auto;
+        top: auto;
+        margin-top: 0;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-enumerated {
+        width: 168px !important;
+        align-items: stretch;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-enumerated .mod-enumerated-list {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        touch-action: pan-y;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-enumerated .mod-enumerated-list.mod-segmented {
+        flex: none;
+        flex-direction: column;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-enumerated .mod-enumerated-list > div {
+        height: 36px;
+        padding: 0 8px;
+        font-size: 13px;
+        line-height: 36px;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-string,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-file-list {
+        width: 240px !important;
+        align-items: stretch;
+    }
+}
+
+/* The title stays, what is under it scrolls */
+body.app-bar-mode .mod-settings .mod-pedal-settings {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings > * {
+    flex: none;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings > .mod-controls {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Turned sideways on a screen that is not small, see small-screen in js/appbar.js,
+   there is room under each control for its bindings and whether snapshots take it,
+   side by side under its value */
+@media (orientation: landscape) {
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings .mod-touch-controls > div {
+        position: relative;
+        padding-bottom: 48px;
+    }
+
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-address,
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-knob-snapshot-status {
+        display: block;
+        position: absolute;
+        top: auto;
+        right: auto;
+        bottom: 8px;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background-size: 28px;
+        cursor: pointer;
+    }
+
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-knob-snapshot-status {
+        left: calc(50% - 34px);
+        font-size: 18px;
+        line-height: 32px;
+        text-align: center;
+    }
+
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-address {
+        left: calc(50% + 2px);
+    }
+
+    /* one that has no bindings, as a parameter, has the other alone, in the middle */
+    body.app-bar-mode:not(.small-screen) .mod-settings .mod-pedal-settings .mod-touch-controls > div:not(:has(> .mod-address)) > .mod-knob-snapshot-status {
+        left: calc(50% - 16px);
+    }
+}
+
+/* Upright, a control's snapshot and bindings buttons are on its name's row, after its
+   value or its switch, its slider or its list under them all. Always in the same two
+   places at the row's end, whatever the value's length, as wide when one is missing */
+@media (orientation: portrait) {
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto 30px 30px;
+        grid-template-areas: "name value snapshot bindings"
+                             "control control control control";
+        column-gap: 6px;
+        align-items: center;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div > span[class$=-title],
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass > span[class$=-title] {
+        grid-area: name;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-knob-snapshot-status,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass > .mod-knob-snapshot-status {
+        grid-area: snapshot;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-address,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass > .mod-address {
+        grid-area: bindings;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob > .mod-knob-current-value {
+        grid-area: value;
+        position: static;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-knob > .mod-knob-image,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-enumerated > .mod-enumerated-list,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-string > .mod-string-content {
+        grid-area: control;
+    }
+
+    /* a switch is the row's value */
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-switch > .mod-switch-image,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > .mod-switch > .mod-footswitch-image,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass > .mod-switch-image {
+        grid-area: value;
+        position: relative;
+        right: auto;
+        top: auto;
+        margin-top: 0;
+    }
+
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-address,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-controls > div > .mod-knob-snapshot-status,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass > .mod-address,
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .bypass > .mod-knob-snapshot-status {
+        display: block;
+        position: static;
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        background-size: 26px;
+        font-size: 17px;
+        line-height: 30px;
+        text-align: center;
+        cursor: pointer;
+    }
+}
+
+/* no bindings in the performance view, whose template hides them, see settings.html,
+   but for its choices', which it misses */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-address.mod-hidden,
+body.app-bar-mode #performance .mod-settings .mod-pedal-settings .mod-address {
+    display: none !important;
+}
+
+/* What a long press on a control brings up, see touchControlSheet in js/modgui.js: a
+   sheet from the bottom of the screen, sized for a finger, see --touch-zoom, over all */
+.mod-touch-sheet {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1100;
+    zoom: var(--touch-zoom, 1);
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.mod-touch-sheet .panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 8px 0 20px;
+    border-radius: 18px 18px 0 0;
+    background: #1d1d1d;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+    color: #eee;
+    font-size: 15px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mod-touch-sheet .title {
+    padding: 10px 18px;
+    color: #999;
+    font-size: 12px;
+}
+
+.mod-touch-sheet .item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 48px;
+    padding: 0 18px;
+    cursor: pointer;
+}
+
+.mod-touch-sheet .item:active {
+    background: #883996;
+}
+
+.mod-touch-sheet .item i {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    color: #c79bd0;
+    font-size: 18px;
+    font-style: normal;
+    line-height: 24px;
+    text-align: center;
+}
+
+.mod-touch-sheet .item.bindings i {
+    background: url(../img/icons/36/faders.png) center / 24px no-repeat;
+}
+
+.mod-touch-sheet .item.reset i::before {
+    content: '\21BA';
+}
+
+.mod-touch-sheet .item .state {
+    margin-left: auto;
+    color: #888;
+    font-size: 13px;
+}
+
+/* The presets' buttons are a menu, behind one by their title, see touchSettings */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-presets-menu {
+    display: block;
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    width: 48px;
+    height: 32px;
+    border-radius: 8px;
+    background: #2a2a2a;
+    color: #fff;
+    font-size: 18px;
+    line-height: 30px;
+    text-align: center;
+    cursor: pointer;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-presets-menu::after {
+    content: '\2022\2022\2022';
+    letter-spacing: 1px;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-presets.menu-open .mod-presets-menu {
+    background: #883996;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets footer {
+    display: none;
+    position: absolute;
+    top: 46px;
+    right: 16px;
+    z-index: 5;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 200px;
+    padding: 6px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    background: #222;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets.menu-open footer {
+    display: flex;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets footer .btn {
+    display: block;
+    width: 100% !important;
+    height: 44px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 6px;
+    background: #222 none;
+    font-size: 15px;
+    font-weight: normal;
+    text-align: left;
+    text-transform: none !important;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets footer .btn:active {
+    background: #883996;
+}
+
+/* named by their titles, the icons left out */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets footer .btn[title]::after {
+    content: attr(title);
+}
+
+@media (orientation: portrait) {
+    /* upright, the presets are taller, see .mod-touch-main for them turned sideways */
+    body.app-bar-mode .mod-settings .mod-pedal-settings .mod-presets > .mod-enumerated-list {
+        min-height: 176px;
+        max-height: 352px;
+        overflow-y: auto;
+        border-radius: 8px;
+        background: #141414;
+    }
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated .mod-enumerated-list.mod-segmented {
+    display: flex;
+    gap: 1px;
+    border: 1px solid #444;
+    background: #444;
+}
+
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated .mod-enumerated-list.mod-segmented > div {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0 6px;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 body.app-bar-mode.plugin-view > .mod-settings .js-close {
@@ -3060,7 +4113,7 @@ body > .mod-settings.mod-flip-out {
 /* the transport, from the menu, above the dock which has the way back to the board,
    see js/appbar.js */
 body.app-bar-mode #mod-transport-window {
-    bottom: 80px;
+    bottom: calc(80px * var(--touch-zoom, 1));
     left: 50%;
     right: auto !important;
     transform: translateX(-50%);
@@ -3221,6 +4274,153 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     display: flex;
 }
 
+/* The compact dock, across a narrow screen, see js/appbar.js: the menu and the
+   snapshots as their icons, Edit and Live one button to the other, unlit, the CPU
+   meter in the menu, the menu's button red after an xrun as the meter is, Add Plugin
+   its +, a plugin's Remove its trash */
+.mod-app-bar .popup .toggle .icon-camera,
+.mod-app-bar .popup li.meter-entry {
+    display: none;
+}
+
+.mod-app-bar.compact .popup.main .toggle,
+.mod-app-bar.compact .popup.snapshots .toggle {
+    width: 44px;
+    min-width: 0;
+    padding: 0;
+    background-image: none;
+    font-size: 20px;
+}
+
+.mod-app-bar.compact .popup .toggle .name,
+.mod-app-bar.compact > .tools > .meter,
+.mod-app-bar.compact .mode .segment.selected {
+    display: none;
+}
+
+.mod-app-bar.compact .popup.main .toggle::after {
+    content: '\2630';
+}
+
+.mod-app-bar.compact .popup.snapshots .toggle .icon-camera {
+    display: inline;
+}
+
+.mod-app-bar.compact .popup.main .toggle.xrun {
+    background-color: #c0392b;
+    border-color: #e74c3c;
+}
+
+.mod-app-bar.compact .mode .segment {
+    color: #aaa;
+}
+
+.mod-app-bar.compact #plugins-library-tab:not(.active) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* as high as it is wide, a circle */
+    width: 40px;
+    padding: 0;
+    font-size: 0;
+}
+
+.mod-app-bar.compact #plugins-library-tab:not(.active)::after {
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.mod-app-bar.compact .plugin > div:not(.popup) {
+    min-width: 44px;
+    padding: 0 10px;
+}
+
+.mod-app-bar.compact .plugin > .remove {
+    min-width: 44px;
+    padding: 0;
+    font-size: 0;
+}
+
+.mod-app-bar.compact .plugin > .remove::before {
+    content: '\e803';
+    font-family: fontello;
+    font-size: 18px;
+}
+
+/* closer together */
+.mod-app-bar.compact > * + * {
+    margin-left: 8px;
+}
+
+.mod-app-bar.compact .tools {
+    gap: 8px;
+}
+
+/* its menu, as wide as the screen at most: its sections two by two */
+.mod-app-bar.compact .popup.main.open .menu {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* the screen is the page's 980 across, under the dock's zoom */
+    width: 360px;
+    max-width: calc(980px / var(--touch-zoom, 1) - 24px);
+    box-sizing: border-box;
+}
+
+.mod-app-bar.compact .popup.main .section {
+    min-width: 0;
+}
+
+.mod-app-bar.compact .popup.main li {
+    padding: 0 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mod-app-bar.compact .popup li.meter-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mod-app-bar.compact .popup li.meter-entry.xrun {
+    background: #3a1d1d;
+}
+
+.mod-app-bar .popup li.meter-entry .meter {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    width: auto;
+    height: 18px;
+    margin-left: auto;
+    padding: 0;
+    border: none;
+}
+
+.mod-app-bar .popup li.meter-entry .bar {
+    position: relative;
+    width: 6px;
+    height: 100%;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.mod-app-bar .popup li.meter-entry .fill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #ccc;
+}
+
+.mod-app-bar .popup li.meter-entry.xrun .fill {
+    background: #e74c3c;
+}
+
 .mod-app-bar .popup .section {
     min-width: 180px;
 }
@@ -3342,7 +4542,7 @@ body.app-bar-mode.library-open .plugin-info span.js-close {
 
 body.app-bar-mode.plugin-view .plugin-info .box,
 body.app-bar-mode.library-open .plugin-info .box {
-    margin-bottom: 96px;
+    margin-bottom: calc(96px * var(--touch-zoom, 1));
 }
 
 /* The bindings dialog (also a single control's addressing), with the dock: the title
