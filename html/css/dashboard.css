@@ -2973,15 +2973,10 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 }
 
 /* unsaved changes */
-.mod-app-bar .save.modified::after {
-    content: "";
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+.mod-app-bar .save.modified {
+    color: #fff;
     background: #883996;
+    border-color: #883996;
 }
 
 /* The plugin info where the screen is too narrow for the plugin and its description
