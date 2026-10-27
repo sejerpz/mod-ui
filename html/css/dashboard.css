@@ -2915,6 +2915,8 @@ body.app-bar-mode #plugins-library.grid-library.open {
     color: #fff;
     font-size: 16px;
     user-select: none;
+    /* nor the system's own callout on a long press, which the A/B button has a use for */
+    -webkit-touch-callout: none;
 }
 
 /* out of the way of a dialog, below the bottom of the screen */
@@ -3281,7 +3283,7 @@ body.app-bar-mode #plugins-library.grid-library.open {
     transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
 }
 
-.mod-app-bar .plugin > div {
+.mod-app-bar .plugin > div:not(.popup) {
     min-width: 64px;
     height: 40px;
     line-height: 40px;
@@ -3703,7 +3705,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar .perf .actions > *,
 .mod-app-bar > .back > div,
 .mod-app-bar > .dialog > div,
-.mod-app-bar .plugin > div,
+.mod-app-bar .plugin > div:not(.popup),
 .mod-app-bar .task .cancel,
 #plugins-library-tab {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -3725,7 +3727,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar .perf .actions > :active,
 .mod-app-bar > .back > div:active,
 .mod-app-bar > .dialog > div:active,
-.mod-app-bar .plugin > div:active,
+.mod-app-bar .plugin > div:not(.popup):active,
 .mod-app-bar .task .cancel:active,
 #plugins-library-tab:active {
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);

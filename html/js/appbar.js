@@ -9,6 +9,9 @@
 // Every button drives the element that already does the job, so the app's own state
 // and handlers stay where they are.
 
+// How long a press on the A/B button lasts before it brings up the whole comparer, in ms
+var AB_LONG_PRESS = 500
+
 JqueryClass('appBar', {
     init: function (options) {
         var self = $(this)
@@ -293,9 +296,9 @@ JqueryClass('appBar', {
 
         // The A/B comparer as one button: A/B, on black, until there is a snapshot to
         // compare with. A tap takes one, which goes to B, and from then on switches
-        // between A and B. A double tap brings up the whole comparer above it, the way
-        // to take a new snapshot. A tap waits briefly for a second one, or a double tap
-        // would switch there and back first
+        // between A and B. A long press, or a double tap, brings up the whole comparer
+        // above it, the way to take a new snapshot. A tap waits briefly for a second
+        // one, or a double tap would switch there and back first
         var compareA = options.abCompare.find('.js-ab-compare-snapshot-a')
         var compareB = options.abCompare.find('.js-ab-compare-snapshot-b')
         var compareTake = options.abCompare.find('.js-ab-compare-snapshot-take')
@@ -312,17 +315,26 @@ JqueryClass('appBar', {
         var ab = $('<div class="popup ab">').appendTo(tools)
         $('<div class="menu">').append(options.abCompare).appendTo(ab)
         popups = popups.add(ab)
-        var tapped = null
+        var abTapped = null
+        // the long press, and whether the tap it ends in is its own
+        var abPress = null, abPressedAt = null, abLongPressed = false
+        var abOpen = function () {
+            popups.not(ab).removeClass('open')
+            ab.toggleClass('open')
+        }
         var abButton = $('<div class="toggle">').click(function () {
-            if (tapped) {
-                clearTimeout(tapped)
-                tapped = null
-                popups.not(ab).removeClass('open')
-                ab.toggleClass('open')
+            if (abLongPressed) {
+                abLongPressed = false
                 return false
             }
-            tapped = setTimeout(function () {
-                tapped = null
+            if (abTapped) {
+                clearTimeout(abTapped)
+                abTapped = null
+                abOpen()
+                return false
+            }
+            abTapped = setTimeout(function () {
+                abTapped = null
                 var status = compared()
                 if (! status) {
                     compareTake.click()
@@ -332,6 +344,30 @@ JqueryClass('appBar', {
             }, 300)
             return false
         }).appendTo(ab)
+        var abRelease = function () {
+            clearTimeout(abPress)
+            abPress = null
+        }
+        abButton.on('pointerdown', function (e) {
+            abLongPressed = false
+            abPressedAt = { x: e.originalEvent.clientX, y: e.originalEvent.clientY }
+            abRelease()
+            abPress = setTimeout(function () {
+                abPress = null
+                abLongPressed = true
+                clearTimeout(abTapped)
+                abTapped = null
+                abOpen()
+            }, AB_LONG_PRESS)
+        }).on('pointermove', function (e) {
+            // a finger that wanders off is not pressing
+            if (abPress && (Math.abs(e.originalEvent.clientX - abPressedAt.x) > 10 ||
+                            Math.abs(e.originalEvent.clientY - abPressedAt.y) > 10)) {
+                abRelease()
+            }
+        }).on('pointerup pointercancel', abRelease)
+        // nor does the browser's own menu for a long press come up
+        .on('contextmenu', false)
         var showCompared = function () {
             var status = compared()
             abButton.text(status == 'A' || status == 'B' ? status : 'A/B')
@@ -472,6 +508,13 @@ JqueryClass('appBar', {
         })
         options.pedalboard.on('pluginview', function (e, instance) {
             viewed = instance
+            // the A/B comparer comes along, between Info and Settings, and goes back
+            // among the board's tools after
+            if (instance) {
+                ab.insertAfter(plugin.children('.information'))
+            } else {
+                ab.insertBefore(save)
+            }
             setState('viewing', !! instance)
         })
         // Its settings and its info take the whole screen above the dock, which folds
