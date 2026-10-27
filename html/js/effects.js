@@ -453,6 +453,11 @@ JqueryClass('effectBox', {
             if (renderedIndex >= pluginCount) {
                 // if we get here it means we finished rendering
                 self.effectBox('calculateNavigation')
+                // the grid library's Favorites marks the plugins now there, see gridView:
+                // on startup its tab is picked before they are
+                if (self.hasClass('grid-library')) {
+                    self.effectBox('gridView')
+                }
 
                 if (self.data('showPluginsRenderId') == currentRenderId) {
                     // no other renders in queue, take the chance and reset the id
