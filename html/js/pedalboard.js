@@ -1877,8 +1877,26 @@ JqueryClass('pedalboard', {
             $.each(wiring.cables, function (i, cable) {
                 self.data('portDisconnect')(cable[0], cable[1], function () {})
             })
-            $.each(self.pedalboard('wirePairs', wiring.from, own.input), function (i, pair) { connect(pair) })
-            $.each(self.pedalboard('wirePairs', own.output, wiring.to), function (i, pair) { connect(pair) })
+            // from and to each of the plugins on either side on its own, the cables of
+            // a run can go to more than one, see showInsertPoints
+            var byPlugin = function (ports) {
+                var groups = {}, order = []
+                $.each(ports, function (i, port) {
+                    var at = port.substring(0, port.lastIndexOf('/'))
+                    if (! groups[at]) {
+                        groups[at] = []
+                        order.push(at)
+                    }
+                    groups[at].push(port)
+                })
+                return $.map(order, function (at) { return [groups[at]] })
+            }
+            $.each(byPlugin(wiring.from), function (i, from) {
+                $.each(self.pedalboard('wirePairs', from, own.input), function (j, pair) { connect(pair) })
+            })
+            $.each(byPlugin(wiring.to), function (i, to) {
+                $.each(self.pedalboard('wirePairs', own.output, to), function (j, pair) { connect(pair) })
+            })
             return
         }
         var connMgr = self.data('connectionManager')
@@ -1948,8 +1966,8 @@ JqueryClass('pedalboard', {
     },
 
     // While a plugin waits to be placed: a point on each run of cables between two
-    // plugins (or a plugin and the board's ins or outs) that it could go into, halfway
-    // along the cables and level with the middle of the row it would go in. Tapping
+    // plugins (or a plugin and the board's ins or outs) that it could go into, in the
+    // gutter right before the cell it would go in, level with its middle. Tapping
     // one puts it there, in a column of its own right after where the cables come from,
     // fed by what fed them and feeding what they fed. The cables of one kind between
     // the same two make one run, the left and right of a stereo pair together. No point
@@ -1959,16 +1977,8 @@ JqueryClass('pedalboard', {
         var self = $(this)
         var plugins = self.data('plugins')
         var scale = self.data('scale')
-        var origin = self[0].getBoundingClientRect()
         var instanceOf = function (port) {
             return port.substring(0, port.lastIndexOf('/'))
-        }
-        var center = function (element) {
-            var r = element[0].getBoundingClientRect()
-            return {
-                x: (r.left + r.width / 2 - origin.left) / scale,
-                y: (r.top + r.height / 2 - origin.top) / scale
-            }
         }
         // the order of a port among its plugin's, or among the hardware's by name
         var order = function (port) {
@@ -1994,14 +2004,11 @@ JqueryClass('pedalboard', {
                 return
             }
             var key = instanceOf(from) + ' ' + instanceOf(to) + ' ' + type
-            var run = runs.list[key] = runs.list[key] || { type: type, cables: [], from: [], to: [], points: [] }
+            var run = runs.list[key] = runs.list[key] || { type: type, cables: [], from: [], to: [] }
             run.cables.push([from, to])
             run.from.indexOf(from) < 0 && run.from.push(from)
             run.to.indexOf(to) < 0 && run.to.push(to)
             runs.types[from] = runs.types[to] = type
-            var a = center(output), b = center(jack)
-            // halfway along the cable: its curve is symmetric about there
-            run.points.push((a.x + b.x) / 2)
         })
 
         // right after the plugin the cables come from, in its row. From the board's
@@ -2035,9 +2042,36 @@ JqueryClass('pedalboard', {
             return false
         }
 
-        var size = 36 / scale
+        // as big as the button in a cell, see dashboard.css, but never too small to tap
+        var size = Math.max(120, 36 / scale)
+        // Runs from the same plugin into the same cell, as when it feeds two plugins in
+        // the next column, one per row, are one point: put there, the plugin goes
+        // before the split and feeds them all
+        var merged = []
         $.each(runs.list, function (key, run) {
-            if (between(run)) {
+            run.cell = cellFor(run)
+            // in the gutter the cables leave the plugin they come from by, see
+            // gridCableCorners, or enter the one they go to from the board's inputs:
+            // halfway along a cable going back, or coming from the edge of the board,
+            // is on another plugin, or a cell
+            run.x = self.pedalboard('cellRect', run.cell).x
+            for (var i = 0; i < merged.length; i++) {
+                var other = merged[i]
+                if (other.type == run.type && instanceOf(other.from[0]) == instanceOf(run.from[0]) &&
+                    other.cell.col == run.cell.col && other.cell.row == run.cell.row) {
+                    other.cables = other.cables.concat(run.cables)
+                    $.each(run.from, function (j, port) { other.from.indexOf(port) < 0 && other.from.push(port) })
+                    $.each(run.to, function (j, port) { other.to.indexOf(port) < 0 && other.to.push(port) })
+                    other.split = true
+                    return
+                }
+            }
+            merged.push(run)
+        })
+
+        $.each(merged, function (i, run) {
+            // a free cell does the same only for a run to one plugin
+            if (! run.split && between(run)) {
                 return
             }
             var sorted = function (ports) {
@@ -2048,19 +2082,16 @@ JqueryClass('pedalboard', {
             }
             sorted(run.from)
             sorted(run.to)
-            var x = 0
-            $.each(run.points, function (i, point) {
-                x += point / run.points.length
-            })
-            var cell = cellFor(run)
+            var x = run.x
+            var cell = run.cell
             var row = self.pedalboard('cellRect', cell)
             $('<div class="mod-insert-point">').css({
                 left: x - size / 2,
                 top: row.y + row.height / 2 - size / 2,
                 width: size,
                 height: size,
-                'outline-width': 2 / scale,
-                'font-size': 16 / scale
+                'border-width': size / 20,
+                'font-size': size / 3
             }).click(function () {
                 if (Date.now() - (self.data('lastPanMove') || 0) < 300) {
                     return false
