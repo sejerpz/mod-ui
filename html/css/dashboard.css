@@ -31,33 +31,35 @@
     top: 0;
 }
 
-/* where the plugin being placed can go into a run of cables, see showInsertPoints.
-   Drawn like a free cell, round, and pulsing to be told apart from the cables. Its
-   sizes are set for the board's zoom, the pulse in em */
-.mod-insert-point {
-    position: absolute;
+/* The places the plugin being placed can go, all drawn alike but for their icon: a
+   dark round button with a dashed border, pulsing. Into a run of cables, see
+   showInsertPoints, a + sized there for the board's zoom, its pulse in em; into a free
+   cell, a + in the middle of it; in the place of another plugin, see markSwapCells,
+   two arrows going opposite ways */
+.mod-insert-point,
+.mod-placement-cell.free::after,
+.mod-placement-cell.swap::after {
     box-sizing: border-box;
     border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.12);
-    outline-style: dashed;
-    outline-color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.6);
+    background-color: rgba(17, 17, 17, 0.75);
+    background-position: center;
+    background-size: 60%;
+    background-repeat: no-repeat;
     animation: mod-insert-pulse 1.6s ease-out infinite;
 }
 
-.mod-insert-point:active {
-    background-color: rgba(136, 57, 150, 0.45);
+.mod-insert-point {
+    position: absolute;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 22v56M22 50h56' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
-.mod-insert-point::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 14v72M14 50h72' fill='none' stroke='white' stroke-opacity='0.6' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E") center / 55% no-repeat;
-    pointer-events: none;
+.mod-insert-point:active,
+.mod-placement-cell.free:active::after,
+.mod-placement-cell.swap:active::after {
+    background-color: rgba(136, 57, 150, 0.85);
 }
 
 @keyframes mod-insert-pulse {
@@ -72,40 +74,17 @@
     background-clip: padding-box;
 }
 
-.mod-placement-cell.free {
-    background-color: rgba(255, 255, 255, 0.12);
-    outline: 6px dashed rgba(255, 255, 255, 0.5);
-    outline-offset: -18px;
-    cursor: pointer;
-}
-
-.mod-placement-cell.free:active {
-    background-color: rgba(136, 57, 150, 0.45);
-}
-
-/* a big see-through + on every free cell, an arrow into a tray instead while a plugin
-   is dragged over the grid. Drawn as svg, so it does not depend on the font */
-.mod-placement-cell.free::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 14v72M14 50h72' fill='none' stroke='white' stroke-opacity='0.3' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E") center / 45% no-repeat;
-    pointer-events: none;
-}
-
-.mod-placement-grid.passive .mod-placement-cell.free::after {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 10v54M28 42l22 22 22-22M16 68v18h68V68' fill='none' stroke='white' stroke-opacity='0.3' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-
-/* a plugin the one being placed can take the place of, see markSwapCells: a round
-   button in the middle of it, with two arrows going opposite ways */
+.mod-placement-cell.free,
 .mod-placement-cell.swap {
     cursor: pointer;
 }
 
+/* a free cell still shows as a cell */
+.mod-placement-cell.free {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.mod-placement-cell.free::after,
 .mod-placement-cell.swap::after {
     content: '';
     position: absolute;
@@ -114,16 +93,24 @@
     width: 120px;
     height: 120px;
     margin: -60px 0 0 -60px;
-    border-radius: 50%;
-    border: 6px dashed rgba(255, 255, 255, 0.6);
-    box-sizing: border-box;
-    background: rgba(17, 17, 17, 0.75) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M18 36h60M62 20l16 16-16 16M82 64H22M38 48 22 64l16 16' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 60% no-repeat;
-    animation: mod-insert-pulse 1.6s ease-out infinite;
+    border-width: 6px;
     font-size: 40px;
+    pointer-events: none;
 }
 
-.mod-placement-cell.swap:active::after {
-    background-color: rgba(136, 57, 150, 0.85);
+.mod-placement-cell.free::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 22v56M22 50h56' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.mod-placement-cell.swap::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M18 36h60M62 20l16 16-16 16M82 64H22M38 48 22 64l16 16' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* while a plugin is dragged over the grid, an arrow into a tray, without the pulse */
+.mod-placement-grid.passive .mod-placement-cell.free::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 16v46M30 42l20 20 20-20M20 66v14h60V66' fill='none' stroke='white' stroke-opacity='0.85' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    animation: none;
+    opacity: 0.6;
 }
 
 .mod-placement-grid.passive .mod-placement-cell.swap::after {
@@ -136,8 +123,7 @@
 }
 
 .mod-placement-grid.passive .mod-placement-cell.free {
-    background-color: rgba(255, 255, 255, 0.05);
-    outline-color: rgba(255, 255, 255, 0.25);
+    background-color: rgba(255, 255, 255, 0.04);
 }
 
 .mod-placement-target {
