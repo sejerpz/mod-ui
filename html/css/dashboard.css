@@ -208,6 +208,583 @@
     font-weight: bold;
 }
 
+/* the ports of a plugin spread out for a tap, see pickPort */
+.mod-port-picker {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.mod-port-picker-panel {
+    position: absolute;
+    padding: 10px 14px 6px;
+    border-radius: 10px;
+    border: 2px solid #883996;
+    background: rgba(17, 17, 17, 0.92);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+    color: #fff;
+}
+
+.mod-port-picker-title {
+    margin-bottom: 6px;
+    color: #c79bd0;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.mod-port-picker-port {
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    margin: 0 -6px 4px;
+    padding: 0 6px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* inputs sit on a plugin's left, so their panel is on its left and ends in the jacks */
+.mod-port-picker-panel.input .mod-port-picker-port {
+    flex-direction: row-reverse;
+}
+
+.mod-port-picker-port:active {
+    background: rgba(136, 57, 150, 0.85);
+}
+
+.mod-port-picker-port.disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.mod-port-picker-port.disabled:active {
+    background: none;
+}
+
+/* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    border-radius: 18px;
+    background: #883996;
+    color: #fff;
+    font-family: fontello !important;
+    font-size: 18px;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* the trash of the plugins' own actions, see pedals.css */
+.mod-port-picker-unplug::after {
+    content: '\e803';
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack {
+    flex: none;
+    width: 70px;
+    height: 45px;
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+}
+
+.mod-port-picker-name {
+    padding: 0 12px;
+    font-size: 15px;
+    white-space: nowrap;
+}
+
+.output .audio /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/audio-output.png); }
+.output .audio.connected /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/audio-output-connected.png); }
+.output .midi /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/midi-output.png); }
+.output .midi.connected /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/midi-output-connected.png); }
+.output .cv /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/cv-output.png); }
+.output .cv.connected /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/cv-output-connected.png); }
+.input .audio /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/audio-input.png); }
+.input .audio.connected /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/audio-input-connected.png); }
+.input .midi /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/midi-input.png); }
+.input .midi.connected /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/midi-input-connected.png); }
+.input .cv /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/cv-input.png); }
+.input .cv.connected /* a port listed for the cables under it, see showInputCables, not to be picked */
+.mod-port-picker-port.static {
+    cursor: default;
+}
+
+.mod-port-picker-port.static:active {
+    background: none;
+}
+
+/* a cable into the port above it, with the trash that unplugs it */
+.mod-port-picker-cable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: -4px 0 4px;
+    padding-left: 12px;
+    border-left: 2px solid rgba(136, 57, 150, 0.6);
+    color: #ccc;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.mod-port-picker-unplug {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #883996 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' transform='rotate(45 10 10)' d='M8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / 20px no-repeat;
+    cursor: pointer;
+}
+
+.mod-port-picker-unplug:active {
+    background-color: #a64db5;
+}
+
+.mod-port-picker-jack { background-image: url(../img/cv-input-connected.png); }
+
 #pedalboard-dashboard.dev_api:after {
     content: "DEV API enabled";
     color: #555;
@@ -2439,7 +3016,9 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar:not(.viewing) > .plugin,
 .mod-app-bar.viewing > :not(.plugin):not(.dialog),
 .mod-app-bar.dialog > :not(.dialog),
-.mod-app-bar:not(.dialog) > .dialog {
+.mod-app-bar:not(.dialog) > .dialog,
+.mod-app-bar.connecting > :not(.connecting),
+.mod-app-bar:not(.connecting) > .connecting {
     overflow: hidden;
 }
 
@@ -2456,7 +3035,9 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar:not(.viewing) > .plugin,
 .mod-app-bar.viewing > :not(.plugin):not(.dialog),
 .mod-app-bar.dialog > :not(.dialog),
-.mod-app-bar:not(.dialog) > .dialog {
+.mod-app-bar:not(.dialog) > .dialog,
+.mod-app-bar.connecting > :not(.connecting),
+.mod-app-bar:not(.connecting) > .connecting {
     max-width: 0;
     opacity: 0;
     margin-left: 0;
@@ -2468,8 +3049,81 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.arranging .perf,
 .mod-app-bar.elsewhere .back,
 .mod-app-bar.viewing .plugin,
-.mod-app-bar.dialog .dialog {
+.mod-app-bar.dialog .dialog,
+.mod-app-bar.connecting .connecting {
     margin-left: 0;
+}
+
+/* a cable being made by taps, see js/appbar.js: where it comes from and Cancel */
+.mod-app-bar > .connecting {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding-left: 8px;
+    max-width: 640px;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+/* floating just above the dock, on its left, like a title. Placed on the dock rather
+   than in its part, so the part's clipping while it folds leaves it alone */
+.mod-app-bar .connecting .title {
+    position: absolute;
+    left: 12px;
+    bottom: calc(100% + 10px);
+    font-size: 20px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    animation: mod-connect-breathe 1.6s ease-in-out infinite alternate;
+}
+
+/* waiting for the tap on the target: it slowly fades in and out */
+@keyframes mod-connect-breathe {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
+}
+
+.mod-app-bar .connecting .source {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 40px;
+}
+
+.mod-app-bar .connecting img {
+    height: 40px;
+    max-width: 48px;
+    object-fit: contain;
+}
+
+.mod-app-bar .connecting .names {
+    max-width: 240px;
+    line-height: 18px;
+    text-align: center;
+}
+
+.mod-app-bar .connecting .label {
+    color: #c79bd0;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mod-app-bar .connecting .port {
+    font-size: 15px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mod-app-bar .connecting .cancel {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 16px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: #883996;
+    cursor: pointer;
 }
 
 /* the way back from the viewed plugin's settings */
@@ -2838,7 +3492,8 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 
 /* "Add Plugin", with a white disc behind it whose + shows the purple through. Not
    while it is the way out of adding, as Close or Cancel */
-#plugins-library-tab:not(.active)::after {
+#plugins-library-tab:not(.active)::after,
+.mod-app-bar .connecting .cancel::after {
     content: '';
     display: inline-block;
     width: 18px;
@@ -2846,6 +3501,11 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     margin-left: 8px;
     vertical-align: -3px;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' fill-rule='evenodd' d='M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20ZM8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Cancel while a cable is being made, with the same disc but an x */
+.mod-app-bar .connecting .cancel::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' fill-rule='evenodd' transform='rotate(45 10 10)' d='M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20ZM8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E");
 }
 
 #plugins-library-tab {
@@ -3026,6 +3686,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar > .back > div,
 .mod-app-bar > .dialog > div,
 .mod-app-bar .plugin > div,
+.mod-app-bar .connecting .cancel,
 #plugins-library-tab {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
                 inset 0 -1px 0 rgba(0, 0, 0, 0.35),
@@ -3047,6 +3708,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar > .back > div:active,
 .mod-app-bar > .dialog > div:active,
 .mod-app-bar .plugin > div:active,
+.mod-app-bar .connecting .cancel:active,
 #plugins-library-tab:active {
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
 }

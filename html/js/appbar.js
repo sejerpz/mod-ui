@@ -402,6 +402,30 @@ JqueryClass('appBar', {
             attributeFilter: ['class']
         })
 
+        // A cable being made by taps, see the pedalboard's connectFromPlugin: the dock
+        // folds down to where it comes from, the plugin and the port's name, and the way
+        // to drop it
+        var connecting = $('<div class="connecting">').appendTo(self)
+        $('<div class="title">').text('Connect').appendTo(connecting)
+        var source = $('<div class="source">').appendTo(connecting)
+        var thumbnail = $('<img>').appendTo(source)
+        var names = $('<div class="names">').appendTo(source)
+        var sourceLabel = $('<div class="label">').appendTo(names)
+        var sourcePort = $('<div class="port">').appendTo(names)
+        $('<div class="cancel">').text('Cancel').click(function () {
+            options.pedalboard.pedalboard('finishConnection')
+            return false
+        }).appendTo(connecting)
+        options.pedalboard.on('connectionstart', function (e, from) {
+            thumbnail.toggle(!! from.thumbnail).attr('src', from.thumbnail || '')
+            sourceLabel.text(from.label)
+            sourcePort.text(from.port).toggle(!! from.port)
+            setState('connecting', true)
+        })
+        options.pedalboard.on('connectionend', function () {
+            setState('connecting', false)
+        })
+
         // What a plugin can do, while the board shows just it, see the pedalboard's
         // showPlugin: the dock folds down to these and the way back to the whole board.
         // They are the plugin's own action icons

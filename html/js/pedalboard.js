@@ -3320,10 +3320,12 @@ JqueryClass('pedalboard', {
                     return
                 }
                 // in grid mode, a tap on its background by its outputs starts a cable from
-                // them, see connectFromPlugin, and further in shows just the plugin
+                // them, see connectFromPlugin, by its inputs shows the cables into them, see
+                // unplugAtPlugin, and further in shows just the plugin
                 if (! connection && self.pedalboard('gridMode') && ! self.data('pluginView') &&
                     $(event.target).hasClass('mod-drag-handle') &&
-                    self.pedalboard('connectFromPlugin', instance, event)) {
+                    (self.pedalboard('connectFromPlugin', instance, event) ||
+                     self.pedalboard('unplugAtPlugin', instance, event))) {
                     return
                 }
                 if (event.shiftKey) {
@@ -4398,8 +4400,17 @@ JqueryClass('pedalboard', {
 
         element.click(function () {
             var connection = self.data('ongoingConnection')
-            if (connection) {
+            // in grid mode a jack is too small a target to tell one port from another: a
+            // tap on it is a tap on its plugin, see connectToPlugin
+            var port = element.attr('mod-port')
+            var instance = port.substring(0, port.lastIndexOf('/'))
+            if (connection && self.pedalboard('gridMode') && self.data('plugins')[instance]) {
+                self.pedalboard('connectToPlugin', connection.jack, instance)
+            } else if (connection) {
                 self.pedalboard('do_connect', connection.jack, element)
+            } else if (self.pedalboard('gridMode') && self.data('plugins')[instance] &&
+                       self.pedalboard('showInputCables', instance)) {
+                return false
             } else {
                 self.pedalboard('expandInput', element)
             }
@@ -4674,6 +4685,13 @@ JqueryClass('pedalboard', {
                     }
                 });
              
+              } else if (self.pedalboard('gridMode') && ! self.data('ongoingConnection')) {
+                  // as small as an input's, see connectFromOutputs
+                  var port = element.attr('mod-port')
+                  var instance = port.substring(0, port.lastIndexOf('/'))
+                  if (! self.data('plugins')[instance] || ! self.pedalboard('connectFromOutputs', instance)) {
+                      self.pedalboard('startConnection', element)
+                  }
               } else {
                   self.pedalboard('startConnection', element)
               }
@@ -6061,11 +6079,44 @@ JqueryClass('pedalboard', {
         self.bind('mousemove', moveHandler)
         self.data('ongoingConnection', connection)
         self.pedalboard('highlightInputs', true, jack)
+        self.trigger('connectionstart', [self.pedalboard('connectionSource', output)])
+    },
+
+    // What a cable starting from `output` comes from, for the dock: { label, port, type,
+    // thumbnail }, the thumbnail being for a plugin's output only, not the board's
+    connectionSource: function (output) {
+        var self = $(this)
+        var port = output.attr('mod-port')
+        var instance = port.substring(0, port.lastIndexOf('/'))
+        var symbol = port.substring(port.lastIndexOf('/') + 1)
+        var type = output.data('portType') || 'audio'
+        var plugin = self.data('plugins')[instance]
+        var gui = plugin && plugin.data && plugin.data('gui')
+        if (! gui) {
+            var label = output.closest('[title]').attr('title') || symbol
+            return { label: label.replace(/^Hardware /, ''), port: '', type: type, thumbnail: null }
+        }
+        var effect = gui.effect
+        var ports = plugin.data('ports')[type]
+        var name = symbol
+        $.each((ports && ports.output) || [], function (i, each) {
+            if (each.symbol == symbol) {
+                name = each.name || symbol
+            }
+        })
+        var ver = [effect.builder, effect.microVersion, effect.minorVersion, effect.release].join('_')
+        return {
+            label: gui.label || effect.label || effect.name,
+            port: name,
+            type: type,
+            thumbnail: effect.gui && effect.gui.thumbnail
+                     ? '/effect/image/thumbnail.png?uri=' + escape(effect.uri) + '&v=' + ver
+                     : '/resources/pedals/default-thumbnail.png'
+        }
     },
 
     // A tap on a plugin within GRID_CABLE_EDGE of its right side, where its outputs are,
-    // starts a cable from the first of them with nothing connected, or the first of them
-    // if every one is. Whether it did.
+    // starts a cable from them, see connectFromOutputs. Whether it did.
     connectFromPlugin: function (instance, event) {
         var self = $(this)
         var icon = self.data('plugins')[instance]
@@ -6073,6 +6124,13 @@ JqueryClass('pedalboard', {
         if (event.clientX < rect.right - Math.max(rect.width * GRID_CABLE_EDGE, 24)) {
             return false
         }
+        return self.pedalboard('connectFromOutputs', instance)
+    },
+
+    // Starts a cable from the outputs of `instance`: from its only one, or from the one
+    // picked in pickPort. Whether it has any.
+    connectFromOutputs: function (instance) {
+        var self = $(this)
         var origIndex = self.data('connectionManager').origIndex
         var outputs = []
         $.each(['audio', 'midi', 'cv'], function (i, type) {
@@ -6081,16 +6139,62 @@ JqueryClass('pedalboard', {
         if (! outputs.length) {
             return false
         }
-        var free = $.grep(outputs, function (port) {
-            return ! Object.keys(origIndex[port] || {}).length
-        })
-        self.pedalboard('startConnection', self.find('[mod-port="' + (free[0] || outputs[0]) + '"]'))
+        var start = function (port) {
+            self.pedalboard('startConnection', self.find('[mod-port="' + port + '"]'))
+        }
+        if (outputs.length == 1) {
+            start(outputs[0])
+            return true
+        }
+        self.pedalboard('pickPort', instance, 'output', $.map(outputs, function (port) {
+            return { port: port, connected: Object.keys(origIndex[port] || {}).length > 0 }
+        }), start)
         return true
     },
 
-    // Ends the cable being made from `jack` in `instance`, in the first of its inputs of
-    // the cable's kind that nothing of the cable's own plugin goes into yet. Into the
-    // plugin it comes from it does not go, and with no such input it says so
+    // A tap on a plugin within GRID_CABLE_EDGE of its left side, where its inputs are,
+    // shows the cables into them, see showInputCables. Whether it did.
+    unplugAtPlugin: function (instance, event) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        var rect = icon[0].getBoundingClientRect()
+        if (event.clientX > rect.left + Math.max(rect.width * GRID_CABLE_EDGE, 24)) {
+            return false
+        }
+        return self.pedalboard('showInputCables', instance)
+    },
+
+    // The inputs of `instance` in pickPort, each with the cables coming into it to be
+    // unplugged one by one. Whether there are any.
+    showInputCables: function (instance) {
+        var self = $(this)
+        var destIndex = self.data('connectionManager').destIndex
+        var inputs = []
+        $.each(['audio', 'midi', 'cv'], function (i, type) {
+            inputs = inputs.concat(self.pedalboard('wirePorts', instance, type).input)
+        })
+        var any = false
+        var choices = $.map(inputs, function (input) {
+            var cables = $.map(Object.keys(destIndex[input] || {}), function (from) {
+                var source = self.pedalboard('connectionSource', self.find('[mod-port="' + from + '"]'))
+                return { from: from, label: source.port ? source.label + ' · ' + source.port : source.label }
+            })
+            any = any || cables.length > 0
+            return { port: input, connected: cables.length > 0, cables: cables }
+        })
+        if (! any) {
+            return false
+        }
+        self.pedalboard('pickPort', instance, 'input', choices, null, function (from, to) {
+            self.data('portDisconnect')(from, to, function () {})
+        })
+        return true
+    },
+
+    // Ends the cable being made from `jack` in `instance`: in its only input of the
+    // cable's kind, or in the one picked in pickPort. Into the plugin it comes from it
+    // does not go, nor into an input it already goes into, and with no input left it
+    // says so
     connectToPlugin: function (jack, instance) {
         var self = $(this)
         var output = jack.data('origin')
@@ -6102,14 +6206,23 @@ JqueryClass('pedalboard', {
         var type = output.data('portType')
         var destIndex = self.data('connectionManager').destIndex
         var inputs = self.pedalboard('wirePorts', instance, type).input
-        for (var i = 0; i < inputs.length; i++) {
-            var fed = $.grep(Object.keys(destIndex[inputs[i]] || {}), function (from) {
-                return from.lastIndexOf(source + '/', 0) == 0
-            })
-            if (! fed.length) {
-                self.pedalboard('do_connect', jack, self.find('[mod-port="' + inputs[i] + '"]'))
-                return
-            }
+        var choices = $.map(inputs, function (input) {
+            var from = Object.keys(destIndex[input] || {})
+            return { port: input, connected: from.length > 0, disabled: from.indexOf(port) >= 0 }
+        })
+        var open = $.grep(choices, function (choice) {
+            return ! choice.disabled
+        })
+        var connect = function (input) {
+            self.pedalboard('do_connect', jack, self.find('[mod-port="' + input + '"]'))
+        }
+        if (choices.length > 1 && open.length) {
+            self.pedalboard('pickPort', instance, 'input', choices, connect)
+            return
+        }
+        if (open.length) {
+            connect(open[0].port)
+            return
         }
         var name = function (instance) {
             var plugin = self.data('plugins')[instance]
@@ -6117,8 +6230,92 @@ JqueryClass('pedalboard', {
             return gui ? (gui.label || gui.effect.label || gui.effect.name) : instance
         }
         new Notification('warning', inputs.length
-                                    ? 'Every ' + type + ' input of ' + name(instance) + ' already comes from ' + name(source)
+                                    ? 'Every ' + type + ' input of ' + name(instance) + ' already comes from this output'
                                     : name(instance) + ' has no ' + type + ' input', 3000)
+    },
+
+    // Lets a tap pick one of the `ports` of `instance`, its outputs or inputs as `dir`
+    // says, for `done`: an overlay by the plugin with their jacks spread out, each with
+    // its name. Each choice is { port, connected, disabled, cables }; one that is
+    // disabled is shown but cannot be picked. With no `done` none can, the overlay
+    // being for the `cables` listed under each, { from, label }, which a tap on their
+    // trash hands to `unplug`. A tap anywhere else closes it, picking nothing.
+    pickPort: function (instance, dir, ports, done, unplug) {
+        var self = $(this)
+        var plugin = self.data('plugins')[instance]
+        var all = plugin.data('ports')
+        var gui = plugin.data('gui')
+        var describe = function (port) {
+            var symbol = port.substring(port.lastIndexOf('/') + 1)
+            for (var type in all) {
+                var list = (all[type] && all[type][dir]) || []
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i].symbol == symbol) {
+                        return { type: type, name: list[i].name || symbol }
+                    }
+                }
+            }
+            return { type: 'audio', name: symbol }
+        }
+
+        $('.mod-port-picker').remove()
+        var overlay = $('<div class="mod-port-picker">').attr('data-touch-native', '').appendTo('body')
+        var panel = $('<div class="mod-port-picker-panel">').addClass(dir).appendTo(overlay)
+        $('<div class="mod-port-picker-title">')
+            .text((gui ? (gui.label || gui.effect.label || gui.effect.name) : instance) +
+                  (dir == 'output' ? ' outputs' : ' inputs'))
+            .appendTo(panel)
+        $.each(ports, function (i, choice) {
+            var port = describe(choice.port)
+            var row = $('<div class="mod-port-picker-port">')
+                .addClass(port.type)
+                .toggleClass('connected', !! choice.connected)
+                .toggleClass('disabled', !! choice.disabled)
+                .appendTo(panel)
+            $('<div class="mod-port-picker-jack">').appendTo(row)
+            $('<div class="mod-port-picker-name">').text(port.name).appendTo(row)
+            if (done && ! choice.disabled) {
+                row.on('click', function () {
+                    overlay.remove()
+                    done(choice.port)
+                    return false
+                })
+            } else if (! done) {
+                row.addClass('static')
+            }
+            $.each(choice.cables || [], function (j, cable) {
+                var line = $('<div class="mod-port-picker-cable">').appendTo(panel)
+                $('<div class="mod-port-picker-from">').text(cable.label).appendTo(line)
+                $('<div class="mod-port-picker-unplug">').on('click', function () {
+                    unplug(cable.from, choice.port)
+                    line.remove()
+                    if (! panel.find('.mod-port-picker-cable').length) {
+                        overlay.remove()
+                    }
+                    return false
+                }).appendTo(line)
+            })
+        })
+        overlay.on('click', function (event) {
+            if (! $(event.target).closest('.mod-port-picker-panel').length) {
+                overlay.remove()
+            }
+            return false
+        })
+
+        // by the plugin: its outputs on its right, its inputs on its left, in the window
+        var rect = plugin[0].getBoundingClientRect()
+        var width = panel.outerWidth(), height = panel.outerHeight()
+        var gap = 12
+        var left = dir == 'output' ? rect.right + gap : rect.left - gap - width
+        if (left + width > window.innerWidth - gap || left < gap) {
+            left = dir == 'output' ? rect.left - gap - width : rect.right + gap
+        }
+        panel.css({
+            left: Math.max(gap, Math.min(left, window.innerWidth - width - gap)),
+            top: Math.max(gap, Math.min(rect.top + rect.height / 2 - height / 2,
+                                        window.innerHeight - height - gap))
+        })
     },
 
     finishConnection: function () {
@@ -6130,6 +6327,7 @@ JqueryClass('pedalboard', {
         connection.canvas.remove()
         self.unbind('mousemove', connection.moveHandler)
         self.pedalboard('highlightInputs', false)
+        self.trigger('connectionend')
     },
 
     do_connect: function (jack, input, overCount) {
