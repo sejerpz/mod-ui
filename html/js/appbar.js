@@ -402,29 +402,49 @@ JqueryClass('appBar', {
             attributeFilter: ['class']
         })
 
-        // A cable being made by taps, see the pedalboard's connectFromPlugin: the dock
-        // folds down to where it comes from, the plugin and the port's name, and the way
-        // to drop it
-        var connecting = $('<div class="connecting">').appendTo(self)
-        $('<div class="title">').text('Connect').appendTo(connecting)
-        var source = $('<div class="source">').appendTo(connecting)
+        // Something waiting for a tap on the board: a cable being made by taps, see the
+        // pedalboard's connectFromPlugin, or a plugin being added, see its
+        // showPlacementGrid. The dock folds down to what it is about, under a title
+        // floating above, and the way to drop it
+        var task = $('<div class="task">').appendTo(self)
+        var title = $('<div class="title">').appendTo(task)
+        var source = $('<div class="source">').appendTo(task)
         var thumbnail = $('<img>').appendTo(source)
+        var holder = $('<div class="preview">').appendTo(source)
         var names = $('<div class="names">').appendTo(source)
         var sourceLabel = $('<div class="label">').appendTo(names)
         var sourcePort = $('<div class="port">').appendTo(names)
+        var cancel = null
         $('<div class="cancel">').text('Cancel').click(function () {
-            options.pedalboard.pedalboard('finishConnection')
+            cancel && cancel()
             return false
-        }).appendTo(connecting)
+        }).appendTo(task)
+        // `what` has a title, a label and a port, either of them empty, and a thumbnail or
+        // a preview to show
+        var startTask = function (what, onCancel) {
+            title.text(what.title)
+            thumbnail.toggle(!! what.thumbnail).attr('src', what.thumbnail || '')
+            holder.empty().toggle(!! what.preview).append(what.preview || null)
+            sourceLabel.text(what.label || '').toggle(!! what.label)
+            sourcePort.text(what.port || '').toggle(!! what.port)
+            cancel = onCancel
+            setState('task', true)
+        }
+        var endTask = function () {
+            cancel = null
+            setState('task', false)
+        }
         options.pedalboard.on('connectionstart', function (e, from) {
-            thumbnail.toggle(!! from.thumbnail).attr('src', from.thumbnail || '')
-            sourceLabel.text(from.label)
-            sourcePort.text(from.port).toggle(!! from.port)
-            setState('connecting', true)
+            startTask({ title: 'Connect', thumbnail: from.thumbnail, label: from.label, port: from.port }, function () {
+                options.pedalboard.pedalboard('finishConnection')
+            })
         })
-        options.pedalboard.on('connectionend', function () {
-            setState('connecting', false)
+        options.pedalboard.on('placementstart', function (e, plugin) {
+            startTask({ title: 'Add', preview: plugin.preview, port: plugin.label }, function () {
+                options.pedalboard.pedalboard('hidePlacementGrid')
+            })
         })
+        options.pedalboard.on('connectionend placementend', endTask)
 
         // What a plugin can do, while the board shows just it, see the pedalboard's
         // showPlugin: the dock folds down to these and the way back to the whole board.
