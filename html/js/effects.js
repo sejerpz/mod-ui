@@ -14,6 +14,9 @@
  * - results: dictionary containing detailed data of all plugins
  *            displayed
  */
+// How long a finger holds a plugin in grid mode's library for its info, see renderPlugin
+var LIBRARY_LONG_PRESS = 500
+
 JqueryClass('effectBox', {
     init: function (options) {
         var self = $(this)
@@ -183,7 +186,10 @@ JqueryClass('effectBox', {
         })
 
         var header = $('<div class="grid-library-header">')
-        $('<span class="title">').text('Add plugin').appendTo(header)
+        $('<div class="heading">')
+            .append($('<span class="title">').text('Add plugin'))
+            .append($('<span class="tip">').text('Tap to add, long press for info'))
+            .appendTo(header)
         header.append(self.find('#plugins-library-settings-window'))
         $('<span class="close">&times;</span>').click(function () {
             self.effectBox('closeLibrary')
@@ -501,7 +507,41 @@ JqueryClass('effectBox', {
             }
         })
 
+        // In grid mode a tap picks the plugin, and its info is a long press away: held
+        // still, not scrolling the list, see LIBRARY_LONG_PRESS
+        var press = null, pressedAt = null, longPressed = false
+        var release = function () {
+            clearTimeout(press)
+            press = null
+        }
+        rendered.on('pointerdown', function (e) {
+            longPressed = false
+            release()
+            if (! self.hasClass('grid-library')) {
+                return
+            }
+            pressedAt = { x: e.originalEvent.clientX, y: e.originalEvent.clientY }
+            press = setTimeout(function () {
+                press = null
+                longPressed = true
+                self.effectBox('showPluginInfo', plugin)
+            }, LIBRARY_LONG_PRESS)
+        }).on('pointermove', function (e) {
+            if (press && (Math.abs(e.originalEvent.clientX - pressedAt.x) > 10 ||
+                          Math.abs(e.originalEvent.clientY - pressedAt.y) > 10)) {
+                release()
+            }
+        }).on('pointerup pointercancel', release).on('contextmenu', function () {
+            // nor the browser's own menu for the thumbnail
+            return ! self.hasClass('grid-library')
+        })
+
         rendered.click(function () {
+            // the tap that ends a long press is not one
+            if (longPressed) {
+                longPressed = false
+                return false
+            }
             // In grid mode a tap picks the plugin to place: the library gets out of the
             // way and the board offers the free cells to put it in
             if (self.data('pedalboard').pedalboard('gridMode')) {

@@ -609,7 +609,8 @@ JqueryClass('appBar', {
             if (viewed && settings && settings[0] == e.target) {
                 settings.on('pointerdown.appbar', settingsDown).on('pointerup.appbar', settingsUp)
                 setState('dialog', true)
-            } else if (viewed && target.is('.plugin-info')) {
+            } else if ((viewed || $('body').hasClass('library-open')) && target.is('.plugin-info')) {
+                // Back closes it onto the library it came from, still open under it
                 info = target
                 setState('dialog', true)
             } else if (viewed || settings && settings[0] == e.target) {
