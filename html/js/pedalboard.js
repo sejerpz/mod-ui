@@ -100,8 +100,8 @@ var PLACEMENT_ICON_SCALE = 0.68
 // How much of a cell grid mode's zoom leaves past the cells in use, to the right and
 // below: room to grow the board into, without a whole empty row and column
 var PLACEMENT_SPARE = 0.3
-// How big the plugin waiting to be placed is drawn, against its size in a cell
-var PLACEMENT_BADGE_SCALE = 0.5
+// The box the plugin waiting to be placed is drawn in, in the dock, see showPlacementGrid
+var PLACEMENT_PREVIEW = { width: 64, height: 40 }
 
 JqueryClass('pedalboard', {
     init: function (options) {
@@ -1537,7 +1537,7 @@ JqueryClass('pedalboard', {
             if (! cell.hasClass('free')) {
                 return false
             }
-            // before hiding, which takes the badge away
+            // before hiding, which takes the preview away
             self.pedalboard('flyToCell', chosen)
             self.pedalboard('hidePlacementGrid')
             self.pedalboard('addToCell', element, chosen)
@@ -1550,16 +1550,12 @@ JqueryClass('pedalboard', {
             }
         })
 
-        // The plugin being added waits in the bottom right corner of the board, labelled,
-        // until a cell is chosen. Outside the scaled canvas, but sized after how it will
-        // be drawn in its cell, see sizePlacementBadge.
+        // The plugin being added waits, drawn small, wherever 'placementstart' puts its
+        // preview, the dock, until a cell is chosen. 'placementend' once it is, or not
         var pluginData = element.data('pluginData')
-        var badge = $('<div class="mod-placement-badge ignore-arrive">')
-        var preview = $('<div class="preview">').appendTo(badge)
-        $('<div class="label">').text('Adding').appendTo(badge)
-        $('<div class="name">').text(pluginData.label || pluginData.name || '').appendTo(badge)
-        badge.appendTo(self.parent())
-        grid.data('badge', badge)
+        var preview = $('<div class="mod-placement-preview ignore-arrive">')
+        grid.data('preview', preview)
+        self.trigger('placementstart', [{ label: pluginData.label || pluginData.name || '', preview: preview }])
 
         self.pedalboard('renderPluginGhost', pluginData, function (icon, plugin) {
             if (self.data('placementGrid') !== grid) {
@@ -1572,7 +1568,7 @@ JqueryClass('pedalboard', {
             var children = icon.children()
             // Shown once it has a size, and sized again whenever that changes: the
             // plugin's stylesheet and images keep arriving after the icon is drawn, and
-            // a size taken too early leaves it unscaled and spilling out of the badge
+            // a size taken too early leaves it unscaled and spilling out of its box
             var measure = function () {
                 var w = children.width()
                 var h = children.height()
@@ -1580,8 +1576,11 @@ JqueryClass('pedalboard', {
                     return false
                 }
                 icon.width(w).height(h)
-                badge.data('icon', icon)
-                self.pedalboard('sizePlacementBadge')
+                preview.data('icon', icon)
+                // as big as fits PLACEMENT_PREVIEW
+                var s = Math.min(PLACEMENT_PREVIEW.width / w, PLACEMENT_PREVIEW.height / h)
+                icon.css('transform', 'scale(' + s + ')')
+                preview.css({ width: w * s, height: h * s })
                 icon.css('visibility', 'visible')
                 return true
             }
@@ -1598,30 +1597,13 @@ JqueryClass('pedalboard', {
         self.data('placementGrid', grid)
     },
 
-    // Scales the preview of the plugin waiting to be placed to PLACEMENT_BADGE_SCALE of
-    // how it will be drawn in a cell at the board's current zoom: the same proportions
-    // as on the board, without covering as much of it.
-    sizePlacementBadge: function () {
-        var self = $(this)
-        var grid = self.data('placementGrid')
-        var icon = grid && grid.data('badge').data('icon')
-        if (! icon) {
-            return
-        }
-        var w = icon.width()
-        var h = icon.height()
-        var s = self.pedalboard('cellFitScale', w, h) * self.data('scale') * PLACEMENT_BADGE_SCALE
-        icon.css('transform', 'scale(' + s + ')')
-        grid.data('badge').find('.preview').css({ width: w * s, height: h * s })
-    },
-
-    // Flies the plugin waiting in the badge into `cell`, where and as big as it will be
+    // Flies the plugin waiting in its preview into `cell`, where and as big as it will be
     // drawn there. It stays over the cell until the plugin itself has arrived under it,
     // see snapPlugin, and at least until it has landed.
     flyToCell: function (cell) {
         var self = $(this)
         var grid = self.data('placementGrid')
-        var icon = grid && grid.data('badge').data('icon')
+        var icon = grid && grid.data('preview').data('icon')
         if (! icon) {
             return
         }
@@ -1742,10 +1724,11 @@ JqueryClass('pedalboard', {
             return
         }
         var done = grid.data('done')
-        grid.data('badge').remove()
+        grid.data('preview').remove()
         grid.remove()
         self.data('placementGrid', null)
         $(document).off('keydown.placement')
+        self.trigger('placementend')
         if (done) {
             done()
         }
@@ -2448,7 +2431,6 @@ JqueryClass('pedalboard', {
                     transform: 'scale(' + value + ')',
                 })
                 self.data('scale', value)
-                self.pedalboard('sizePlacementBadge')
             },
         })
     },

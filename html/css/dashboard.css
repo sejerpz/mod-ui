@@ -159,53 +159,14 @@
 /* the plugin flying from the badge into the cell it was put in, see flyToCell */
 .mod-placement-flyer {
     position: fixed;
-    z-index: 1000;
+    /* over the dock it starts from */
+    z-index: 1002;
     transform-origin: 0 0;
     pointer-events: none;
 }
 
 .mod-placement-flyer.flying {
     transition: left 0.4s ease-in-out, top 0.4s ease-in-out, transform 0.4s ease-in-out;
-}
-
-/* the plugin waiting for a cell in tap-to-place, see showPlacementGrid */
-.mod-placement-badge {
-    position: absolute;
-    right: 16px;
-    bottom: 16px;
-    z-index: 8;
-    min-width: 120px;
-    padding: 10px;
-    border-radius: 8px;
-    border: 2px solid #883996;
-    background: rgba(17, 17, 17, 0.9);
-    color: #fff;
-    text-align: center;
-    pointer-events: none;
-}
-
-.mod-placement-badge .preview {
-    position: relative;
-    margin: 0 auto;
-    /* or the plugin's own absolutely placed body shifts to the middle of the icon */
-    text-align: left;
-}
-
-.mod-placement-badge .preview > * {
-    position: absolute;
-}
-
-.mod-placement-badge .label {
-    margin-top: 8px;
-    color: #c79bd0;
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-}
-
-.mod-placement-badge .name {
-    font-size: 14px;
-    font-weight: bold;
 }
 
 /* the ports of a plugin spread out for a tap, see pickPort */
@@ -2917,10 +2878,6 @@ body.app-bar-mode #plugins-library.grid-library.open {
     transform: none;
 }
 
-body.app-bar-mode .mod-placement-badge {
-    bottom: 80px;
-}
-
 .mod-app-bar {
     position: fixed;
     left: 50%;
@@ -3017,8 +2974,8 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.viewing > :not(.plugin):not(.dialog),
 .mod-app-bar.dialog > :not(.dialog),
 .mod-app-bar:not(.dialog) > .dialog,
-.mod-app-bar.connecting > :not(.connecting),
-.mod-app-bar:not(.connecting) > .connecting {
+.mod-app-bar.task > :not(.task),
+.mod-app-bar:not(.task) > .task {
     overflow: hidden;
 }
 
@@ -3036,8 +2993,8 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.viewing > :not(.plugin):not(.dialog),
 .mod-app-bar.dialog > :not(.dialog),
 .mod-app-bar:not(.dialog) > .dialog,
-.mod-app-bar.connecting > :not(.connecting),
-.mod-app-bar:not(.connecting) > .connecting {
+.mod-app-bar.task > :not(.task),
+.mod-app-bar:not(.task) > .task {
     max-width: 0;
     opacity: 0;
     margin-left: 0;
@@ -3050,12 +3007,13 @@ body.app-bar-mode .mod-placement-badge {
 .mod-app-bar.elsewhere .back,
 .mod-app-bar.viewing .plugin,
 .mod-app-bar.dialog .dialog,
-.mod-app-bar.connecting .connecting {
+.mod-app-bar.task .task {
     margin-left: 0;
 }
 
-/* a cable being made by taps, see js/appbar.js: where it comes from and Cancel */
-.mod-app-bar > .connecting {
+/* waiting for a tap on the board, see js/appbar.js: a cable being made or a plugin
+   being added, what it is about and Cancel */
+.mod-app-bar > .task {
     display: flex;
     align-items: center;
     gap: 24px;
@@ -3066,7 +3024,7 @@ body.app-bar-mode .mod-placement-badge {
 
 /* floating just above the dock, on its left, like a title. Placed on the dock rather
    than in its part, so the part's clipping while it folds leaves it alone */
-.mod-app-bar .connecting .title {
+.mod-app-bar .task .title {
     position: absolute;
     left: 12px;
     bottom: calc(100% + 10px);
@@ -3082,26 +3040,68 @@ body.app-bar-mode .mod-placement-badge {
     to { opacity: 1; }
 }
 
-.mod-app-bar .connecting .source {
+.mod-app-bar .task .source {
     display: flex;
     align-items: center;
     gap: 16px;
     height: 40px;
 }
 
-.mod-app-bar .connecting img {
+/* Behind the dock and the title floating above it, down to the bottom of the screen,
+   a darker area with its top corners rounded: the board under it dimmed, not hidden */
+.mod-app-bar::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    right: -20px;
+    top: -52px;
+    bottom: -13px;
+    z-index: -1;
+    border-radius: 20px 20px 0 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.mod-app-bar.task::before {
+    opacity: 1;
+}
+
+/* the plugin being added, drawn small, see the pedalboard's showPlacementGrid */
+.mod-app-bar .task .preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+}
+
+.mod-placement-preview {
+    position: relative;
+    /* or the plugin's own absolutely placed body shifts to the middle of the icon */
+    text-align: left;
+}
+
+.mod-placement-preview > * {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.mod-app-bar .task img {
     height: 40px;
     max-width: 48px;
     object-fit: contain;
 }
 
-.mod-app-bar .connecting .names {
+.mod-app-bar .task .names {
     max-width: 240px;
     line-height: 18px;
     text-align: center;
 }
 
-.mod-app-bar .connecting .label {
+.mod-app-bar .task .label {
     color: #c79bd0;
     font-size: 11px;
     font-weight: bold;
@@ -3110,13 +3110,13 @@ body.app-bar-mode .mod-placement-badge {
     text-overflow: ellipsis;
 }
 
-.mod-app-bar .connecting .port {
+.mod-app-bar .task .port {
     font-size: 15px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.mod-app-bar .connecting .cancel {
+.mod-app-bar .task .cancel {
     height: 40px;
     line-height: 40px;
     padding: 0 16px;
@@ -3493,7 +3493,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 /* "Add Plugin", with a white disc behind it whose + shows the purple through. Not
    while it is the way out of adding, as Close or Cancel */
 #plugins-library-tab:not(.active)::after,
-.mod-app-bar .connecting .cancel::after {
+.mod-app-bar .task .cancel::after {
     content: '';
     display: inline-block;
     width: 18px;
@@ -3504,7 +3504,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 }
 
 /* Cancel while a cable is being made, with the same disc but an x */
-.mod-app-bar .connecting .cancel::after {
+.mod-app-bar .task .cancel::after {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' fill-rule='evenodd' transform='rotate(45 10 10)' d='M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20ZM8.75 4.5h2.5v4.25h4.25v2.5h-4.25v4.25h-2.5v-4.25H4.5v-2.5h4.25Z'/%3E%3C/svg%3E");
 }
 
@@ -3686,7 +3686,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar > .back > div,
 .mod-app-bar > .dialog > div,
 .mod-app-bar .plugin > div,
-.mod-app-bar .connecting .cancel,
+.mod-app-bar .task .cancel,
 #plugins-library-tab {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
                 inset 0 -1px 0 rgba(0, 0, 0, 0.35),
@@ -3708,7 +3708,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar > .back > div:active,
 .mod-app-bar > .dialog > div:active,
 .mod-app-bar .plugin > div:active,
-.mod-app-bar .connecting .cancel:active,
+.mod-app-bar .task .cancel:active,
 #plugins-library-tab:active {
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
 }
