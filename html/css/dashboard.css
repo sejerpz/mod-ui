@@ -2741,7 +2741,7 @@ body.app-bar-mode #plugins-library.grid-library .grid-library-header .close {
 }
 
 /* the bar drops it on narrow screens for lack of room, this row scrolls instead */
-#plugins-library.grid-library ul.js-category-tabs #effect-tab-Favorites {
+#plugins-library.grid-library ul.js-category-tabs #effect-tab-Favorites:not(.grid-empty) {
     display: inline-block !important;
 }
 
@@ -2754,6 +2754,11 @@ body.app-bar-mode #plugins-library.grid-library .grid-library-header .close {
 #plugins-library.grid-library.show-favorites #plugins-list .plugins-wrapper:not(.has-favorites),
 #plugins-library.grid-library.show-favorites #plugins-list .plugins-wrapper .plugin:not(.is-favorite) {
     display: none;
+}
+
+/* a category with no plugin has no tab, see gridTabs in js/effects.js */
+#plugins-library.grid-library ul.js-category-tabs li.grid-empty {
+    display: none !important;
 }
 
 /* a category: its title, then its plugins in a grid */

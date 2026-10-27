@@ -169,6 +169,7 @@ JqueryClass('effectBox', {
         }
         self.addClass('grid-library')
         self.effectBox('gridView')
+        self.effectBox('gridTabs')
         self.find('#effect-tab-Other').show()
         // animated only from now on, or it is seen sliding away as the page loads
         setTimeout(function () {
@@ -238,6 +239,21 @@ JqueryClass('effectBox', {
         })
     },
 
+    // The grid library's tabs leave out the categories with no plugin in them, as
+    // counted by showPlugins, but All and the one picked
+    gridTabs: function () {
+        var self = $(this)
+        if (! self.hasClass('grid-library')) {
+            return
+        }
+        var counts = self.data('categoryCounts') || {}
+        self.find('ul.js-category-tabs li').each(function () {
+            var category = this.id.replace(/^effect-tab-/, '')
+            $(this).toggleClass('grid-empty', category != 'All' && ! counts[category] &&
+                                              ! $(this).hasClass('selected'))
+        })
+    },
+
     openLibrary: function () {
         var self = $(this)
         // a plugin picked earlier and not placed yet is dropped
@@ -299,6 +315,7 @@ JqueryClass('effectBox', {
         // the grid library starts a newly picked tab from its top
         if (self.hasClass('grid-library')) {
             self.effectBox('gridView')
+            self.effectBox('gridTabs')
             self.find('#plugins-list').scrollTop(0)
         }
         self.effectBox('unfold')
@@ -405,6 +422,8 @@ JqueryClass('effectBox', {
             var tab = self.find('#effect-tab-' + category)
             tab.find('.count').text('(' + categories[category] + ')')
         }
+        self.data('categoryCounts', categories)
+        self.effectBox('gridTabs')
 
         if (categories[category] == 0) {
             self.find('#effect-tab-MaxGen').hide()
@@ -682,7 +701,9 @@ JqueryClass('effectBox', {
 
                             self.find('#effect-tab-Favorites').find('.count').text('(' + FAVORITES.length + ')')
                             if (self.hasClass('grid-library')) {
+                                (self.data('categoryCounts') || {}).Favorites = FAVORITES.length
                                 self.effectBox('gridView')
+                                self.effectBox('gridTabs')
                             }
                         },
                         cache: false,
