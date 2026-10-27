@@ -1802,8 +1802,9 @@ JqueryClass('pedalboard', {
     },
 
     // The plugin a plugin in `cell` takes `type` from, on the 'left', or gives it to, on
-    // the 'right': the nearest one that way in the same row, else in the first row from
-    // the top that has one that way. Only plugins with the ports for it count.
+    // the 'right': the nearest one that way in the same row, else in the nearest row that
+    // has one that way, one above, one below, two above and so on. Only plugins with the
+    // ports for it count.
     wireNeighbour: function (instance, cell, side, type) {
         var self = $(this)
         var plugins = self.data('plugins')
@@ -1822,10 +1823,9 @@ JqueryClass('pedalboard', {
                 byRow[at.row] = { instance: other, col: at.col }
             }
         }
-        if (byRow[cell.row]) {
-            return byRow[cell.row].instance
-        }
-        var rows = $.map(Object.keys(byRow), Number).sort(function (a, b) { return a - b })
+        var rows = $.map(Object.keys(byRow), Number).sort(function (a, b) {
+            return Math.abs(a - cell.row) - Math.abs(b - cell.row) || a - b
+        })
         return rows.length ? byRow[rows[0]].instance : null
     },
 
