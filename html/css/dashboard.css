@@ -3376,11 +3376,12 @@ body.app-bar-mode #plugins-library.grid-library.open {
 .mod-plugin-view-side .disconnect {
     display: inline-block;
     margin-bottom: 4px;
-    padding: 3px 10px;
-    border-radius: 10px;
+    /* the font's capitals sit high in its line: half a pixel more above them */
+    padding: 6.5px 14px 5.5px;
+    border-radius: 13px;
     background: #c0392b;
     color: #fff;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: bold;
     letter-spacing: 0.5px;
     text-transform: uppercase;
