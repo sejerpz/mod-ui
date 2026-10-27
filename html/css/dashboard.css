@@ -79,7 +79,8 @@
     cursor: pointer;
 }
 
-/* a free cell still shows as a cell: a faint rounded tile, slowly breathing */
+/* the board looks as always, a free cell is cut into it: a rounded groove, dark on
+   its top edge and lit on the bottom one, slowly breathing */
 .mod-placement-cell.free::before {
     content: '';
     position: absolute;
@@ -88,13 +89,15 @@
     right: 0;
     bottom: 0;
     border-radius: 28px;
-    background-color: rgba(255, 255, 255, 0.07);
+    box-shadow: inset 0 16px 20px rgba(0, 0, 0, 0.7),
+                inset 0 0 0 14px rgba(0, 0, 0, 0.5),
+                0 8px 0 rgba(255, 255, 255, 0.08);
     animation: mod-cell-breathe 3.2s ease-in-out infinite alternate;
     pointer-events: none;
 }
 
 @keyframes mod-cell-breathe {
-    from { opacity: 0.55; }
+    from { opacity: 0.6; }
     to { opacity: 1; }
 }
 
