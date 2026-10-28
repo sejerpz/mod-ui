@@ -157,7 +157,7 @@ JqueryClass('effectBox', {
         return self
     },
 
-    // Grid mode's library: instead of the bar, an "Add Plugin" button in the app bar,
+    // The dock's library, see js/appbar.js: instead of the bar, an "Add Plugin" button in it,
     // which slides the library up to the title bar. The category tabs head it,
     // and the plugins are in a grid scrolling vertically: All lists every category one
     // under the other, any other tab just its own. Picking a plugin closes it and starts
@@ -566,14 +566,17 @@ JqueryClass('effectBox', {
                 longPressed = false
                 return false
             }
-            // In grid mode a tap picks the plugin to place: the library gets out of the
-            // way and the board offers the free cells to put it in
-            if (self.data('pedalboard').pedalboard('gridMode')) {
+            // In the dock's library a tap picks the plugin to place: the library gets out
+            // of the way and the board offers the free cells to put it in, or, not in
+            // grid mode, waits for a tap where it is to go
+            if (self.hasClass('grid-library')) {
                 var tab = self.data('gridTab')
+                var pedalboard = self.data('pedalboard')
                 self.effectBox('closeLibrary')
                 // while the plugin is being placed, the tab is how a finger gives up
                 tab.text('Cancel \u00d7').addClass('active')
-                self.data('pedalboard').pedalboard('showPlacementGrid', rendered, function () {
+                pedalboard.pedalboard(pedalboard.pedalboard('gridMode') ? 'showPlacementGrid' : 'showFreePlacement',
+                                      rendered, function () {
                     tab.text('Add Plugin').removeClass('active')
                 })
                 return
