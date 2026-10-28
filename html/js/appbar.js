@@ -47,7 +47,11 @@ JqueryClass('appBar', {
             self.toggleClass('compact', across < 760)
         }
         fitViewport()
-        $(window).on('orientationchange resize', fitViewport)
+        // The browser's own events, not jQuery's: with jquery.ba-resize a resize bound
+        // through jQuery is only its own, on the window and bubbled up from every element
+        // it watches, every 250ms whether anything changed or not
+        window.addEventListener('orientationchange', fitViewport)
+        window.addEventListener('resize', fitViewport)
 
         // A small screen, by its short side under 600, which the page's 980 wide layout
         // does not change, for what does not fit one. A screen of no known size is not
@@ -724,9 +728,12 @@ JqueryClass('appBar', {
             options.pedalboard.pedalboard('setMargins', 0, 0, $(window).height() - self.offset().top + 12)
         }
         fitBoard()
-        $(window).on('orientationchange resize', function () {
+        // as fitViewport, the browser's own: fitting the board again throws away the zoom
+        var fitBoardLater = function () {
             setTimeout(fitBoard, 0)
-        })
+        }
+        window.addEventListener('orientationchange', fitBoardLater)
+        window.addEventListener('resize', fitBoardLater)
 
         return self
     },
