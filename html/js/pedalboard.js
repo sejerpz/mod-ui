@@ -1443,6 +1443,7 @@ JqueryClass('pedalboard', {
         if (persist) {
             var saved = self.pedalboard('savedPosition', cell, w, h)
             self.data('pluginMove')(instance, saved.x, saved.y)
+            icon.data('freePosition', { x: saved.x, y: saved.y })
         }
         self.pedalboard('drawPluginJacks', icon)
         // the cells in use may have grown or shrunk, and the zoom with them
@@ -1467,8 +1468,10 @@ JqueryClass('pedalboard', {
             return
         }
         var persist = !! cell
-        // where it was saved, see PLACEMENT_SAVED_CELL
+        // where it was saved, see PLACEMENT_SAVED_CELL, and where it goes back to outside
+        // grid mode, see switchGridMode
         if (! cell) {
+            icon.data('freePosition', { x: parseInt(icon.css('left')), y: parseInt(icon.css('top')) })
             cell = self.pedalboard('savedCell', parseInt(icon.css('left')), parseInt(icon.css('top')),
                                    icon.width(), icon.height())
         }
@@ -1498,6 +1501,93 @@ JqueryClass('pedalboard', {
                 self.pedalboard('fitInCell', instance, icon, icon.data('gridCell'), persist)
             })
         }
+    },
+
+    // Grid mode turned on or off with the board open, see desktop's setGridMode, which
+    // `flip` does. Every plugin glides into a cell, the one it would get as the board
+    // loads, or out of it back to where it is saved, which a move in grid mode changes,
+    // see fitInCell. Nothing else is saved. The cables wait out of sight meanwhile, and
+    // are drawn again once the plugins are in place, along the cells or not
+    switchGridMode: function (flip) {
+        var self = $(this)
+        self.pedalboard('finishConnection')
+        self.pedalboard('hidePlacementGrid')
+        // its way back to the whole board is a zoom of its own, done first
+        if (self.data('pluginView')) {
+            self.pedalboard('leavePluginView')
+            setTimeout(function () {
+                self.pedalboard('switchGridMode', flip)
+            }, 450)
+            return
+        }
+        flip()
+        var grid = self.pedalboard('gridMode')
+        $('body').toggleClass('grid-mode', grid)
+
+        var plugins = self.data('plugins')
+        var moves = []
+        for (var instance in plugins) {
+            var icon = plugins[instance]
+            if (! icon.position) {
+                continue
+            }
+            icon.stop(true, true)
+            var from = { left: parseInt(icon.css('left')), top: parseInt(icon.css('top')),
+                         scale: icon.data('gridScale') || 1 }
+            if (grid) {
+                if (! icon.data('freePosition')) {
+                    icon.data('freePosition', { x: from.left, y: from.top })
+                }
+                var cell = self.pedalboard('savedCell', from.left, from.top, icon.width(), icon.height())
+                self.pedalboard('fitInCell', instance, icon, self.pedalboard('nearestFreeCell', cell, instance), false)
+            } else {
+                var back = icon.data('freePosition') || { x: from.left, y: from.top }
+                icon.removeData('gridCell').removeData('gridScale').removeData('gridSize')
+                icon.css({ left: back.x, top: back.y, transform: '' })
+            }
+            moves.push({ icon: icon, from: from,
+                         to: { left: parseInt(icon.css('left')), top: parseInt(icon.css('top')),
+                               scale: icon.data('gridScale') || 1 } })
+        }
+
+        var place = function (move, t) {
+            var s = move.from.scale + (move.to.scale - move.from.scale) * t
+            move.icon.css({
+                left: move.from.left + (move.to.left - move.from.left) * t,
+                top: move.from.top + (move.to.top - move.from.top) * t,
+                transform: s == 1 ? '' : 'scale(' + s + ')',
+                'transform-origin': '0 0'
+            })
+        }
+        $.each(moves, function (i, move) {
+            place(move, 0)
+        })
+        self.addClass('mod-grid-switching')
+        self.data('gridSwitching', true)
+        $({ t: 0 }).animate({ t: 1 }, {
+            duration: 500,
+            easing: 'swing',
+            step: function (t) {
+                $.each(moves, function (i, move) {
+                    place(move, t)
+                })
+            },
+            complete: function () {
+                $.each(moves, function (i, move) {
+                    place(move, 1)
+                })
+                self.data('cableRoutes', null)
+                self.data('connectionManager').iterate(function (jack) {
+                    self.pedalboard('drawJack', jack)
+                })
+                self.removeClass('mod-grid-switching')
+                self.data('gridSwitching', false)
+                // the zoom of the one or of the other, see adapt
+                self.data('gridFit', null)
+                self.pedalboard('adapt', false)
+            }
+        })
+        self.trigger('gridmode', grid)
     },
 
     // Draws the cells over the canvas, free ones marked. The grid lives inside the
@@ -2907,6 +2997,10 @@ JqueryClass('pedalboard', {
     // Enlarge the pedalboard to a minimum size capable of accommodating all plugins.
     adapt: function (forcedUpdate) {
         var self = $(this)
+        // once the plugins are in place, see switchGridMode
+        if (self.data('gridSwitching')) {
+            return
+        }
         if (self.pedalboard('gridMode')) {
             // against the last fit, not the current zoom: a finger may have zoomed in
             // the plugin view has a zoom of its own, laid out again for a new screen size
@@ -6110,6 +6204,10 @@ JqueryClass('pedalboard', {
         var self = $(this)
         if (! self.pedalboard('gridMode')) {
             self.data('cableRoutes', null)
+            // grid mode just turned off, see switchGridMode
+            self.data('connectionManager').iterate(function (jack) {
+                jack.data('canvas').removeAttr('data-cable-color')
+            })
             return
         }
 
@@ -6971,6 +7069,7 @@ JqueryClass('pedalboard', {
         var plugin = plugins[instance];
         // moved from another window: into the cell it was saved in, see savedCell
         if (self.pedalboard('gridMode') && plugin.data && plugin.data('gridCell')) {
+            plugin.data('freePosition', { x: x, y: y })
             var cell = self.pedalboard('savedCell', x, y, plugin.width(), plugin.height())
             self.pedalboard('fitInCell', instance, plugin, self.pedalboard('nearestFreeCell', cell, instance), false)
             return

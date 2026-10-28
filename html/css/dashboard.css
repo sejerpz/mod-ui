@@ -963,6 +963,12 @@ svg .light {
 .mod-output-jack {
     transition: opacity 0.12s ease;
 }
+
+/* out of sight while the plugins move into cells or out of them, see switchGridMode */
+.mod-grid-switching .mod-cable-canvas,
+.mod-grid-switching .mod-output-jack.jack-connected {
+    opacity: 0;
+}
 .mod-tracing .mod-output-jack {
     opacity: 0.35;
 }

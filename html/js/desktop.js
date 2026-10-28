@@ -1641,6 +1641,8 @@ function Desktop(elements) {
     // switched on or off with the button by the title, see js/appbar.js, and remembered
     // by this browser, off until it is
     var GRID_MODE_KEY = 'mod-grid-mode'
+    // the one chosen since the page loaded, should the browser not keep it
+    var gridChoice = null
     this.gridModeLocked = function () {
         return !! self.isTouchDevice
     }
@@ -1648,22 +1650,27 @@ function Desktop(elements) {
         if (self.gridModeLocked()) {
             return true
         }
+        if (gridChoice != null) {
+            return gridChoice
+        }
         var stored = null
         try {
             stored = window.localStorage.getItem(GRID_MODE_KEY)
         } catch (e) {}
         return stored == '1'
     }
-    // The board is laid out for one or the other as it loads, so it loads again, and so
-    // does the page, whose library and dock are made for it too. What has not been saved
-    // stays, the host has it
+    // The board is laid out again in place, its plugins moving into cells or back to
+    // where they are saved, see the pedalboard's switchGridMode
     this.setGridMode = function (on) {
-        try {
-            window.localStorage.setItem(GRID_MODE_KEY, on ? '1' : '0')
-        } catch (e) {
+        if (self.gridModeLocked() || on == self.gridModeOn()) {
             return
         }
-        window.location.reload()
+        self.pedalboard.pedalboard('switchGridMode', function () {
+            gridChoice = on
+            try {
+                window.localStorage.setItem(GRID_MODE_KEY, on ? '1' : '0')
+            } catch (e) {}
+        })
     }
 
     this.systemStats = {
