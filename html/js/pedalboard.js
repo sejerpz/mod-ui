@@ -6480,7 +6480,8 @@ JqueryClass('pedalboard', {
     // its name. Each choice is { port, connected, disabled, cables }; one that is
     // disabled is shown but cannot be picked. With no `done` none can, the overlay
     // being for the `cables` listed under each, { from, to, label }, which a tap on
-    // their x hands to `unplug`. A tap anywhere else closes it, picking nothing.
+    // their x hands to `unplug`; with `done` they are folded under their count until
+    // it is tapped. A tap anywhere else closes it, picking nothing.
     pickPort: function (instance, dir, ports, done, unplug) {
         var self = $(this)
         var plugin = self.data('plugins')[instance]
@@ -6506,6 +6507,12 @@ JqueryClass('pedalboard', {
             .text((gui ? (gui.label || gui.effect.label || gui.effect.name) : instance) +
                   (dir == 'output' ? ' outputs' : ' inputs'))
             .appendTo(panel)
+        // what a tap on a port does, said once for all of them
+        if (done) {
+            $('<div class="mod-port-picker-hint">')
+                .text(dir == 'output' ? 'Tap an output to start a cable' : 'Tap an input to plug the cable in')
+                .appendTo(panel)
+        }
         $.each(ports, function (i, choice) {
             var port = describe(choice.port)
             var row = $('<div class="mod-port-picker-port">')
@@ -6516,6 +6523,8 @@ JqueryClass('pedalboard', {
             $('<div class="mod-port-picker-jack">').appendTo(row)
             $('<div class="mod-port-picker-name">').text(port.name).appendTo(row)
             if (done && ! choice.disabled) {
+                // a button, and the + on it says it starts or ends a cable
+                $('<div class="mod-port-picker-go">').appendTo(row)
                 row.on('click', function () {
                     overlay.remove()
                     done(choice.port)
@@ -6524,19 +6533,43 @@ JqueryClass('pedalboard', {
             } else if (! done) {
                 row.addClass('static')
             }
-            var plugged = (choice.cables || []).length
-            $.each(choice.cables || [], function (j, cable) {
-                var line = $('<div class="mod-port-picker-cable">').appendTo(panel)
+            var cables = choice.cables || []
+            if (! cables.length) {
+                return
+            }
+            // The cables already in the port, under how many they are: folded while the
+            // ports are there to be picked, open when unplugging them is all there is to do
+            var count = $('<div class="mod-port-picker-count">').appendTo(panel)
+            var list = $('<div class="mod-port-picker-cables">').appendTo(panel)
+            var plugged = cables.length
+            var counted = function () {
+                count.text(plugged + (plugged == 1 ? ' cable' : ' cables'))
+            }
+            counted()
+            count.toggleClass('open', ! done).on('click', function () {
+                count.toggleClass('open')
+                place()
+                return false
+            })
+            $.each(cables, function (j, cable) {
+                var line = $('<div class="mod-port-picker-cable">').appendTo(list)
                 $('<div class="mod-port-picker-from">').text(cable.label).appendTo(line)
                 $('<div class="mod-port-picker-unplug">').on('click', function () {
                     unplug(cable.from, cable.to)
                     line.remove()
                     plugged -= 1
+                    counted()
                     row.toggleClass('connected', plugged > 0)
+                    if (! plugged) {
+                        count.remove()
+                        list.remove()
+                    }
                     // with nothing left to unplug, nor a port to pick, it has done its job
                     if (! done && ! panel.find('.mod-port-picker-cable').length) {
                         overlay.remove()
+                        return false
                     }
+                    place()
                     return false
                 }).appendTo(line)
             })
@@ -6548,19 +6581,23 @@ JqueryClass('pedalboard', {
             return false
         })
 
-        // by the plugin: its outputs on its right, its inputs on its left, in the window
-        var rect = plugin[0].getBoundingClientRect()
-        var width = panel.outerWidth(), height = panel.outerHeight()
-        var gap = 12
-        var left = dir == 'output' ? rect.right + gap : rect.left - gap - width
-        if (left + width > window.innerWidth - gap || left < gap) {
-            left = dir == 'output' ? rect.left - gap - width : rect.right + gap
+        // by the plugin: its outputs on its right, its inputs on its left, in the window.
+        // Again as cables are shown, hidden or unplugged, and it grows or shrinks
+        var place = function () {
+            var rect = plugin[0].getBoundingClientRect()
+            var width = panel.outerWidth(), height = panel.outerHeight()
+            var gap = 12
+            var left = dir == 'output' ? rect.right + gap : rect.left - gap - width
+            if (left + width > window.innerWidth - gap || left < gap) {
+                left = dir == 'output' ? rect.left - gap - width : rect.right + gap
+            }
+            panel.css({
+                left: Math.max(gap, Math.min(left, window.innerWidth - width - gap)),
+                top: Math.max(gap, Math.min(rect.top + rect.height / 2 - height / 2,
+                                            window.innerHeight - height - gap))
+            })
         }
-        panel.css({
-            left: Math.max(gap, Math.min(left, window.innerWidth - width - gap)),
-            top: Math.max(gap, Math.min(rect.top + rect.height / 2 - height / 2,
-                                        window.innerHeight - height - gap))
-        })
+        place()
     },
 
     finishConnection: function () {
