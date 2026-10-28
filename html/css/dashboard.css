@@ -834,6 +834,22 @@ svg .light {
     stroke: #E48E67;
 }
 
+/* In grid mode the cables running side by side in a gap between the cells are told apart
+   by a color, see routeCables in js/pedalboard.js: not of the whole cable, which stays its
+   kind's own, but of its light thread and of the bands of a stereo pair's trunk, see
+   below. 0 is none. A set for each kind, standing out from it */
+.mod-audio { --cable-decor-1: #F2B33D; --cable-decor-2: #3CC8E0; --cable-decor-3: #FF7BAC; --cable-decor-4: #8FD85C; }
+.mod-midi  { --cable-decor-1: #F2B33D; --cable-decor-2: #FF7BAC; --cable-decor-3: #8FD85C; --cable-decor-4: #C79BFF; }
+.mod-cv    { --cable-decor-1: #3CC8E0; --cable-decor-2: #8FD85C; --cable-decor-3: #C79BFF; --cable-decor-4: #5B8CFF; }
+[data-cable-color="1"] { --cable-decor: var(--cable-decor-1); }
+[data-cable-color="2"] { --cable-decor: var(--cable-decor-2); }
+[data-cable-color="3"] { --cable-decor: var(--cable-decor-3); }
+[data-cable-color="4"] { --cable-decor: var(--cable-decor-4); }
+[data-cable-color]:not([data-cable-color="0"]):not(.mod-stereo) svg .light {
+    stroke: var(--cable-decor);
+    stroke-width: 2;
+}
+
 /* A stereo pair is one cable that splits into a Y at each end (drawStereoBezier). Only the
    trunk carries both channels, so only the trunk is set apart: a little heavier, and its
    light path widened and dashed into bands instead of left as a thin highlight. The four
@@ -853,6 +869,11 @@ svg .light {
     /* Centred on the cable rather than nudged down, or the stripes sit off the edge */
     -webkit-transform: none;
     transform: none;
+}
+/* side by side with others in grid mode, the bands in its color, see above */
+.mod-stereo[data-cable-color]:not([data-cable-color="0"]) svg .light.mod-trunk {
+    stroke: var(--cable-decor);
+    stroke-opacity: 0.85;
 }
 
 /* Hovering a jack traces its cable: every other cable on the board fades back, so the one

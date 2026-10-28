@@ -5736,6 +5736,8 @@ JqueryClass('pedalboard', {
     // Force parameter will force drawing when jack is disconnected
     drawJack: function (jack, force) {
         var self = $(this)
+        // a cable moving may move the others it shares a gap with, see routeCables
+        self.pedalboard('scheduleRouting')
         // We used settimeout so that drawing will occur after all events are processed. This avoids some bad
         // user experience
         setTimeout(function () {
@@ -5889,13 +5891,8 @@ JqueryClass('pedalboard', {
         svg.clear()
         canvas.addClass('mod-stereo')
 
-        // Where the two halves meet. Far enough clear of the ports that the split reads
-        // as a split, and not as a kink in a cable that left at an angle
-        var stub = 18
-        var x1 = Math.max(out1.x, out2.x) + stub
-        var y1 = (out1.y + out2.y) / 2
-        var x2 = Math.min(in1.x, in2.x) - stub
-        var y2 = (in1.y + in2.y) / 2
+        var trunk = stereoTrunk(out1, out2, in1, in2)
+        var x1 = trunk.xi, y1 = trunk.yi, x2 = trunk.xo, y2 = trunk.yo
 
         var parts = [['pathShadow', 'shadow'], ['pathCable', 'cable'], ['pathLight', 'light']]
         var i
@@ -5973,7 +5970,7 @@ JqueryClass('pedalboard', {
             var deltaX = cableDeltaX(xi, xo)
             return path.move(xi, yi).curveC(xo - deltaX, yi, xi + deltaX, yo, xo, yo)
         }
-        var points = self.pedalboard('gridCableCorners', xi, yi, xo, yo)
+        var points = self.pedalboard('routedCorners', xi, yi, xo, yo)
         var radius = 40
         path.move(points[0].x, points[0].y)
         for (var i = 1; i < points.length - 1; i++) {
@@ -6026,6 +6023,181 @@ JqueryClass('pedalboard', {
         var gapY = to.row > from.row ? to.row * H : (to.row + 1) * H
         return [start, { x: outGap, y: yi }, { x: outGap, y: gapY },
                 { x: inGap, y: gapY }, { x: inGap, y: yo }, end]
+    },
+
+    // Cables sharing a gap between the cells, see gridCableCorners, run side by side in
+    // it rather than one over the other. Each gap a cable runs along is a lane, with a
+    // track in it for each group of cables there: those from one output, or one stereo
+    // pair, which stay together. Groups whose stretches of the lane do not overlap share
+    // a track. A cable's corners move onto its group's tracks, see routedCorners, and
+    // the groups sharing a lane take different colors of their kind, see dashboard.css,
+    // to be told apart. Worked out for every cable whenever one is drawn, see drawJack,
+    // once all of those drawn together are, and the board drawn again if it changed
+    scheduleRouting: function () {
+        var self = $(this)
+        if (self.data('routingScheduled')) {
+            return
+        }
+        self.data('routingScheduled', true)
+        setTimeout(function () {
+            self.data('routingScheduled', false)
+            self.pedalboard('routeCables')
+        }, 0)
+    },
+
+    routeCables: function () {
+        var self = $(this)
+        if (! self.pedalboard('gridMode')) {
+            self.data('cableRoutes', null)
+            return
+        }
+
+        // every cable drawn whole, as its ends and the group it is in
+        var cables = []
+        var seen = []
+        self.data('connectionManager').iterate(function (jack) {
+            if (! jack.data('connected') || jack.data('teleported') || seen.indexOf(jack[0]) >= 0) {
+                return
+            }
+            var origin = jack.data('origin')
+            var cable = { group: origin.attr('mod-port'), type: origin.data('portType') || 'audio', jack: jack }
+            var pair = self.pedalboard('stereoPartnerJack', jack)
+            if (pair && pair.jack.data('connected') && ! pair.jack.data('teleported')) {
+                // the pair drawn as one, by its left half, see drawStereoJack
+                var left = pair.first ? jack : pair.jack
+                var right = pair.first ? pair.jack : jack
+                seen.push(right[0])
+                var l = self.pedalboard('jackCoords', left)
+                var r = self.pedalboard('jackCoords', right)
+                cable.ends = stereoTrunk({ x: l.xi, y: l.yi }, { x: r.xi, y: r.yi },
+                                         { x: l.xo, y: l.yo }, { x: r.xo, y: r.yo })
+                cable.group = left.data('origin').attr('mod-port')
+                cable.jack = left
+            } else {
+                cable.ends = self.pedalboard('jackCoords', jack)
+            }
+            seen.push(jack[0])
+            var e = cable.ends
+            cable.points = self.pedalboard('gridCableCorners', e.xi, e.yi, e.xo, e.yo)
+            cables.push(cable)
+        })
+
+        // The lanes: every stretch of a cable but its first and last, which leave and
+        // enter its ports. Upright in the gap between two columns, or across in the one
+        // between two rows, by where they are
+        var lanes = {}
+        $.each(cables, function (c, cable) {
+            var points = cable.points
+            for (var i = 1; i <= points.length - 3; i++) {
+                var a = points[i], b = points[i + 1]
+                var upright = a.x == b.x
+                var key = upright ? 'x' + a.x : 'y' + a.y
+                var from = upright ? Math.min(a.y, b.y) : Math.min(a.x, b.x)
+                var to = upright ? Math.max(a.y, b.y) : Math.max(a.x, b.x)
+                var lane = lanes[key] = lanes[key] || {}
+                var group = lane[cable.group] = lane[cable.group] || { name: cable.group, from: from, to: to, stretches: [] }
+                group.from = Math.min(group.from, from)
+                group.to = Math.max(group.to, to)
+                group.stretches.push({ cable: c, at: i, upright: upright })
+            }
+        })
+
+        // each group's track in each lane, the lane's tracks spread across its middle
+        var shifts = $.map(cables, function () {
+            return [[]]
+        })
+        var neighbours = {}
+        $.each(lanes, function (key, lane) {
+            var groups = $.map(lane, function (group) {
+                return group
+            }).sort(function (a, b) {
+                return a.from - b.from || (b.to - b.from) - (a.to - a.from) || (a.name < b.name ? -1 : 1)
+            })
+            var ends = []
+            $.each(groups, function (i, group) {
+                var track = 0
+                while (track < ends.length && ends[track] >= group.from) {
+                    track++
+                }
+                ends[track] = group.to
+                group.track = track
+            })
+            var step = ends.length > 1 ? Math.min(CABLE_TRACK, CABLE_LANE_WIDTH / (ends.length - 1)) : 0
+            $.each(groups, function (i, group) {
+                var offset = (group.track - (ends.length - 1) / 2) * step
+                $.each(group.stretches, function (j, stretch) {
+                    shifts[stretch.cable].push({ at: stretch.at, upright: stretch.upright, by: offset })
+                })
+                // side by side with the groups it shares a stretch of the lane with
+                neighbours[group.name] = neighbours[group.name] || {}
+                $.each(groups, function (k, other) {
+                    if (other !== group && other.from < group.to && group.from < other.to) {
+                        neighbours[group.name][other.name] = true
+                    }
+                })
+            })
+        })
+
+        // a decoration's color for each group: none, the first, unless one of its kind side
+        // by side with it in a lane has none already, and then one none of those have where
+        // there are enough
+        var typeOf = {}
+        $.each(cables, function (c, cable) {
+            typeOf[cable.group] = cable.type
+        })
+        var colors = {}
+        $.each(Object.keys(typeOf).sort(), function (i, name) {
+            var used = {}
+            $.each(neighbours[name] || {}, function (other) {
+                if (typeOf[other] == typeOf[name] && colors[other] !== undefined) {
+                    used[colors[other]] = true
+                }
+            })
+            var color = 0
+            while (color < CABLE_COLORS - 1 && used[color]) {
+                color++
+            }
+            colors[name] = color
+        })
+
+        // the corners moved onto their tracks, by the ends drawJack will ask with, and the
+        // color of each cable's decoration, none for one no longer routed
+        self.data('connectionManager').iterate(function (jack) {
+            jack.data('canvas').removeAttr('data-cable-color')
+        })
+        var routes = {}
+        $.each(cables, function (c, cable) {
+            var points = $.map(cable.points, function (point) {
+                return { x: point.x, y: point.y }
+            })
+            $.each(shifts[c], function (j, shift) {
+                var axis = shift.upright ? 'x' : 'y'
+                points[shift.at][axis] += shift.by
+                points[shift.at + 1][axis] += shift.by
+            })
+            var e = cable.ends
+            routes[routeKey(e.xi, e.yi, e.xo, e.yo)] = points
+            cable.jack.data('canvas').attr('data-cable-color', colors[cable.group])
+        })
+
+        var before = self.data('cableRoutes')
+        if (JSON.stringify(before) == JSON.stringify(routes)) {
+            return
+        }
+        self.data('cableRoutes', routes)
+        // drawn again on the tracks, which asks for this once more and changes nothing
+        self.data('connectionManager').iterate(function (jack) {
+            self.pedalboard('drawJack', jack)
+        })
+    },
+
+    // The corners of a cable from (xi, yi) to (xo, yo) as routeCables last laid them out,
+    // or as gridCableCorners has them before it has
+    routedCorners: function (xi, yi, xo, yo) {
+        var self = $(this)
+        var routes = self.data('cableRoutes')
+        var points = routes && routes[routeKey(xi, yi, xo, yo)]
+        return points || self.pedalboard('gridCableCorners', xi, yi, xo, yo)
     },
 
     startConnection: function (output) {
@@ -6711,6 +6883,23 @@ JqueryClass('pedalboard', {
     },
 })
 
+// What routeCables files a cable's corners under, see routedCorners: its ends, to a
+// tenth of a board px
+function routeKey(xi, yi, xo, yo) {
+    return [xi, yi, xo, yo].map(function (v) {
+        return v.toFixed(1)
+    }).join(',')
+}
+
+// Where the two halves of a stereo pair meet, see drawStereoBezier, as the ends of the
+// trunk that carries both: far enough clear of the ports that the split reads as a
+// split, and not as a kink in a cable that left at an angle
+function stereoTrunk(out1, out2, in1, in2) {
+    var stub = 18
+    return { xi: Math.max(out1.x, out2.x) + stub, yi: (out1.y + out2.y) / 2,
+             xo: Math.min(in1.x, in2.x) - stub, yo: (in1.y + in2.y) / 2 }
+}
+
 // How far a teleport's stub runs from its port before it meets its box. Long enough to
 // read as a cable going somewhere, short enough that it is not the thing you notice.
 var TELEPORT_STUB = 44
@@ -6718,6 +6907,14 @@ var TELEPORT_STUB = 44
 // How much of a cell, from either side, is at least for the outputs or the inputs of its
 // plugin when tapped in grid mode, even where the plugin is: see cellZone
 var CELL_TAP_SIDE = 0.25
+
+// Cables in grid mode side by side in a gap between the cells, see routeCables: how far
+// apart, and how much of the gap they spread over at most, in board px. And how many
+// colors of the decoration that tells them apart there are, none the first, see
+// dashboard.css
+var CABLE_TRACK = 14
+var CABLE_LANE_WIDTH = 40
+var CABLE_COLORS = 5
 
 // The key that splits a cable into a teleport, and joins it back up. A single lower-case
 // letter, matched case-insensitively with no modifier held. Named so a preference, if one
