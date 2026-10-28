@@ -1554,14 +1554,54 @@ JqueryClass('pedalboard', {
             return false
         })
 
+        self.pedalboard('waitToPlace', grid, element, done, function (plugin) {
+            // with its ports known, which the library does not list
+            self.pedalboard('showInsertPoints', grid, element, plugin)
+            self.pedalboard('markSwapCells', grid, plugin)
+        })
+    },
+
+    // Tap-to-place on a board not in grid mode: a tap anywhere on it adds the plugin
+    // `element` there, centred on the tap. As showPlacementGrid otherwise
+    showFreePlacement: function (element, done) {
+        var self = $(this)
+        self.pedalboard('hidePlacementGrid')
+        self.pedalboard('finishConnection')
+
+        var grid = $('<div class="mod-placement-grid mod-placement-free ignore-arrive">').css({
+            width: self.width(),
+            height: self.height(),
+            'z-index': self.data('z_index') + 1000
+        }).appendTo(self)
+        grid.on('click', function (e) {
+            // the tail of a pan is not a choice
+            if (Date.now() - (self.data('lastPanMove') || 0) < 300) {
+                return false
+            }
+            var scale = self.data('scale')
+            var origin = self.offset()
+            var icon = grid.data('preview').data('icon')
+            var x = (e.pageX - origin.left) / scale - (icon ? icon.width() / 2 : 0)
+            var y = (e.pageY - origin.top) / scale - (icon ? icon.height() / 2 : 0)
+            self.pedalboard('hidePlacementGrid')
+            element.trigger('pluginAdded', { x: Math.max(0, x), y: Math.max(0, y) })
+            return false
+        })
+        self.pedalboard('waitToPlace', grid, element, done)
+    },
+
+    // The plugin `element` waiting to be placed in `grid`: drawn small, wherever
+    // 'placementstart' puts its preview, the dock, until it is placed or not, which
+    // 'placementend' says, as hidePlacementGrid does, and `done` then. `ready` once the
+    // plugin's full description is known, with it
+    waitToPlace: function (grid, element, done, ready) {
+        var self = $(this)
         $(document).on('keydown.placement', function (e) {
             if (e.keyCode == 27) {
                 self.pedalboard('hidePlacementGrid')
             }
         })
 
-        // The plugin being added waits, drawn small, wherever 'placementstart' puts its
-        // preview, the dock, until a cell is chosen. 'placementend' once it is, or not
         var pluginData = element.data('pluginData')
         var preview = $('<div class="mod-placement-preview ignore-arrive">')
         grid.data('preview', preview)
@@ -1571,9 +1611,7 @@ JqueryClass('pedalboard', {
             if (self.data('placementGrid') !== grid) {
                 return
             }
-            // with its ports known, which the library does not list
-            self.pedalboard('showInsertPoints', grid, element, plugin)
-            self.pedalboard('markSwapCells', grid, plugin)
+            ready && ready(plugin)
             icon.css({ visibility: 'hidden', 'transform-origin': '0 0' }).appendTo(preview)
             var children = icon.children()
             // Shown once it has a size, and sized again whenever that changes: the

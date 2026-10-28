@@ -1636,6 +1636,36 @@ function Desktop(elements) {
         self.onPedalboardLoadComplete(callback)
     }
 
+    // Grid mode, the board in cells with its cables in lanes. Always on for a touch
+    // screen, a phone's or a tablet's, which the free board is not made for. Otherwise as
+    // switched on or off with the button by the title, see js/appbar.js, and remembered
+    // by this browser, off until it is
+    var GRID_MODE_KEY = 'mod-grid-mode'
+    this.gridModeLocked = function () {
+        return !! self.isTouchDevice
+    }
+    this.gridModeOn = function () {
+        if (self.gridModeLocked()) {
+            return true
+        }
+        var stored = null
+        try {
+            stored = window.localStorage.getItem(GRID_MODE_KEY)
+        } catch (e) {}
+        return stored == '1'
+    }
+    // The board is laid out for one or the other as it loads, so it loads again, and so
+    // does the page, whose library and dock are made for it too. What has not been saved
+    // stays, the host has it
+    this.setGridMode = function (on) {
+        try {
+            window.localStorage.setItem(GRID_MODE_KEY, on ? '1' : '0')
+        } catch (e) {
+            return
+        }
+        window.location.reload()
+    }
+
     this.systemStats = {
         cpuLoad: 0,
         xrun: 0
@@ -1659,7 +1689,7 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
         cvAddressing: self.cvAddressing,
         // isTouchDevice is only set once the desktop exists, hence asked every time
         gridMode: function () {
-            return self.isTouchDevice
+            return self.gridModeOn()
         },
         pluginLoad: function (uri, instance, x, y, callback, errorCallback) {
             var firstTry = true

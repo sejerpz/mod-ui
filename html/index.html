@@ -358,56 +358,60 @@ $('document').ready(function() {
 
         desktop.isMobile = (navigator?.userAgentData?.mobile ?? false) || mobileCheck();
         desktop.isTouchDevice = desktop.isMobile || touchCheck();
-        desktop.effectBox.effectBox('setGridLibrary', desktop.pedalboard.pedalboard('gridMode'));
-        if (desktop.pedalboard.pedalboard('gridMode')) {
-            $('<div id="app-bar">').appBar({
-                constructorTrigger: $('#main-menu #mod-plugins'),
-                performanceTrigger: $('#main-menu #performance-trigger'),
-                performanceBox: desktop.performanceBox,
-                performanceActions: $('#performance header .actions'),
-                transportButton: $('#main-menu #mod-transport-icon'),
-                transportWindow: $('#mod-transport-window'),
-                midiPortsWindow: $('#midi-ports-window'),
-                cvToggle: $('#js-cv-addressing-toggle'),
-                places: $('#pedalboards-library, #bank-library, #file-manager-library, #cloud-plugins-library'),
-                pedalboard: desktop.pedalboard,
-                addButton: desktop.effectBox.data('gridTab'),
-                abCompare: $('#pedalboard-info .js-ab-compare'),
-                helpButton: $('#pedalboard-info .js-help-toggle'),
-                snapshotSaveButton: $('#pedalboard-info .js-preset-save'),
-                snapshotSaveAsButton: $('#pedalboard-info .js-preset-save-as'),
-                snapshotManageButton: $('#pedalboard-info .js-preset-manage'),
-                snapshotDialogs: $('#pedal-presets-window, #save-preset'),
-                saveButton: $('#pedalboard-info .js-save'),
-                cpuButton: $('#main-menu #mod-cpu'),
-                cpuText: $('#cpu-bar-text'),
-                ramText: $('#ram-bar-text'),
-                xruns: $('#mod-xruns'),
-                cpuLoadWindow: $('#cpu-load-window'),
-                menu: [
-                    { title: 'Pedalboard', items: [
-                        ['Pedalboards library', $('#main-menu #mod-pedalboard')],
-                        ['Banks', $('#main-menu #mod-bank')],
-                        ['New pedalboard', $('#pedalboard-info .js-reset')],
-                        ['Save as', $('#pedalboard-info .js-save-as')],
-                    ]},
-                    { title: 'Routing', items: [
-                        ['Bindings', $('#js-pb-addressing-toggle')],
-                        ['CV ports', $('#js-cv-addressing-toggle')],
-                        ['MIDI ports', $('#main-menu #mod-show-midi-port')],
-                    ]},
-                    { title: 'Tools', items: [
-                        ['File manager', $('#main-menu #mod-file-manager')],
-                        ['Plugin store', $('#main-menu #mod-cloud-plugins')],
-                        ['Transport', $('#main-menu #mod-transport-icon')],
-                    ]},
-                    { title: 'System', items: [
-                        ['Settings', $('#main-menu #mod-settings')],
-                        ['Help', $('#pedalboard-info .js-help-toggle')],
-                    ]},
-                ],
-            });
-        }
+        // the dock and its library, with the board in cells or not, see desktop's gridModeOn
+        desktop.effectBox.effectBox('setGridLibrary', true);
+        $('<div id="app-bar">').appBar({
+            constructorTrigger: $('#main-menu #mod-plugins'),
+            performanceTrigger: $('#main-menu #performance-trigger'),
+            performanceBox: desktop.performanceBox,
+            performanceActions: $('#performance header .actions'),
+            transportButton: $('#main-menu #mod-transport-icon'),
+            transportWindow: $('#mod-transport-window'),
+            midiPortsWindow: $('#midi-ports-window'),
+            cvToggle: $('#js-cv-addressing-toggle'),
+            places: $('#pedalboards-library, #bank-library, #file-manager-library, #cloud-plugins-library'),
+            store: $('#cloud-plugins-library'),
+            pedalboard: desktop.pedalboard,
+            addButton: desktop.effectBox.data('gridTab'),
+            abCompare: $('#pedalboard-info .js-ab-compare'),
+            helpButton: $('#pedalboard-info .js-help-toggle'),
+            snapshotSaveButton: $('#pedalboard-info .js-preset-save'),
+            snapshotSaveAsButton: $('#pedalboard-info .js-preset-save-as'),
+            snapshotManageButton: $('#pedalboard-info .js-preset-manage'),
+            snapshotDialogs: $('#pedal-presets-window, #save-preset'),
+            saveButton: $('#pedalboard-info .js-save'),
+            cpuButton: $('#main-menu #mod-cpu'),
+            cpuText: $('#cpu-bar-text'),
+            ramText: $('#ram-bar-text'),
+            xruns: $('#mod-xruns'),
+            cpuLoadWindow: $('#cpu-load-window'),
+            gridModeOn: desktop.gridModeOn,
+            gridModeLocked: desktop.gridModeLocked,
+            setGridMode: desktop.setGridMode,
+            zoomControls: $('#zoom-controllers'),
+            menu: [
+                { title: 'Pedalboard', items: [
+                    ['Pedalboards library', $('#main-menu #mod-pedalboard')],
+                    ['Banks', $('#main-menu #mod-bank')],
+                    ['New pedalboard', $('#pedalboard-info .js-reset')],
+                    ['Save as', $('#pedalboard-info .js-save-as')],
+                ]},
+                { title: 'Routing', items: [
+                    ['Bindings', $('#js-pb-addressing-toggle')],
+                    ['CV ports', $('#js-cv-addressing-toggle')],
+                    ['MIDI ports', $('#main-menu #mod-show-midi-port')],
+                ]},
+                { title: 'Tools', items: [
+                    ['File manager', $('#main-menu #mod-file-manager')],
+                    ['Plugin store', $('#main-menu #mod-cloud-plugins')],
+                    ['Transport', $('#main-menu #mod-transport-icon')],
+                ]},
+                { title: 'System', items: [
+                    ['Settings', $('#main-menu #mod-settings')],
+                    ['Help', $('#pedalboard-info .js-help-toggle')],
+                ]},
+            ],
+        });
 
         if (desktop.isMobile) {
             $('body').addClass('mobile');

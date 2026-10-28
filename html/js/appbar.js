@@ -45,6 +45,10 @@ JqueryClass('appBar', {
             // see dashboard.css: what has a name has an icon instead, Edit and Live are
             // one button to the other, and the CPU meter is in the menu
             self.toggleClass('compact', across < 760)
+            // Across a wide window, as a desktop's, it has room to spare: some of the
+            // menu's places as buttons of their own, the whole A/B comparer and the CPU
+            // and RAM with their figures
+            self.toggleClass('wide', across >= 980 && window.innerWidth >= 1440)
         }
         fitViewport()
         // The browser's own events, not jQuery's: with jquery.ba-resize a resize bound
@@ -112,6 +116,23 @@ JqueryClass('appBar', {
             moving = setTimeout(function () {
                 self.removeClass('folded')
             }, 300)
+        }
+
+        // The element a menu entry clicks, by its label. The wide dock has buttons of its own
+        // for some, see fitViewport, which leave the menu there: `inDock` says so
+        var menuItem = function (label, inDock) {
+            var found = $()
+            $.each(options.menu, function (i, section) {
+                $.each(section.items, function (j, item) {
+                    if (item[0] == label) {
+                        found = item[1]
+                    }
+                })
+            })
+            if (inDock && found.length) {
+                found.data('appBarItem').addClass('in-dock')
+            }
+            return found
         }
 
         // the gateway to whatever the hidden bars had and the dock has no room for. Its
@@ -211,10 +232,18 @@ JqueryClass('appBar', {
                 options.performanceTrigger.click()
             })
         }).appendTo(mode)
+        // The plugin store, the wide dock's third mode, see fitViewport. Like the other
+        // places the menu leads to, it folds the dock down to the way back
+        var storeTrigger = menuItem('Plugin store', true)
+        var store = $('<div class="segment store">').text('Store').click(function () {
+            if (! options.store.is(':visible')) {
+                storeTrigger.click()
+            }
+        }).appendTo(mode)
         // In one of the places the menu leads to, like the plugin store, the board and
         // its tools are not there: the dock folds down to the way back to the board, the
         // menu being only there
-        $('<div>').text('‹ Back').click(function () {
+        var elsewhereBack = $('<div>').text('‹ Back').click(function () {
             edit.click()
         }).appendTo($('<div class="back">').appendTo(self))
         var showMode = function () {
@@ -279,6 +308,16 @@ JqueryClass('appBar', {
         })
 
         var tools = $('<div class="tools">').appendTo(self)
+
+        // the wide dock's own buttons for the menu's entries most used, see fitViewport
+        var shortcuts = $('<div class="shortcuts">').appendTo(tools)
+        $.each([['New', 'New pedalboard'], ['Pedalboards', 'Pedalboards library'], ['Banks', 'Banks'],
+                ['Bindings', 'Bindings']], function (i, entry) {
+            var element = menuItem(entry[1], true)
+            $('<div>').text(entry[0]).click(function () {
+                element.click()
+            }).appendTo(shortcuts)
+        })
 
         // the header's snapshots menu
         popup('snapshots', 'Snapshots', [{ items: [
@@ -417,6 +456,10 @@ JqueryClass('appBar', {
         }).appendTo(tools)
         var cpu = $('<div class="fill">').appendTo($('<div class="bar">').appendTo(meter))
         var ram = $('<div class="fill">').appendTo($('<div class="bar">').appendTo(meter))
+        // the wide dock's figures beside them
+        var readout = $('<div class="readout">').appendTo(meter)
+        var cpuFigure = $('<span>').appendTo(readout)
+        var ramFigure = $('<span>').appendTo(readout)
         // the compact dock has them in the menu instead, the last section's last entry,
         // see dashboard.css
         var meterEntry = $('<li class="meter-entry">').text('CPU and RAM').click(function () {
@@ -436,11 +479,35 @@ JqueryClass('appBar', {
             cpu.css('height', c + '%')
             ram.css('height', r + '%')
             meter.attr('title', 'CPU ' + c + '% / RAM ' + r + '%')
+            cpuFigure.text('CPU ' + Math.round(c) + '%')
+            ramFigure.text('RAM ' + Math.round(r) + '%')
         }
         options.cpuText.add(options.ramText).each(function () {
             new MutationObserver(showLoad).observe(this, { childList: true, characterData: true, subtree: true })
         })
         showLoad()
+        // The wide dock's transport, before the meter: whether it rolls, as a play or a
+        // stop sign, lit while it plays, and its tempo under it, opening the transport.
+        // Read off the bar's button, which transport.js keeps up to date
+        var transportEntry = menuItem('Transport', true)
+        var transport = $('<div class="transport">').click(function () {
+            transportEntry.click()
+        }).insertBefore(meter)
+        $('<span class="sign">').appendTo(transport)
+        var bpm = $('<span class="bpm">').appendTo(transport)
+        var showRolling = function () {
+            var playing = options.transportButton.hasClass('playing')
+            var tempo = parseFloat((options.transportButton.text().match(/[\d.]+/) || [''])[0])
+            var shown = isNaN(tempo) ? '---' : String(Math.round(tempo * 10) / 10)
+            transport.toggleClass('playing', playing)
+                .attr('title', (playing ? 'Playing' : 'Stopped') + ', ' + shown + ' BPM')
+            bpm.text(shown + ' BPM')
+        }
+        new MutationObserver(showRolling).observe(options.transportButton[0], {
+            attributes: true, attributeFilter: ['class'], childList: true, characterData: true, subtree: true
+        })
+        showRolling()
+
         var xrun = null
         // and the compact dock's menu button with it, which has the meter
         var xrunShown = meter.add(meterEntry).add(main.children('.toggle'))
@@ -609,7 +676,7 @@ JqueryClass('appBar', {
         var snapshotWatch = new MutationObserver(showSnapshot)
         var compare = $('<div class="compare">').appendTo(dialog)
         var compareHome = null
-        $('<div>').text('‹ Back').click(function () {
+        var dialogBack = $('<div>').text('‹ Back').click(function () {
             if (settings) {
                 closeSettings()
             } else if (info) {
@@ -718,6 +785,61 @@ JqueryClass('appBar', {
             dialogs = dialogs.not(e.target)
             makeRoom()
         })
+
+        // By the title, at the top right: grid mode on or off, see desktop's setGridMode,
+        // which loads the page again, and the board's zoom out and in, see-through over it.
+        // Where grid mode cannot be turned off, on a touch screen, it only says it is on
+        var titleTools = $('<div class="mod-title-tools">').insertAfter('#pedalboard-info')
+        var gridOn = options.gridModeOn()
+        // what is only for a board in cells, see dashboard.css
+        $('body').toggleClass('grid-mode', gridOn)
+        var gridLocked = options.gridModeLocked()
+        $('<span class="grid-toggle">')
+            .append('<i class="icon-th-large">')
+            .toggleClass('active', gridOn)
+            .toggleClass('locked', gridLocked)
+            .attr('title', gridLocked ? 'Grid layout'
+                                      : gridOn ? 'Grid layout on: turn it off' : 'Grid layout off: turn it on')
+            .click(function () {
+                if (! gridLocked) {
+                    options.setGridMode(! gridOn)
+                }
+            }).appendTo(titleTools)
+        titleTools.append(options.zoomControls)
+
+        // Esc, with a keyboard, is the way out the dock shows: what is open over the rest
+        // first, a menu, a sheet or a list, then Cancel, Back or Board. Before the page's
+        // own Esc, which closes windows and would skip the settings' flip back. Not in a
+        // field being typed in, nor in help mode, which has its own
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape' || options.helpButton.hasClass('active') ||
+                $(e.target).closest('input, textarea, select, [contenteditable=true]').length) {
+                return
+            }
+            var open = popups.filter('.open')
+            if ($('.mod-port-picker').length) {
+                $('.mod-port-picker').remove()
+            } else if ($('.mod-touch-sheet').length) {
+                $('.mod-touch-sheet').remove()
+            } else if (open.length) {
+                open.removeClass('open')
+            } else if ($('.menu-open, .js-ab-compare.open').length) {
+                $('.menu-open').removeClass('menu-open')
+                $('.js-ab-compare.open').removeClass('open')
+            } else if (self.hasClass('task')) {
+                cancelButton.click()
+            } else if (self.hasClass('dialog')) {
+                dialogBack.click()
+            } else if (self.hasClass('viewing')) {
+                options.pedalboard.pedalboard('leavePluginView')
+            } else if (self.hasClass('elsewhere')) {
+                elsewhereBack.click()
+            } else {
+                return
+            }
+            e.preventDefault()
+            e.stopPropagation()
+        }, true)
 
         self.appendTo('body')
 

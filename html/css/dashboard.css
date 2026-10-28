@@ -31,6 +31,12 @@
     top: 0;
 }
 
+/* not in grid mode, anywhere on the board, see showFreePlacement */
+.mod-placement-free {
+    cursor: crosshair;
+    background: rgba(136, 57, 150, 0.06);
+}
+
 /* The places the plugin being placed can go, all drawn alike but for their icon: a
    dark round button with a dashed border, pulsing. Into a run of cables, see
    showInsertPoints, a + sized there for the board's zoom, its pulse in em; into a free
@@ -175,17 +181,17 @@
 /* In grid mode the board shows plugins too small for their controls: a tap on a knob
    or a footswitch goes through to the plugin under it, which shows just the plugin,
    where they can be used. Its ports and actions still take their own taps */
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal * {
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal * {
     pointer-events: none;
 }
 
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal .mod-drag-handle,
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-audio-port],
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-audio-port] *,
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-midi-port],
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-midi-port] *,
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-cv-port],
-body.app-bar-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-cv-port] * {
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal .mod-drag-handle,
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-audio-port],
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-audio-port] *,
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-midi-port],
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-midi-port] *,
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-cv-port],
+body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .mod-pedal [mod-role$=-cv-port] * {
     pointer-events: auto;
 }
 
@@ -2436,8 +2442,7 @@ body.app-bar-mode #plugins-library.grid-library .grid-library-header .close {
    It replaces the top and bottom bars:
    the top one keeps only the logo and the title, see-through over the board */
 body.app-bar-mode #main-menu,
-body.app-bar-mode #pedalboard-info .actions,
-body.app-bar-mode #zoom-controllers {
+body.app-bar-mode #pedalboard-info .actions {
     display: none !important;
 }
 
@@ -2485,6 +2490,77 @@ body.app-bar-mode.library-open header#pedalboard-actions {
 body.app-bar-mode #pedalboard-info {
     position: static;
     display: block;
+    min-width: 0;
+}
+
+/* After the title, see-through on its bar: grid mode on or off and the zoom, see
+   js/appbar.js. The bar lets taps through to the board, these take them */
+body.app-bar-mode header#pedalboard-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-right: 6px;
+    /* sized for a finger as the dock is, buttons and all */
+    zoom: var(--touch-zoom, 1);
+}
+
+.mod-title-tools {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    pointer-events: auto;
+}
+
+body.app-bar-mode .mod-title-tools #zoom-controllers {
+    position: static;
+    display: flex;
+    gap: 2px;
+}
+
+.mod-title-tools .grid-toggle,
+body.app-bar-mode .mod-title-tools #zoom-controllers > span {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background-color: transparent;
+    background-size: 20px;
+    opacity: 0.66;
+    cursor: pointer;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.mod-title-tools .grid-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 17px;
+    line-height: 1;
+}
+
+.mod-title-tools .grid-toggle:hover,
+body.app-bar-mode .mod-title-tools #zoom-controllers > span:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    opacity: 1;
+}
+
+/* while the board is in cells */
+.mod-title-tools .grid-toggle.active {
+    color: #d9a7e3;
+    background-color: rgba(136, 57, 150, 0.35);
+    opacity: 1;
+}
+
+/* always on, a touch screen's, see desktop's gridModeLocked: shown, not a button */
+.mod-title-tools .grid-toggle.locked {
+    cursor: default;
+}
+
+.mod-title-tools .grid-toggle.locked:hover {
+    background-color: rgba(136, 57, 150, 0.35);
 }
 
 body.app-bar-mode #pedalboard-info > h1 {
@@ -2687,7 +2763,12 @@ body.app-bar-mode #plugins-library.grid-library.open {
     gap: 24px;
     padding-left: 8px;
     max-width: 640px;
-    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+}
+
+/* folded away it takes no room at all, or what is left in the dock is off its middle */
+.mod-app-bar:not(.task) > .task {
+    padding-left: 0;
 }
 
 /* floating just above the dock, on its left, like a title. Placed on the dock rather
@@ -3152,9 +3233,9 @@ body.app-bar-mode #plugins-library.grid-library.open {
     color: #666;
 }
 
-/* none of the plugins have them, on a tablet as on a phone: tapping a plugin leads to
-   its actions in the dock, see js/appbar.js */
-body.app-bar-mode .mod-pedal .mod-actions {
+/* none of the plugins have them in grid mode: tapping a plugin leads to its actions in
+   the dock, see js/appbar.js. The free board keeps them on the plugins */
+body.app-bar-mode.grid-mode .mod-pedal .mod-actions {
     display: none;
 }
 
@@ -4245,6 +4326,148 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     gap: 12px;
 }
 
+/* The wide dock, across a wide window, see js/appbar.js: room for more of it */
+.mod-app-bar.wide > .tools {
+    max-width: 1200px;
+}
+
+/* some of the menu's places as buttons of their own */
+.mod-app-bar .shortcuts {
+    display: none;
+    gap: 6px;
+}
+
+.mod-app-bar.wide .shortcuts {
+    display: flex;
+}
+
+.mod-app-bar .shortcuts > div {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border: 1px solid #333;
+    border-radius: 8px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.mod-app-bar .shortcuts > div:active {
+    background: #333;
+}
+
+/* the plugin store, the third mode. Once there, the dock folds down to Back */
+.mod-app-bar .mode .segment.store {
+    display: none;
+}
+
+.mod-app-bar.wide .mode .segment.store {
+    display: block;
+}
+
+/* the transport: a stop sign, or a play sign lit while it rolls, over its tempo */
+.mod-app-bar .transport {
+    display: none;
+}
+
+.mod-app-bar.wide .transport {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 52px;
+    height: 40px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+.mod-app-bar .transport .sign {
+    width: 14px;
+    height: 14px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect fill='white' x='4' y='4' width='12' height='12' rx='1.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.mod-app-bar .transport.playing .sign {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' d='M5 3.2v13.6a.8.8 0 0 0 1.2.7l10.6-6.8a.8.8 0 0 0 0-1.4L6.2 2.5A.8.8 0 0 0 5 3.2Z'/%3E%3C/svg%3E");
+}
+
+.mod-app-bar .transport .bpm {
+    color: #ccc;
+    font-size: 10px;
+    line-height: 11px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.mod-app-bar.wide .transport.playing {
+    background-color: #883996;
+    border-color: #883996;
+}
+
+.mod-app-bar.wide .transport.playing .bpm {
+    color: #fff;
+}
+
+.mod-app-bar.wide .transport:active {
+    background-color: #333;
+}
+
+/* what has a button of its own is not in the menu as well */
+.mod-app-bar.wide .popup li.in-dock {
+    display: none;
+}
+
+/* the whole A/B comparer in place of its one button */
+.mod-app-bar.wide .popup.ab > .toggle {
+    display: none;
+}
+
+.mod-app-bar.wide .popup.ab > .menu {
+    display: flex;
+    position: static;
+    transform: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+}
+
+/* the CPU and RAM with their figures */
+.mod-app-bar .meter .readout {
+    display: none;
+}
+
+.mod-app-bar.wide .meter {
+    width: auto;
+}
+
+.mod-app-bar.wide .meter .bar {
+    flex: none;
+    width: 7px;
+}
+
+.mod-app-bar.wide .meter .readout {
+    display: flex;
+    flex-direction: column;
+    align-self: center;
+    margin-left: 4px;
+    color: #ccc;
+    font-size: 11px;
+    line-height: 13px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.mod-app-bar.wide .meter.xrun .readout {
+    color: #fff;
+}
+
 /* the header's comparer, drawn like the Edit / Live group. Its markup has an inline
    margin to center it in the header */
 .mod-app-bar .js-ab-compare {
@@ -4698,20 +4921,20 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box .advanced-container {
 /* Grid mode's cabling by touch: a tap on an output starts a cable, a tap on an input
    ends it. Drawn at the board's zoom, the ports are a small target for a finger, so
    each answers a tap some way around it, out into the gap beside its plugin */
-body.app-bar-mode .mod-pedal .mod-output::after,
-body.app-bar-mode .mod-pedal .mod-input::after {
+body.app-bar-mode.grid-mode .mod-pedal .mod-output::after,
+body.app-bar-mode.grid-mode .mod-pedal .mod-input::after {
     content: '';
     position: absolute;
     top: -12px;
     bottom: -12px;
 }
 
-body.app-bar-mode .mod-pedal .mod-output::after {
+body.app-bar-mode.grid-mode .mod-pedal .mod-output::after {
     left: -10px;
     right: -70px;
 }
 
-body.app-bar-mode .mod-pedal .mod-input::after {
+body.app-bar-mode.grid-mode .mod-pedal .mod-input::after {
     left: -70px;
     right: -10px;
 }
