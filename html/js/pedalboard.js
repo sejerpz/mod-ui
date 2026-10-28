@@ -749,7 +749,20 @@ JqueryClass('pedalboard', {
             ev.preventDefault()
         })
         self[0].addEventListener('dblclick', function (ev) {
-            if (ev.handled || self.data('pluginView')) return
+            if (self.data('pluginView')) return
+            // on a plugin's own background, not on its controls, it opens its settings, and
+            // only that: the zoom a click on it would do is called off. Grid mode has its
+            // plugin view for that. The plugin marks every double click as handled, see
+            // modgui.js, so that it does not zoom out
+            var handle = $(ev.target).closest('[mod-role]')
+            if (! self.pedalboard('gridMode') && handle.is('[mod-role=drag-handle]') &&
+                ! $(ev.target).closest('.mod-actions').length) {
+                clearTimeout(self.data('focusTimer'))
+                handle.closest('[mod-instance]').find('.mod-settings').first().click()
+                ev.preventDefault()
+                return
+            }
+            if (ev.handled) return
             self.pedalboard('zoomOut')
             ev.preventDefault()
         })
@@ -3398,13 +3411,23 @@ JqueryClass('pedalboard', {
                     return;
 
                 // setTimeout avoids cable drawing bug
-                setTimeout(function () {
-                    if (! self.pedalboard('gridMode')) {
-                        self.pedalboard('focusPlugin', obj.icon)
-                    } else if (! self.data('pluginView')) {
-                        self.pedalboard('showPlugin', instance)
-                    }
-                }, 0)
+                if (self.pedalboard('gridMode')) {
+                    setTimeout(function () {
+                        if (! self.data('pluginView')) {
+                            self.pedalboard('showPlugin', instance)
+                        }
+                    }, 0)
+                    return
+                }
+                // the zoom waits to know it is not the first click of a double click,
+                // which opens the settings instead, see initGestures
+                clearTimeout(self.data('focusTimer'))
+                if ((event.originalEvent || event).detail > 1) {
+                    return
+                }
+                self.data('focusTimer', setTimeout(function () {
+                    self.pedalboard('focusPlugin', obj.icon)
+                }, 300))
             },
             change: function (port, value) {
                 self.data('pluginParameterChange')(port, value)
