@@ -6929,6 +6929,7 @@ button.close {
   padding: 8px;
   text-align: center;
   color: #fff;
+  position: relative;
   /* don't show author in perfomance view */
 }
 #performance .plugin .label-container {
@@ -6970,6 +6971,10 @@ button.close {
 }
 #performance .plugin .is-visible {
   color: #883996;
+}
+#performance .plugin .visibility-state {
+  color: #888;
+  pointer-events: none;
 }
 #performance .plugin .title {
   display: inline;

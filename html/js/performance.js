@@ -229,6 +229,7 @@ JqueryClass('performanceBox', {
                 }
 
                 self.data('visibleFilter', defaultvisibleFilter)
+                self.data('showVisibleFilter')()
             }
 
             self.data('updatePlugins')()
@@ -267,22 +268,19 @@ JqueryClass('performanceBox', {
             console.log(`swipe ${e}`)
         })
 
+        // The crossed eye, as the dock's while performing, see js/appbar.js: plain while
+        // the plugins not made visible are left out, lit while they are shown too
         const visibleFilterButton = self.find('#performance-filter-visibility')
+        self.data('showVisibleFilter', function () {
+            const all = !self.data('visibleFilter')
+            visibleFilterButton.toggleClass('active', all)
+                .attr('title', all ? 'Showing the hidden plugins too: hide them' : 'Hidden plugins left out: show them')
+        })
         visibleFilterButton.click(function() {
             const newValue = !self.data('visibleFilter')
-            const icon = self.find('#performance-filter-visibility')
-
-            if (newValue) {
-                visibleFilterButton.addClass("active")
-                icon.removeClass('icon-eye-off')
-                icon.addClass('icon-eye')
-            } else {
-                visibleFilterButton.removeClass("active")
-                icon.removeClass('icon-eye')
-                icon.addClass('icon-eye-off')
-            }
 
             self.data('visibleFilter', newValue)
+            self.data('showVisibleFilter')()
             self.data('updatePlugins')()
             self.data("selectElement")(":presets")
         });
@@ -435,6 +433,10 @@ JqueryClass('performanceBox', {
                 })
             })
             renameBox?.find('.icon')?.removeClass('mod-hidden')
+        } else if (visibleFilter === false && ! (plugin.getPerformanceOptions()?.visible ?? false)) {
+            // showing them all, those not made visible say so, only as a state: they are
+            // made visible arranging the view
+            rendered.find('.icon-visible').addClass('icon-eye-off visibility-state')
         }
 
         rendered.click(function () {

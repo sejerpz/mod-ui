@@ -277,13 +277,21 @@ JqueryClass('appBar', {
             })
         }
         var before = null
+        // the filter as it was before arranging, which the view goes back to after
+        var filterBefore = null
         design.click(function () {
             var arranging = !! options.performanceBox.data('inDesign')
             before = arranging ? $.map(guis(), function (gui) {
                 var performance = gui.getPerformanceOptions()
                 return { gui: gui, index: performance.index, visible: performance.visible, label: gui.label }
             }) : null
+            if (arranging) {
+                filterBefore = !! options.performanceBox.data('visibleFilter')
+            } else if (filterBefore != null && filterBefore != !! options.performanceBox.data('visibleFilter')) {
+                visibleFilter.click()
+            }
             setState('arranging', arranging)
+            showLiveFilter()
         })
         $('<button class="js-cancel">').text('Cancel').click(function () {
             $.each(before || [], function (i, was) {
@@ -365,6 +373,26 @@ JqueryClass('appBar', {
             }
             return compareA.hasClass('js-ab-compare-snapshot-disabled') ? null : 'init'
         }
+
+        // Performing, before the comparer: the performance view's filter, at hand without
+        // arranging it. The plugins not made visible in it are left out, or shown too
+        var visibleFilter = options.performanceActions.find('.view-filter')
+        var liveFilter = $('<div class="live-filter">').append('<i class="icon-eye-off">').click(function () {
+            visibleFilter.click()
+            showLiveFilter()
+        }).appendTo(tools)
+        var showLiveFilter = function () {
+            // lit while the plugins not made visible are shown too
+            var all = ! options.performanceBox.data('visibleFilter')
+            liveFilter.toggleClass('active', all)
+                .attr('title', all ? 'Showing the hidden plugins too: hide them' : 'Hidden plugins left out: show them')
+        }
+        // the view picks its filter as it opens, see performance.js
+        options.performanceBox.on('windowopen', function () {
+            setTimeout(showLiveFilter, 0)
+        })
+        showLiveFilter()
+
         var ab = $('<div class="popup ab">').appendTo(tools)
         $('<div class="menu">').append(options.abCompare).appendTo(ab)
         popups = popups.add(ab)

@@ -55,6 +55,9 @@
     padding: 8px;
     text-align: center;
     color: #fff;
+    // where its eye is, see .icon-visible: not just while arranging, which makes it
+    // relative to drag it
+    position: relative;
 
     .label-container {
       display: inline;
@@ -102,6 +105,12 @@
 
     .is-visible {
       color: @brand-primary;
+    }
+
+    // not made visible, shown while the view shows them all: a state, not a button
+    .visibility-state {
+      color: #888;
+      pointer-events: none;
     }
 
     .title {
