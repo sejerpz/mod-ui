@@ -788,12 +788,14 @@ JqueryClass('appBar', {
 
         // By the title, at the top right: grid mode on or off, see desktop's setGridMode,
         // which loads the page again, and the board's zoom out and in, see-through over it.
-        // Where grid mode cannot be turned off, on a touch screen, it only says it is on
+        // Where grid mode cannot be turned off, on a touch screen, it only says it is on,
+        // and there is no zoom to press: the fingers pinch it
         var titleTools = $('<div class="mod-title-tools">').insertAfter('#pedalboard-info')
         var gridOn = options.gridModeOn()
         // what is only for a board in cells, see dashboard.css
         $('body').toggleClass('grid-mode', gridOn)
         var gridLocked = options.gridModeLocked()
+        titleTools.toggleClass('touch', gridLocked)
         $('<span class="grid-toggle">')
             .append('<i class="icon-th-large">')
             .toggleClass('active', gridOn)
