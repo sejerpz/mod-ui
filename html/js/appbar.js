@@ -787,26 +787,30 @@ JqueryClass('appBar', {
         })
 
         // By the title, at the top right: grid mode on or off, see desktop's setGridMode,
-        // which loads the page again, and the board's zoom out and in, see-through over it.
-        // Where grid mode cannot be turned off, on a touch screen, it only says it is on,
-        // and there is no zoom to press: the fingers pinch it
+        // which lays the board out again, and the board's zoom out and in, see-through
+        // over it. Where grid mode cannot be turned off, on a touch screen, it only says it
+        // is on, and there is no zoom to press: the fingers pinch it
         var titleTools = $('<div class="mod-title-tools">').insertAfter('#pedalboard-info')
-        var gridOn = options.gridModeOn()
-        // what is only for a board in cells, see dashboard.css
-        $('body').toggleClass('grid-mode', gridOn)
         var gridLocked = options.gridModeLocked()
         titleTools.toggleClass('touch', gridLocked)
-        $('<span class="grid-toggle">')
+        var gridToggle = $('<span class="grid-toggle">')
             .append('<i class="icon-th-large">')
-            .toggleClass('active', gridOn)
             .toggleClass('locked', gridLocked)
-            .attr('title', gridLocked ? 'Grid layout'
-                                      : gridOn ? 'Grid layout on: turn it off' : 'Grid layout off: turn it on')
             .click(function () {
                 if (! gridLocked) {
-                    options.setGridMode(! gridOn)
+                    options.setGridMode(! options.gridModeOn())
                 }
             }).appendTo(titleTools)
+        var showGridMode = function () {
+            var gridOn = options.gridModeOn()
+            // what is only for a board in cells, see dashboard.css
+            $('body').toggleClass('grid-mode', gridOn)
+            gridToggle.toggleClass('active', gridOn)
+                .attr('title', gridLocked ? 'Grid layout'
+                                          : gridOn ? 'Grid layout on: turn it off' : 'Grid layout off: turn it on')
+        }
+        showGridMode()
+        options.pedalboard.on('gridmode', showGridMode)
         titleTools.append(options.zoomControls)
 
         // Esc, with a keyboard, is the way out the dock shows: what is open over the rest
