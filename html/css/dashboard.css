@@ -2520,6 +2520,10 @@ body.app-bar-mode .mod-title-tools #zoom-controllers {
     gap: 2px;
 }
 
+body.app-bar-mode .mod-title-tools.touch #zoom-controllers {
+    display: none;
+}
+
 .mod-title-tools .grid-toggle,
 body.app-bar-mode .mod-title-tools #zoom-controllers > span {
     width: 32px;
