@@ -2702,7 +2702,7 @@ body.app-bar-mode #plugins-library.grid-library.open {
 .mod-app-bar > .mode,
 .mod-app-bar > .tools,
 .mod-app-bar > .add {
-    max-width: 640px;
+    max-width: var(--part-room, 640px);
     transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
 }
 
@@ -4330,9 +4330,10 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     gap: 12px;
 }
 
-/* The wide dock, across a wide window, see js/appbar.js: room for more of it */
+/* The wide dock, across a wide window, see js/appbar.js: room for more of it. As the
+   room the part has when open, so it still folds away to nothing with the rest */
 .mod-app-bar.wide > .tools {
-    max-width: 1200px;
+    --part-room: 1200px;
 }
 
 /* some of the menu's places as buttons of their own */
