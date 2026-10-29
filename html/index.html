@@ -878,39 +878,35 @@ $('document').ready(function() {
             </div>
         </div>
 
-        <div id="midi-ports-window" class="save-popup mod-hidden">
-            <div class="mod-box" id="midi-ports-box">
-                <h1>MIDI Ports List</h1>
-                <form class="bottom">
-                    <fieldset>
-                        <div>
-                            <label>
-                                <input type="checkbox" autocomplete="off" id="midi-loopback">
-                                    Enable Virtual MIDI Loopback
-                                </input>
-                            </label>
+        <div id="midi-ports-window" class="save-popup mod-sheet-popup mod-hidden">
+            <div class="mod-box mod-sheet" id="midi-ports-box">
+                <header>
+                    <h1>MIDI ports</h1>
+                    <span class="js-cancel close">&times;</span>
+                </header>
+                <div class="body">
+                    <div class="section-title">Devices</div>
+                    <div class="group" id="midi-ports-list"></div>
+                    <p class="hint">Enabled devices show up on the board as MIDI inputs and outputs.</p>
+                    <div class="section-title">Mode</div>
+                    <div class="segmented js-midi-mode">
+                        <button type="button" data-mode="aggregated">Aggregated<small>one MIDI in, one MIDI out</small></button>
+                        <button type="button" data-mode="separated">Separated<small>a port per device</small></button>
+                    </div>
+                    <div class="js-loopback-section">
+                        <div class="section-title">Virtual</div>
+                        <div class="group">
+                            <div class="row js-loopback">
+                                <div class="text"><span class="name">MIDI loopback</span><span class="sub">What the board sends out comes back in</span></div>
+                                <div class="switch"></div>
+                            </div>
                         </div>
-                        <div>
-                            <label>
-                                <input type="radio" autocomplete="off" name="midi-mode" value="aggregated" id="midi-mode-aggregate">
-                                    Aggregated mode
-                                </input>
-                            </label>
-                        </div>
-                        <div>
-                            <label>
-                                <input type="radio" autocomplete="off" name="midi-mode" value="separated" id="midi-mode-separated">
-                                    Separated mode
-                                </input>
-                            </label>
-                        </div>
-                        <div class="controls clearfix" id="midi-ports-list"></div>
-                        <div class="controls actions">
-                            <button class="js-cancel btn btn-danger">Cancel</button>
-                            <button class="js-submit btn btn-success">Save</button>
-                        </div>
-                    </fieldset>
-                </form>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="js-cancel btn">Cancel</button>
+                    <button class="js-submit btn btn-primary">Save</button>
+                </div>
             </div>
         </div>
         <!-- MIDI DEVICE LIST WINDOW -->
