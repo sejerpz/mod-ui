@@ -1203,7 +1203,7 @@ $('document').ready(function() {
     var self = this
 
     var cached_cpuLoad
-    var ws = new WebSocket("ws://" + window.location.host + "/websocket")
+    var ws = new WebSocket((location.protocol == "https:" ? "wss://" : "ws://") + window.location.host + "/websocket")
 
     ws.onclose = function (evt) {
         if ($('body').find('.screen-disconnected').length != 0) {

@@ -142,7 +142,6 @@ $('document').ready(function() {
         hmiWidgetsWindow: $('#hmi-widgets-window'),
         pedalPresetsWindow: $('#pedal-presets-window'),
         pedalPresetsList: $("#pedal-presets-list"),
-        pedalPresetsOverlay: $("#pedal-presets-list-input"),
         updateDeviceWindow: $('#cc-device-update-window'),
         inputBox: $('#input-box'),
         saveBox: $('#save-pedalboard'),
@@ -917,21 +916,21 @@ $('document').ready(function() {
         <!-- MIDI DEVICE LIST WINDOW -->
 
         <!-- PEDALBOARD SNAPSHOTS -->
-        <div id="pedal-presets-window" class="save-popup mod-hidden">
-            <div class="mod-box" style="width: 400px">
-                <h1 class="pull-left">Load / Manage snapshots</h1><span class="js-cancel close">&times;</span>
-                <form class="bottom">
-                    <div class="controls clearfix">
-                        <input type="text" name="pedal-presets-list" value="" id="pedal-presets-list-input"/>
-                        <select class="preset-list" size="9" id="pedal-presets-list"></select>
-                    </div>
-                    <div class="controls actions">
-                        <button class="js-rename btn btn-default">Rename</button>
-                        <button class="js-delete btn btn-danger">Delete</button>
-                        <!--<button class="js-assign btn btn-success">Assign selected&nbsp;</button>-->
-                        <button class="js-assign-all btn btn-warning">Assign all&nbsp;</button>
-                    </div>
-                </form>
+        <div id="pedal-presets-window" class="save-popup mod-sheet-popup mod-hidden">
+            <div class="mod-box mod-sheet">
+                <header>
+                    <h1>Snapshots</h1><span class="js-count count"></span>
+                    <span class="js-cancel close">&times;</span>
+                </header>
+                <div class="body">
+                    <input type="search" class="js-filter filter" placeholder="Find a snapshot" autocomplete="off"/>
+                    <div class="snapshot-list" id="pedal-presets-list"></div>
+                    <p class="hint">Tap a snapshot to load it, swipe it to the left to delete it.</p>
+                </div>
+                <div class="actions">
+                    <button class="js-assign-all btn">Assign all</button>
+                    <button class="js-save-as btn btn-primary">Save as new</button>
+                </div>
             </div>
         </div>
         <!-- END PEDALBOARD SNAPSHOTS -->

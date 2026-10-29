@@ -33,6 +33,10 @@ JqueryClass('appBar', {
             var landscape = window.matchMedia('(orientation: landscape)').matches
             var across = landscape ? Math.max(screen.width, screen.height)
                                    : Math.min(screen.width, screen.height)
+            // a screen of no known size, as a hidden window's, is taken as a wide one
+            if (! across) {
+                across = 980
+            }
             var content = across >= 980 ? 'width=device-width, initial-scale=1, user-scalable=no'
                                         : 'width=980, user-scalable=no'
             if (viewport.attr('content') != content) {
@@ -339,13 +343,15 @@ JqueryClass('appBar', {
         // one is up. They open and close with show() and hide(), whatever opened them,
         // and so do the plugins' CPU usage, see below, and the MIDI ports. So do the
         // bindings and the CV ports, which are added to the page while open, and the
-        // windows of a plugin the board shows alone, see below
+        // windows of a plugin the board shows alone, see below. It comes back over them
+        // to ask whether to go on with something one of them does, see confirm below
         var dialogs = $()
         var shown = options.snapshotDialogs.add(options.cpuLoadWindow).add(options.midiPortsWindow)
         var makeRoom = function () {
-            self.toggleClass('away', shown.filter(':visible').length > 0 ||
-                                     $('body > .mod-pedal-settings-address').length > 0 ||
-                                     dialogs.length > 0)
+            self.toggleClass('away', ! self.hasClass('confirming') &&
+                                     (shown.filter(':visible').length > 0 ||
+                                      $('body > .mod-pedal-settings-address').length > 0 ||
+                                      dialogs.length > 0))
         }
         shown.each(function () {
             new MutationObserver(makeRoom).observe(this, {
@@ -561,7 +567,8 @@ JqueryClass('appBar', {
         // Something waiting for a tap on the board: a cable being made by taps, see the
         // pedalboard's cellTap, or a plugin being added, see its
         // showPlacementGrid. The dock folds down to what it is about, under a title
-        // floating above, and the way to drop it
+        // floating above, and the way to drop it. Or something asked before it is done,
+        // see confirm, with the way to go on after
         var task = $('<div class="task">').appendTo(self)
         var title = $('<div class="title">').appendTo(task)
         var source = $('<div class="source">').appendTo(task)
@@ -576,22 +583,41 @@ JqueryClass('appBar', {
             cancel && cancel()
             return false
         }).appendTo(task)
+        var go = null
+        var goButton = $('<div class="go">').click(function () {
+            var then = go
+            endTask()
+            then && then()
+            return false
+        }).appendTo(task)
         // `what` has a title, a label and a port, either of them empty, and a thumbnail or
-        // a preview to show. Its way out says Cancel, or `what.cancel`
-        var startTask = function (what, onCancel) {
+        // a preview to show. Its way out says Cancel, or `what.cancel`. With `onGo`, the
+        // way to go on is next to it, saying `what.go`
+        var startTask = function (what, onCancel, onGo) {
             title.text(what.title)
             cancelButton.text(what.cancel || 'Cancel')
+            goButton.text(what.go || '').toggle(!! onGo)
             thumbnail.toggle(!! what.thumbnail).attr('src', what.thumbnail || '')
             holder.empty().toggle(!! what.preview).append(what.preview || null)
             sourceLabel.text(what.label || '').toggle(!! what.label)
             sourcePort.text(what.port || '').toggle(!! what.port)
             cancel = onCancel
+            go = onGo || null
             setState('task', true)
         }
         var endTask = function () {
-            cancel = null
+            cancel = go = null
             setState('task', false)
+            self.removeClass('confirming')
+            makeRoom()
         }
+        // Asked by what is in a dialog, the dock away under it: it comes back over the
+        // dialog for the answer, and goes away again with it
+        self.data('confirm', function (what, onGo) {
+            self.addClass('confirming')
+            makeRoom()
+            startTask(what, endTask, onGo)
+        })
         options.pedalboard.on('connectionstart', function (e, from) {
             startTask({ title: 'Connect', thumbnail: from.thumbnail, label: from.label, port: from.port }, function () {
                 options.pedalboard.pedalboard('finishConnection')
@@ -892,5 +918,11 @@ JqueryClass('appBar', {
         window.addEventListener('resize', fitBoardLater)
 
         return self
+    },
+
+    // Asks whether to go on with something, see confirm in init: `what` as for a task,
+    // with `what.go` saying what going on does, `onGo` called if it is chosen
+    confirm: function (what, onGo) {
+        $(this).data('confirm')(what, onGo)
     },
 })

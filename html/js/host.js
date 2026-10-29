@@ -8,7 +8,7 @@ var cached_cpuLoad = null,
     pb_loading     = true
 
 $('document').ready(function() {
-    ws = new WebSocket("ws://" + window.location.host + "/websocket")
+    ws = new WebSocket((location.protocol == "https:" ? "wss://" : "ws://") + window.location.host + "/websocket")
 
     var empty    = false,
         modified = false;
@@ -244,6 +244,7 @@ $('document').ready(function() {
 
             desktop.pedalboardPresetId = index
             desktop.pedalboardPresetName = name
+            desktop.pedalPresets.setCurrent(index)
             const newTitle = (desktop.title || 'Untitled') + " - " + name
             desktop.titleBox.text(newTitle)
             desktop.performanceTitleBox.text(newTitle)

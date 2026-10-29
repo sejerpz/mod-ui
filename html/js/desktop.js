@@ -17,7 +17,6 @@ function Desktop(elements) {
         midiPortsList: $('<div>'),
         pedalPresetsWindow: $('<div>'),
         pedalPresetsList: $('<div>'),
-        pedalPresetsOverlay: $('<div>'),
         updateDeviceWindow: $('<div>'),
         saveBox: $('<div>'),
         saveButton: $('<div>'),
@@ -259,8 +258,10 @@ function Desktop(elements) {
     this.pedalPresets = new SnapshotsManager({
         pedalPresetsWindow: elements.pedalPresetsWindow,
         pedalPresetsList: elements.pedalPresetsList,
-        pedalPresetsOverlay: elements.pedalPresetsOverlay,
         hardwareManager: self.hardwareManager,
+        saveAsCallback: function () {
+            elements.snapshotSaveAsButton.click()
+        },
         renamedCallback: function (name) {
             const newTitle = (self.title || 'Untitled') + " - " + (name || 'Default')
             self.titleBox.text(newTitle)

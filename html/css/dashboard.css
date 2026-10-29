@@ -2893,6 +2893,40 @@ body.app-bar-mode #plugins-library.grid-library.open {
     cursor: pointer;
 }
 
+/* Asked about something a dialog does, see confirm in js/appbar.js: back over the
+   dialog, with the way to go on next to Cancel, which is grey then */
+.mod-app-bar.confirming {
+    z-index: 1002;
+}
+
+.mod-app-bar.confirming .task .cancel {
+    background: #2c2c2c;
+}
+
+.mod-app-bar.confirming .task .cancel::after {
+    display: none;
+}
+
+.mod-app-bar.confirming .task .title {
+    animation: none;
+}
+
+/* closer to Cancel than the task's parts are to each other */
+.mod-app-bar .task .go {
+    margin-left: -12px;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 16px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: #b8322d;
+    cursor: pointer;
+}
+
+.mod-app-bar .task .go:active {
+    background: #9e2a26;
+}
+
 /* the way back from the viewed plugin's settings */
 .mod-app-bar > .dialog {
     max-width: 640px;
@@ -5031,3 +5065,374 @@ body.app-bar-mode .mod-cv-input.input-connecting:not(.input-connected)::before {
     to { transform: scale(3); opacity: 1; }
 }
 
+
+/* A dialog with the app bar, see .mod-sheet-popup in index.html: dark as the plugin
+   settings and the connect pane, a card in the middle of the screen, rising from the
+   bottom on a small one held upright, see small-screen in js/appbar.js. Its title on
+   top with the way out, its actions at the bottom, where the dock was before it went
+   away, see js/appbar.js, and what is between scrolls. Its parts are sized for a
+   finger however wide the page is laid out, see --touch-zoom in js/appbar.js, each on
+   its own: the card itself is not zoomed, so that it is placed and fits in the
+   screen's own size */
+body.app-bar-mode .save-popup.mod-sheet-popup {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet {
+    left: 50%;
+    top: 50%;
+    width: calc(480px * var(--touch-zoom, 1));
+    max-width: calc(100% - 32px);
+    max-height: calc(100% - 48px);
+    margin: 0;
+    padding: 0;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: calc(16px * var(--touch-zoom, 1));
+    background: rgba(22, 22, 22, 0.97);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 16px;
+    text-align: left;
+}
+
+@media (orientation: portrait) {
+    body.app-bar-mode.small-screen .mod-sheet-popup .mod-sheet {
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        width: auto;
+        max-width: none;
+        transform: none;
+        border-bottom: none;
+        border-radius: calc(20px * var(--touch-zoom, 1)) calc(20px * var(--touch-zoom, 1)) 0 0;
+    }
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet > * {
+    zoom: var(--touch-zoom, 1);
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 0 8px 0 20px;
+    border-bottom: 1px solid #333;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet h1 {
+    flex: 1;
+    margin: 0;
+    overflow: hidden;
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: normal;
+    text-transform: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* how many there are, after the title */
+body.app-bar-mode .mod-sheet-popup .mod-sheet header .count {
+    padding: 0 8px;
+    border: 1px solid #4a2d50;
+    border-radius: 10px;
+    color: #c79bd0;
+    font-size: 13px;
+    line-height: 22px;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet header .count:empty {
+    display: none;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet header .close {
+    float: none;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    color: #bbb;
+    font-size: 30px;
+    font-weight: normal;
+    line-height: 42px;
+    text-align: center;
+    text-shadow: none;
+    opacity: 1;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet header .close:active {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 16px;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .hint {
+    margin: 8px 4px 0;
+    color: #999;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .actions {
+    flex: none;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+    padding: 12px 16px;
+    border-top: 1px solid #333;
+    background: rgba(17, 17, 17, 0.6);
+    text-align: left;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn {
+    min-width: 96px;
+    height: 48px;
+    padding: 0 18px;
+    border: 1px solid #444;
+    border-radius: 12px;
+    background: #2c2c2c;
+    color: #fff;
+    font-size: 16px;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn:active {
+    background: #3a3a3a;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn-primary {
+    border-color: #883996;
+    background: #883996;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn-primary:active {
+    background: #9c4aab;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn-danger {
+    border-color: #5a2a2a;
+    background: #2a1c1c;
+    color: #ff8a86;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn.disabled {
+    opacity: 0.35;
+}
+
+/* on a narrow screen, the actions share the whole width */
+@media (orientation: portrait) {
+    body.app-bar-mode.small-screen .mod-sheet-popup .mod-sheet .actions .btn {
+        flex: 1;
+    }
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet input[type=text],
+body.app-bar-mode .mod-sheet-popup .mod-sheet input[type=search] {
+    width: 100%;
+    height: 44px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    background: #1c1c1c;
+    color: #fff;
+    font: inherit;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+body.app-bar-mode .mod-sheet-popup .mod-sheet input:focus {
+    outline: none;
+    border-color: #883996;
+}
+
+/* The snapshots, see js/snapshot.js: a row each, numbered, the loaded one's number on
+   purple, its pencil at the end. Under each row its Delete, which the row uncovers
+   swiped to the left */
+body.app-bar-mode #pedal-presets-window .filter {
+    margin-bottom: 10px;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot-list {
+    overflow: hidden;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot-list > * + * {
+    border-top: 1px solid #353535;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot-item {
+    position: relative;
+    overflow: hidden;
+}
+
+/* the whole row wide, for when it is swiped past it, its word in the last 96px */
+body.app-bar-mode #pedal-presets-window .snapshot-item .delete {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding: 0 0 0 calc(100% - 96px);
+    border: none;
+    background: #b8322d;
+    color: #fff;
+    font-size: 16px;
+    text-align: center;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot-item .delete.disabled {
+    background: #5a3a3a;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 6px 6px 6px 14px;
+    box-sizing: border-box;
+    background: #2a2a2a;
+    cursor: pointer;
+    /* sideways the row follows the finger, up and down the list scrolls */
+    touch-action: pan-y;
+    transition: transform 0.2s ease, background-color 0.1s;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot.dragging {
+    transition: none;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot-item.swiped .snapshot {
+    transform: translateX(-96px);
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot:not(.dragging):active {
+    background-color: #4a3150;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .number {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    box-sizing: border-box;
+    background: #1c1c1c;
+    color: #bbb;
+    font-size: 14px;
+    line-height: 30px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot-item.current .number {
+    border-color: #883996;
+    background: #883996;
+    color: #fff;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .text {
+    flex: 1;
+    min-width: 0;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .sub {
+    display: block;
+    color: #c79bd0;
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .text input {
+    height: 38px;
+    margin-right: 8px;
+    border-color: #883996;
+    border-radius: 8px;
+}
+
+/* a grey pencil, quiet as the connect pane's x */
+body.app-bar-mode #pedal-presets-window .snapshot .rename {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 22px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19 9l-4-4L4 16z'/%3E%3Cpath d='M13.5 6.5l4 4' stroke-linecap='round'/%3E%3C/svg%3E") center / 22px no-repeat;
+}
+
+/* with a mouse rather than a finger, rather than a swipe: a grey bin */
+body.app-bar-mode #pedal-presets-window .snapshot .ask-delete {
+    display: none;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin-left: -6px;
+    padding: 0;
+    border: none;
+    border-radius: 22px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5'/%3E%3C/svg%3E") center / 22px no-repeat;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    body.app-bar-mode #pedal-presets-window .snapshot .ask-delete {
+        display: block;
+    }
+
+    body.app-bar-mode #pedal-presets-window .snapshot .rename:hover,
+    body.app-bar-mode #pedal-presets-window .snapshot .ask-delete:hover {
+        background-color: rgba(255, 255, 255, 0.08);
+    }
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .ask-delete:hover {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff8a86' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5'/%3E%3C/svg%3E");
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .rename:active,
+body.app-bar-mode #pedal-presets-window .snapshot .ask-delete:active {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+body.app-bar-mode #pedal-presets-window .snapshot .rename.disabled,
+body.app-bar-mode #pedal-presets-window .snapshot .ask-delete.disabled {
+    opacity: 0.35;
+}
+
+body.app-bar-mode #pedal-presets-window .empty {
+    padding: 22px 12px;
+    color: #999;
+    font-size: 14px;
+    text-align: center;
+}

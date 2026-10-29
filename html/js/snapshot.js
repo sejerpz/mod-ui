@@ -1,137 +1,221 @@
 // SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// From how many snapshots the list has a field to find one by its name
+var SNAPSHOTS_FILTER_MIN = 8
+// How far a row moves before it is a swipe rather than a tap, and how far it opens to
+// show its Delete, as wide as in dashboard.css, in px
+var SNAPSHOTS_SWIPE_START = 8
+var SNAPSHOTS_DELETE_WIDTH = 96
+// A mouse rather than a finger, as in dashboard.css
+var MOUSE_FIRST = '(hover: hover) and (pointer: fine)'
+
+// The pedalboard's snapshots: a row each, a tap loads it. Its pencil renames it in its
+// row. Swiped to the left by a finger it shows Delete under it, which deletes it when
+// tapped; with a mouse, see MOUSE_FIRST, its bin after the pencil asks first, in the
+// dock
 function SnapshotsManager(options) {
     var self = this;
 
     options = $.extend({
         pedalPresetsWindow: $('<div>'),
         pedalPresetsList: $('<div>'),
-        pedalPresetsOverlay: $('<div>'),
         renamedCallback: function (name) {},
+        saveAsCallback: function () {},
+        // asks whether to go on, `what` as for the dock's tasks, see confirm in appbar.js
+        confirm: function (what, onGo) {
+            var bar = $('.mod-app-bar')
+            if (bar.length) {
+                bar.appBar('confirm', what, onGo)
+            } else if (window.confirm(what.title)) {
+                onGo()
+            }
+        },
         hardwareManager: null,
-        canFeedback: true,
-        currentlyAddressed: false,
-        editingElem: null,
-        presetCount: 0,
     }, options)
 
+    var win = options.pedalPresetsWindow
+    var list = options.pedalPresetsList
+    var filter = win.find('.js-filter')
+
+    // names by id, as /snapshot/list gives them
+    var presets = {}
+    var currentId = -1
+    // the snapshot swiped open, showing its Delete, and the one being renamed
+    var swipedId = -1
+    var renamingId = -1
+    // the snapshots addressed to an actuator, which may not give the loaded one back
+    var addressed = false
+    var canFeedback = true
+
     $('body').keydown(function (e) {
-        if (e.keyCode == 27) { // esc
-            self.hideRenameOverlay()
-            options.pedalPresetsWindow.hide()
+        if (e.keyCode == 27 && win.is(':visible')) { // esc
+            self.close()
         }
     })
 
-    options.pedalPresetsOverlay
-    .hide()
-    .blur(self.pedalPresetRenamed)
-    .keydown(function (e) {
-        if (e.keyCode == 27) { // esc
-            return self.hideRenameOverlay()
+    win.find('.js-cancel').click(function () {
+        self.close()
+        return false
+    })
+
+    filter.on('input', function () {
+        swipedId = -1
+        self.render()
+    })
+
+    // A finger on a row: moving sideways first it drags the row, which
+    // stays open over its Delete when let go past half of it, and closes otherwise.
+    // Moving up or down first it scrolls the list, see touch-action in dashboard.css
+    var drag = null
+    list.on('pointerdown', '.snapshot', function (e) {
+        // jQuery 1.9 leaves out what is a pointer's own
+        var p = e.originalEvent
+        if (p.pointerType == 'mouse' || renamingId >= 0 ||
+            $(e.target).closest('input, .js-rename, .js-ask-delete').length) {
+            return
+        }
+        var row = $(this)
+        drag = {
+            row: row,
+            // the finger moves in the page's px, the row in the dialog's, see --touch-zoom
+            zoom: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch-zoom')) || 1,
+            id: row.closest('.snapshot-item').data('id'),
+            pointerId: p.pointerId,
+            x: p.clientX,
+            y: p.clientY,
+            from: row.closest('.snapshot-item').hasClass('swiped') ? -SNAPSHOTS_DELETE_WIDTH : 0,
+            swiping: false,
+            moved: false,
+        }
+    })
+
+    list.on('pointermove', '.snapshot', function (e) {
+        var p = e.originalEvent
+        if (!drag || p.pointerId != drag.pointerId) {
+            return
+        }
+        var dx = (p.clientX - drag.x) / drag.zoom
+        var dy = (p.clientY - drag.y) / drag.zoom
+
+        if (!drag.swiping) {
+            if (Math.abs(dy) > SNAPSHOTS_SWIPE_START && Math.abs(dy) > Math.abs(dx)) {
+                drag = null
+                return
+            }
+            if (Math.abs(dx) < SNAPSHOTS_SWIPE_START) {
+                return
+            }
+            drag.swiping = drag.moved = true
+            this.setPointerCapture(p.pointerId)
+            drag.row.addClass('dragging')
+            // only one open at a time
+            if (swipedId >= 0 && swipedId != drag.id) {
+                self.unswipe()
+            }
+        }
+
+        var width = SNAPSHOTS_DELETE_WIDTH
+        var x = Math.min(0, drag.from + dx)
+        // past its Delete, the row follows less and less
+        if (x < -width) {
+            x = -width - Math.sqrt(-width - x) * 4
+        }
+        drag.row.css('transform', 'translateX(' + x + 'px)')
+    })
+
+    list.on('pointerup pointercancel', '.snapshot', function (e) {
+        var p = e.originalEvent
+        if (!drag || p.pointerId != drag.pointerId) {
+            return
+        }
+        var d = drag
+        drag = null
+        if (!d.swiping) {
+            return
+        }
+        // the click this ends with is not a tap on the row
+        list.data('swiped', true)
+        setTimeout(function () { list.removeData('swiped') }, 0)
+
+        d.row.removeClass('dragging').css('transform', '')
+        var width = SNAPSHOTS_DELETE_WIDTH
+        var x = d.from + (p.clientX - d.x) / d.zoom
+        self.unswipe()
+        if (e.type == 'pointerup' && x < -width / 2) {
+            swipedId = d.id
+            d.row.closest('.snapshot-item').addClass('swiped')
+        }
+    })
+
+    list.on('click', '.snapshot', function (e) {
+        if (list.data('swiped') || $(e.target).closest('input, .js-rename, .js-ask-delete').length) {
+            return
+        }
+        // a tap anywhere closes the one open first
+        if (swipedId >= 0) {
+            self.unswipe()
+            return
+        }
+        var id = $(this).closest('.snapshot-item').data('id')
+        if (id != currentId) {
+            self.loadPreset(id, e)
+        }
+    })
+
+    list.on('click', '.js-rename', function (e) {
+        if (addressed) {
+            return self.prevent(e)
+        }
+        swipedId = -1
+        renamingId = $(this).closest('.snapshot-item').data('id')
+        self.render()
+        list.find('.snapshot input').focus().select()
+        return false
+    })
+
+    list.on('keydown', '.snapshot input', function (e) {
+        if (e.keyCode == 27) { // esc, the rename only
+            renamingId = -1
+            self.render()
+            return false
         }
         if (e.keyCode == 13) { // enter
-            return self.pedalPresetRenamed()
-        }
-        return true
-    })
-
-    options.pedalPresetsWindow.keyup(function (e) {
-        if (e.keyCode == 38 || e.keyCode == 40) { // up and down the list
-            options.pedalPresetsList.find('option:selected').click()
+            self.renamed($(this).val())
             return false
         }
-        return true
     })
 
-    options.pedalPresetsWindow.find('.js-cancel').click(function () {
-        self.hideRenameOverlay()
-        options.pedalPresetsWindow.hide()
+    // also when the field is gone, as render() takes it out
+    list.on('blur', '.snapshot input', function () {
+        self.renamed($(this).val())
+    })
+
+    list.on('click', '.js-delete', function (e) {
+        if (self.preventDelete(e)) {
+            return false
+        }
+        self.remove($(this).closest('.snapshot-item').data('id'))
         return false
     })
 
-    options.pedalPresetsWindow.find('.js-rename').click(function (e) {
-        if (options.currentlyAddressed) {
-            return self.prevent(e)
-        }
-        if (options.editingElem != null) {
-            console.log("Note: rename click ignored")
+    list.on('click', '.js-ask-delete', function (e) {
+        if (self.preventDelete(e)) {
             return false
         }
-
-        var selected = options.editingElem = options.pedalPresetsList.find('option:selected')
-        var selectedHtml = selected.html()
-        var name = selectedHtml.substring(selectedHtml.indexOf(".") + 1);
-
-        options.pedalPresetsOverlay.css({
-            position: "absolute",
-            width: selected.width()+2,
-            height: selected.height()+2,
-            top: selected.position().top,
-            left: selected.position().left
-        }).prop("value", name).show().focus()
-
-        return false
-    })
-
-    options.pedalPresetsWindow.find('.js-delete').click(function (e) {
-        self.hideRenameOverlay()
-
-        var selected = options.pedalPresetsList.find('option:selected')
-        var selectId = selected.val()
-
-        if (options.presetCount <= 1) {
-            return self.prevent(e, "Cannot delete last remaining snapshot")
-        } else if (options.currentlyAddressed) {
-            return self.prevent(e)
-        }
-
-        $.ajax({
-            url: '/snapshot/remove',
-            type: 'GET',
-            data: {
-                id: selectId,
-            },
-            success: function () {
-                selected.remove()
-                options.renamedCallback()
-                options.pedalPresetsWindow.find('.js-delete').addClass('disabled')
-
-                options.presetCount -= 1
-                if (options.presetCount <= 1) {
-                    options.pedalPresetsWindow.find('.js-assign-all').addClass('disabled')
-                }
-
-                // Replace options value and text so we get a sequential list 1, 2, 3, etc.
-                var i = 0
-                options.pedalPresetsList.children().each(function(option) {
-                  var optionHtml = $(this).html()
-                  var prtitle = optionHtml.substring(optionHtml.indexOf(".") + 1)
-                  $(this).html((i+1) + "." + prtitle)
-                  $(this).val(i)
-                  i++
-                })
-            },
-            error: function () {
-                new Notification('error', "Failed to delete snapshot", 5000)
-            },
-            cache: false,
+        var id = $(this).closest('.snapshot-item').data('id')
+        options.confirm({
+            title: 'Delete snapshot?',
+            label: 'Snapshot ' + (id + 1),
+            port: presets[id],
+            go: 'Delete',
+        }, function () {
+            self.remove(id)
         })
-
         return false
     })
 
-    options.pedalPresetsWindow.find('.js-assign').click(function () {
-        self.hideRenameOverlay()
-
-        // TODO
-        console.log(this)
-        return false
-    })
-
-    options.pedalPresetsWindow.find('.js-assign-all').click(function (e) {
-        self.hideRenameOverlay()
-
+    win.find('.js-assign-all').click(function (e) {
         if ($(this).hasClass("disabled")) {
             return self.prevent(e, "Cannot assign list with only 1 snapshot")
         }
@@ -151,61 +235,160 @@ function SnapshotsManager(options) {
             format: null,
             scalePoints: [],
         }
+        self.close()
         options.hardwareManager.open("/pedalboard", port, "Pedalboard")
-        options.pedalPresetsWindow.hide()
         return false
     })
 
-    this.start = function (currentId, currentlyAddressed, canFeedback) {
-        // clear old entries
-        options.pedalPresetsList.find('option').remove()
+    win.find('.js-save-as').click(function () {
+        self.close()
+        options.saveAsCallback()
+        return false
+    })
 
-        // save state
-        options.canFeedback = canFeedback
-        options.currentlyAddressed = currentlyAddressed
+    this.start = function (presetId, currentlyAddressed, feedback) {
+        addressed = currentlyAddressed
+        canFeedback = feedback
 
-        self.getPedalPresetList(function (presets) {
-            options.presetCount = Object.keys(presets).length
-
-            if (options.presetCount == 0) {
+        self.getPedalPresetList(function (resp) {
+            if (Object.keys(resp).length == 0) {
                 return new Notification("error", "No pedalboard snapshots available")
             }
 
-            if (options.presetCount <= 1) {
-                options.pedalPresetsWindow.find('.js-assign-all').addClass('disabled')
-            } else {
-                options.pedalPresetsWindow.find('.js-assign-all').removeClass('disabled')
+            presets = resp
+            currentId = presetId
+            swipedId = renamingId = -1
+            filter.val('')
+            self.render()
+
+            win.show()
+            list.scrollTop(0)
+            var current = list.find('.snapshot-item.current')
+            if (current.length) {
+                current[0].scrollIntoView({ block: 'nearest' })
             }
-
-            if (options.currentlyAddressed) {
-                options.pedalPresetsWindow.find('.js-delete').addClass('disabled')
-                options.pedalPresetsWindow.find('.js-rename').addClass('disabled')
-            } else {
-                if (options.presetCount <= 1) {
-                    options.pedalPresetsWindow.find('.js-delete').addClass('disabled')
-                } else {
-                    options.pedalPresetsWindow.find('.js-delete').removeClass('disabled')
-                }
-                options.pedalPresetsWindow.find('.js-rename').removeClass('disabled')
-            }
-
-            // add new ones
-            for (var i in presets) {
-                var elem = $('<option value="'+i+'">'+(parseInt(i)+1)+"."+presets[i]+'</option>')
-
-                if (currentId == i && ! options.currentlyAddressed) {
-                    elem.prop('selected', 'selected')
-                }
-
-                elem.click(self.optionClicked)
-                elem.appendTo(options.pedalPresetsList)
-            }
-
-            options.pedalPresetsWindow.show()
-
-            options.pedalPresetsWindow.focus()
-            options.pedalPresetsWindow.find('.preset-list').focus()
         })
+    }
+
+    this.close = function () {
+        renamingId = -1
+        // nor is a delete asked about any longer, see confirm in appbar.js
+        $('.mod-app-bar.confirming .task .cancel').click()
+        win.hide()
+    }
+
+    // the snapshot loaded elsewhere, from the actuators or another window
+    this.setCurrent = function (id) {
+        if (id == currentId) {
+            return
+        }
+        currentId = id
+        if (win.is(':visible') && renamingId < 0 && !drag) {
+            self.render()
+        }
+    }
+
+    // whether a snapshot cannot be deleted, saying why
+    this.preventDelete = function (e) {
+        if (Object.keys(presets).length <= 1) {
+            return self.prevent(e, "Cannot delete last remaining snapshot")
+        }
+        if (addressed) {
+            return self.prevent(e)
+        }
+        return false
+    }
+
+    this.remove = function (id) {
+        $.ajax({
+            url: '/snapshot/remove',
+            type: 'GET',
+            data: {
+                id: id,
+            },
+            success: function () {
+                // the server numbers them again from 0, without the gap
+                var names = []
+                for (var i in presets) {
+                    if (i != id) {
+                        names.push(presets[i])
+                    }
+                }
+                presets = $.extend({}, names)
+
+                if (currentId == id) {
+                    currentId = -1
+                    options.renamedCallback()
+                } else if (currentId > id) {
+                    currentId -= 1
+                }
+                swipedId = -1
+                self.render()
+            },
+            error: function () {
+                new Notification('error', "Failed to delete snapshot", 5000)
+            },
+            cache: false,
+        })
+    }
+
+    this.unswipe = function () {
+        swipedId = -1
+        list.find('.snapshot-item.swiped').removeClass('swiped')
+    }
+
+    this.render = function () {
+        var count = Object.keys(presets).length
+        var query = filter.val().trim().toLowerCase()
+        var deletable = !addressed && count > 1
+
+        win.find('.js-count').text(count)
+        win.find('.hint').text(window.matchMedia(MOUSE_FIRST).matches
+                               ? 'Click a snapshot to load it.'
+                               : 'Tap a snapshot to load it, swipe it to the left to delete it.')
+        win.find('.js-assign-all').toggleClass('disabled', count <= 1)
+        filter.toggle(count >= SNAPSHOTS_FILTER_MIN)
+
+        list.empty()
+        for (var i in presets) {
+            var id = parseInt(i)
+            var name = presets[i]
+
+            if (query && id != renamingId && name.toLowerCase().indexOf(query) < 0) {
+                continue
+            }
+
+            var item = $('<div class="snapshot-item">').data('id', id)
+                .toggleClass('current', id == currentId)
+                .toggleClass('swiped', id == swipedId)
+                .appendTo(list)
+            $('<button class="js-delete delete">').text('Delete')
+                .toggleClass('disabled', !deletable)
+                .appendTo(item)
+
+            var row = $('<div class="snapshot">').appendTo(item)
+                .append($('<span class="number">').text(id + 1))
+            var text = $('<div class="text">').appendTo(row)
+
+            if (id == renamingId) {
+                $('<input type="text" autocomplete="off">').val(name).appendTo(text)
+            } else {
+                $('<span class="name">').text(name).appendTo(text)
+                if (id == currentId) {
+                    $('<span class="sub">').text('Loaded').appendTo(text)
+                }
+                $('<button class="js-rename rename" title="Rename">')
+                    .toggleClass('disabled', addressed)
+                    .appendTo(row)
+                $('<button class="js-ask-delete ask-delete" title="Delete">')
+                    .toggleClass('disabled', !deletable)
+                    .appendTo(row)
+            }
+        }
+
+        if (list.is(':empty')) {
+            $('<div class="empty">').text('No snapshot matches “' + filter.val() + '”').appendTo(list)
+        }
     }
 
     this.prevent = function (e, customMessage) {
@@ -227,7 +410,13 @@ function SnapshotsManager(options) {
     /*
      * Load a snapshot on the mod
      */
-    this.loadPreset = function(presetId, presetName) {
+    this.loadPreset = function (presetId, e) {
+        if (addressed && !canFeedback) {
+            return self.prevent(e)
+        }
+
+        var presetName = presets[presetId]
+
         $.ajax({
             url: '/snapshot/load',
             type: 'GET',
@@ -235,6 +424,7 @@ function SnapshotsManager(options) {
                 id: presetId,
             },
             success: function () {
+                self.setCurrent(presetId)
                 new Notification("info", "Snapshot " + presetName + " loaded", 2000)
             },
             error: function () {
@@ -244,60 +434,34 @@ function SnapshotsManager(options) {
         })
     }
 
-    this.optionClicked = function (e) {
-        self.hideRenameOverlay()
-
-        var selectId = $(this).val()
-
-        var selectedHtml = $(this).html()
-        var prtitle = selectedHtml.substring(selectedHtml.indexOf(".") + 1)
-
-        if (options.currentlyAddressed) {
-            if (!options.canFeedback) {
-                options.pedalPresetsList.find('option:selected').removeProp('selected')
-                return self.prevent(e)
-            }
-        } else if (options.presetCount > 1) {
-            options.pedalPresetsWindow.find('.js-delete').removeClass('disabled')
+    this.renamed = function (text) {
+        var id = renamingId
+        if (id < 0) {
+            return
         }
+        renamingId = -1
+        text = text.trim()
 
-        self.loadPreset(selectId, prtitle)
-    }
-
-    this.hideRenameOverlay = function () {
-        options.editingElem = null
-        options.pedalPresetsOverlay.prop("value","").hide()
-        return false
-    }
-
-    this.pedalPresetRenamed = function () {
-        if (options.editingElem == null) {
-            console.log("FIXME: bad state reached")
-            return false
-        }
-
-        var text = options.pedalPresetsOverlay.hide().val()
-        var elem = options.editingElem
-        var prId = elem.val()
-        options.editingElem = null
-
-        if (text == "") {
-            return false
+        if (text == "" || text == presets[id]) {
+            return self.render()
         }
 
         $.ajax({
             url: '/snapshot/rename',
             type: 'GET',
             data: {
-                id   : prId,
+                id   : id,
                 title: text,
             },
             success: function (resp) {
                 if (!resp.ok) {
                     return
                 }
-                elem.html((parseInt(prId)+1) + "." + resp.title)
-                options.renamedCallback(resp.title)
+                presets[id] = resp.title
+                if (id == currentId) {
+                    options.renamedCallback(resp.title)
+                }
+                self.render()
             },
             error: function () {
                 new Notification('error', "Failed to rename snapshot", 5000)
@@ -305,7 +469,7 @@ function SnapshotsManager(options) {
             cache: false,
         })
 
-        return false
+        self.render()
     }
 
     this.getPedalPresetList = function (callback) {
