@@ -100,6 +100,8 @@ var PLACEMENT_ICON_SCALE = 0.68
 // How much of a cell grid mode's zoom leaves past the cells in use, to the right and
 // below: room to grow the board into, without a whole empty row and column
 var PLACEMENT_SPARE = 0.3
+// How much of a cell grid mode's pan is dragged to go on to the next cell, see snapToCells
+var PLACEMENT_SNAP = 0.2
 // The box the plugin waiting to be placed is drawn in, in the dock, see showPlacementGrid
 var PLACEMENT_PREVIEW = { width: 64, height: 40 }
 
@@ -1570,13 +1572,18 @@ JqueryClass('pedalboard', {
                 'transform-origin': '0 0'
             })
         }
+        // The zoom of the one or of the other, see adapt, fitted to where the plugins are
+        // going while they are there, and zoomed to as they glide: one move, not the
+        // plugins' and then the board's
+        self.addClass('mod-grid-switching')
+        self.data('gridFit', null)
+        self.pedalboard('adapt', false)
         $.each(moves, function (i, move) {
             place(move, 0)
         })
-        self.addClass('mod-grid-switching')
         self.data('gridSwitching', true)
         $({ t: 0 }).animate({ t: 1 }, {
-            duration: 500,
+            duration: 400,
             easing: 'swing',
             step: function (t) {
                 $.each(moves, function (i, move) {
@@ -1593,9 +1600,6 @@ JqueryClass('pedalboard', {
                 })
                 self.removeClass('mod-grid-switching')
                 self.data('gridSwitching', false)
-                // the zoom of the one or of the other, see adapt
-                self.data('gridFit', null)
-                self.pedalboard('adapt', false)
             }
         })
         self.trigger('gridmode', grid)
@@ -2512,10 +2516,13 @@ JqueryClass('pedalboard', {
         var screenX = start.pageX - self.parent().offset().left
         var screenY = start.pageY - self.parent().offset().top
 
+        // whether it was a pan at all, not a tap
+        var moved = false
         var moveHandler = function (e) {
             if (self.data('preventDrag'))
                 return
 
+            moved = true
             self.data('lastPanMove', Date.now())
             self.pedalboard('zoom', scale, canvasX, canvasY,
                 screenX + e.pageX - start.pageX,
@@ -2526,10 +2533,44 @@ JqueryClass('pedalboard', {
         var upHandler = function (e) {
             $(document).unbind('mouseup', upHandler)
             $(document).unbind('mousemove', moveHandler)
+            if (moved) {
+                self.pedalboard('snapToCells', (start.pageX - e.pageX) / scale, (start.pageY - e.pageY) / scale)
+            }
         }
 
         $(document).bind('mousemove', moveHandler)
         $(document).bind('mouseup', upHandler)
+    },
+
+    // Grid mode's pan goes a cell at a time: let go, the view slides so that a cell's
+    // edge is at its top left. Past a cell's edge by PLACEMENT_SNAP of a cell, along the
+    // way it was dragged, (dx, dy) on the canvas, it goes on to the next one, else back
+    // to that edge. Not in the plugin view, which is centered on its plugin, nor where
+    // the canvas ends first, see zoom
+    snapToCells: function (dx, dy) {
+        var self = $(this)
+        if (! self.pedalboard('gridMode') || self.data('pluginView')) {
+            return
+        }
+        var snap = function (at, moved, size) {
+            var cells = at / size
+            if (moved > 0) {
+                cells = Math.floor(cells) + (cells - Math.floor(cells) >= PLACEMENT_SNAP ? 1 : 0)
+            } else if (moved < 0) {
+                cells = Math.ceil(cells) - (Math.ceil(cells) - cells >= PLACEMENT_SNAP ? 1 : 0)
+            } else {
+                cells = Math.round(cells)
+            }
+            return Math.max(0, cells) * size
+        }
+        var scale = self.data('scale')
+        // the canvas point at the screen's top left, as zoom places it
+        var left = -(self.data('offsetX') - self.width() * (scale - 1) / 2) / scale
+        var top = -(self.data('offsetY') - self.height() * (scale - 1) / 2) / scale
+        self.pedalboard('zoom', scale,
+                        snap(left, dx || 0, PLACEMENT_CELL.width),
+                        snap(top, dy || 0, PLACEMENT_CELL.height),
+                        0, 0, 200)
     },
 
     // Changes the viewing scale of the pedalboard and position it in a way that

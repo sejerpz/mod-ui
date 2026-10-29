@@ -843,10 +843,17 @@ JqueryClass('appBar', {
         // By the title, at the top right: grid mode on or off, see desktop's setGridMode,
         // which lays the board out again, and the board's zoom out and in, see-through
         // over it. Where grid mode cannot be turned off, on a touch screen, it only says it
-        // is on, and there is no zoom to press: the fingers pinch it
+        // is on. The zoom is there for a mouse only, see MOUSE_FIRST in snapshot.js: the
+        // fingers pinch it. Asked again whenever that changes, as when the browser's
+        // tools emulate a phone and then stop
         var titleTools = $('<div class="mod-title-tools">').insertAfter('#pedalboard-info')
         var gridLocked = options.gridModeLocked()
-        titleTools.toggleClass('touch', gridLocked)
+        var mouseFirst = window.matchMedia(MOUSE_FIRST)
+        var showZoom = function () {
+            titleTools.toggleClass('touch', ! mouseFirst.matches)
+        }
+        showZoom()
+        mouseFirst.addListener(showZoom)
         var gridToggle = $('<span class="grid-toggle">')
             .append('<i class="icon-th-large">')
             .toggleClass('locked', gridLocked)
