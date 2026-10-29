@@ -4922,15 +4922,13 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
     }
 }
 
-/* the viewed plugin's info, or one from the library: the dock has the way back, see
+/* a plugin's info, wherever it was opened from: the dock has the way back, see
    js/appbar.js, and the end of the info scrolls up from under it */
-body.app-bar-mode.plugin-view .plugin-info span.js-close,
-body.app-bar-mode.library-open .plugin-info span.js-close {
+body.app-bar-mode .plugin-info span.js-close {
     display: none;
 }
 
-body.app-bar-mode.plugin-view .plugin-info .box,
-body.app-bar-mode.library-open .plugin-info .box {
+body.app-bar-mode .plugin-info .box {
     margin-bottom: calc(96px * var(--touch-zoom, 1));
 }
 

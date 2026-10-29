@@ -102,6 +102,9 @@ var PLACEMENT_ICON_SCALE = 0.68
 var PLACEMENT_SPARE = 0.3
 // How much of a cell grid mode's pan is dragged to go on to the next cell, see snapToCells
 var PLACEMENT_SNAP = 0.2
+// A pan let go within this many ms, this many screen px away, is a swipe, see swipeCell
+var SWIPE_TIME = 250
+var SWIPE_DISTANCE = 40
 // The box the plugin waiting to be placed is drawn in, in the dock, see showPlacementGrid
 var PLACEMENT_PREVIEW = { width: 64, height: 40 }
 
@@ -2516,6 +2519,10 @@ JqueryClass('pedalboard', {
         var screenX = start.pageX - self.parent().offset().left
         var screenY = start.pageY - self.parent().offset().top
 
+        // the canvas point at the screen's top left, as zoom places it, for a swipe
+        var view = self.pedalboard('viewOrigin')
+        var startTime = Date.now()
+
         // whether it was a pan at all, not a tap
         var moved = false
         var moveHandler = function (e) {
@@ -2533,9 +2540,15 @@ JqueryClass('pedalboard', {
         var upHandler = function (e) {
             $(document).unbind('mouseup', upHandler)
             $(document).unbind('mousemove', moveHandler)
-            if (moved) {
-                self.pedalboard('snapToCells', (start.pageX - e.pageX) / scale, (start.pageY - e.pageY) / scale)
+            if (! moved) {
+                return
             }
+            var dx = start.pageX - e.pageX, dy = start.pageY - e.pageY
+            if (Date.now() - startTime < SWIPE_TIME && Math.max(Math.abs(dx), Math.abs(dy)) > SWIPE_DISTANCE &&
+                self.pedalboard('swipeCell', view, dx, dy)) {
+                return
+            }
+            self.pedalboard('snapToCells', dx / scale, dy / scale)
         }
 
         $(document).bind('mousemove', moveHandler)
@@ -2563,14 +2576,40 @@ JqueryClass('pedalboard', {
             }
             return Math.max(0, cells) * size
         }
-        var scale = self.data('scale')
-        // the canvas point at the screen's top left, as zoom places it
-        var left = -(self.data('offsetX') - self.width() * (scale - 1) / 2) / scale
-        var top = -(self.data('offsetY') - self.height() * (scale - 1) / 2) / scale
-        self.pedalboard('zoom', scale,
-                        snap(left, dx || 0, PLACEMENT_CELL.width),
-                        snap(top, dy || 0, PLACEMENT_CELL.height),
+        var view = self.pedalboard('viewOrigin')
+        self.pedalboard('zoom', self.data('scale'),
+                        snap(view.x, dx || 0, PLACEMENT_CELL.width),
+                        snap(view.y, dy || 0, PLACEMENT_CELL.height),
                         0, 0, 200)
+    },
+
+    // The canvas point at the screen's top left, as zoom places it
+    viewOrigin: function () {
+        var self = $(this)
+        var scale = self.data('scale')
+        return {
+            x: -(self.data('offsetX') - self.width() * (scale - 1) / 2) / scale,
+            y: -(self.data('offsetY') - self.height() * (scale - 1) / 2) / scale
+        }
+    },
+
+    // A quick swipe in grid mode goes one cell along it, the way it mostly went, from
+    // the cell edge nearest to `from`, the view where it started. Whether it did: not
+    // in the plugin view, nor outside grid mode
+    swipeCell: function (from, dx, dy) {
+        var self = $(this)
+        if (! self.pedalboard('gridMode') || self.data('pluginView')) {
+            return false
+        }
+        var col = Math.round(from.x / PLACEMENT_CELL.width)
+        var row = Math.round(from.y / PLACEMENT_CELL.height)
+        if (Math.abs(dx) > Math.abs(dy)) {
+            col = Math.max(0, col + (dx > 0 ? 1 : -1))
+        } else {
+            row = Math.max(0, row + (dy > 0 ? 1 : -1))
+        }
+        self.pedalboard('zoom', self.data('scale'), col * PLACEMENT_CELL.width, row * PLACEMENT_CELL.height, 0, 0, 250)
+        return true
     },
 
     // Changes the viewing scale of the pedalboard and position it in a way that

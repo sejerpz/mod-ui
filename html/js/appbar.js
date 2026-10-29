@@ -44,15 +44,30 @@ JqueryClass('appBar', {
             }
             // what undoes that for what is sized for a finger, as the dock and the plugin
             // settings: its zoom, see dashboard.css
-            document.documentElement.style.setProperty('--touch-zoom', across >= 980 ? 1 : 980 / across)
-            // Across a screen too narrow for the whole dock at that size, it is compact,
+            var zoom = across >= 980 ? 1 : 980 / across
+            document.documentElement.style.setProperty('--touch-zoom', zoom)
+            // How much room there is, in what is sized for a finger: the screen's on a
+            // phone or a tablet, laid out 980 wide whatever it is, the window's where it
+            // is narrower, as a desktop's made narrow. The same three ways as the screen
+            // is for each, phone, tablet or desktop, again as the window is resized
+            var page = document.documentElement
+            // a hidden window's of no size either, as the screen's above
+            var room = Math.min(across, page.clientWidth / zoom || across)
+            // Across too little room for the whole dock at that size, it is compact,
             // see dashboard.css: what has a name has an icon instead, Edit and Live are
             // one button to the other, and the CPU meter is in the menu
-            self.toggleClass('compact', across < 760)
+            self.toggleClass('compact', room < 760)
             // Across a wide window, as a desktop's, it has room to spare: some of the
             // menu's places as buttons of their own, the whole A/B comparer and the CPU
             // and RAM with their figures
-            self.toggleClass('wide', across >= 980 && window.innerWidth >= 1440)
+            self.toggleClass('wide', room >= 1440)
+            // A small screen, or window, by its short side under 600, for what does not
+            // fit one, as the dialogs rising from the bottom. A screen of no known size
+            // is not one
+            var side = Math.min(screen.width, screen.height) || Infinity
+            side = Math.min(side, room, page.clientHeight / zoom || Infinity)
+            $('body').toggleClass('small-screen', side < 600)
+            self.trigger('fitviewport')
         }
         fitViewport()
         // The browser's own events, not jQuery's: with jquery.ba-resize a resize bound
@@ -60,11 +75,6 @@ JqueryClass('appBar', {
         // it watches, every 250ms whether anything changed or not
         window.addEventListener('orientationchange', fitViewport)
         window.addEventListener('resize', fitViewport)
-
-        // A small screen, by its short side under 600, which the page's 980 wide layout
-        // does not change, for what does not fit one. A screen of no known size is not
-        var side = Math.min(screen.width, screen.height)
-        $('body').toggleClass('small-screen', side > 0 && side < 600)
 
         // A button opening a menu upwards. `sections` are lists of [label, element]
         // pairs, the element being clicked when its label is, each list under its title
@@ -806,8 +816,9 @@ JqueryClass('appBar', {
                 compareHome = settings.find('.mod-toolbar')
                 compare.append(compareHome.children('.mod-ab-toggle'))
                 setState('dialog', true)
-            } else if ((viewed || $('body').hasClass('library-open')) && target.is('.plugin-info')) {
-                // Back closes it onto the library it came from, still open under it
+            } else if (target.is('.plugin-info')) {
+                // Back closes it onto what it came from, the board, the library or the
+                // store, still open under it
                 info = target
                 setState('dialog', true)
             } else if (viewed || settings && settings[0] == e.target) {
@@ -844,16 +855,18 @@ JqueryClass('appBar', {
         // which lays the board out again, and the board's zoom out and in, see-through
         // over it. Where grid mode cannot be turned off, on a touch screen, it only says it
         // is on. The zoom is there for a mouse only, see MOUSE_FIRST in snapshot.js: the
-        // fingers pinch it. Asked again whenever that changes, as when the browser's
-        // tools emulate a phone and then stop
+        // fingers pinch it. Nor where the dock is a phone's, compact, the wheel zooming
+        // there. Asked again whenever either changes, as when the browser's tools
+        // emulate a phone and then stop, or the window is made narrow
         var titleTools = $('<div class="mod-title-tools">').insertAfter('#pedalboard-info')
         var gridLocked = options.gridModeLocked()
         var mouseFirst = window.matchMedia(MOUSE_FIRST)
         var showZoom = function () {
-            titleTools.toggleClass('touch', ! mouseFirst.matches)
+            titleTools.toggleClass('touch', ! mouseFirst.matches || self.hasClass('compact'))
         }
         showZoom()
         mouseFirst.addListener(showZoom)
+        self.on('fitviewport', showZoom)
         var gridToggle = $('<span class="grid-toggle">')
             .append('<i class="icon-th-large">')
             .toggleClass('locked', gridLocked)
