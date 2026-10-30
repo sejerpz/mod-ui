@@ -250,6 +250,8 @@ function uis_post(url, fields, callback) {
         },
         error: function () {
             new Notification('error', 'Communication failure', 5000)
+            // the list shows what the unit has, not the choice that failed
+            refresh_uis()
         },
         cache: false,
         dataType: 'json'
@@ -830,6 +832,11 @@ $('document').ready(function() {
                                 .replace(/[-_]+$/, '')
             input.val(name).data('suggested', name)
         }
+    })
+
+    // Enter in the name would submit the form and reload the page; installing is the button's job
+    $("#uis-form").on("submit", function () {
+        return false
     })
 
     // a zip dropped anywhere on the section is chosen as if picked in the file input;

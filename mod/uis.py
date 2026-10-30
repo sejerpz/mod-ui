@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import zipfile
+import zlib
 from urllib.parse import urlparse
 
 NAME_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{0,31}$')
@@ -38,6 +39,16 @@ def install_zip(uis_dir, name, fileobj):
     Accepts a GitHub source archive (<repo>-<branch>/html/...) or the html/ contents directly."""
     check_name(name)
 
+    # the messages of zipfile and of the OS name files from the archive, and Settings shows the
+    # message as HTML, so they are not passed on
+    try:
+        _install_zip(uis_dir, name, fileobj)
+    except (zipfile.BadZipFile, RuntimeError, EOFError, zlib.error):
+        raise ValueError("Not a zip archive, or one that cannot be read (encrypted or damaged)")
+    except OSError as e:
+        raise ValueError("Could not write the files: %s" % (e.strerror or "unknown error"))
+
+def _install_zip(uis_dir, name, fileobj):
     with zipfile.ZipFile(fileobj) as zf:
         infos = zf.infolist()
 
@@ -66,6 +77,9 @@ def install_zip(uis_dir, name, fileobj):
 
         try:
             zf.extractall(tmp, members)
+            # on disk before it can be chosen, so a power cut after switching leaves no empty files
+            if hasattr(os, 'sync'):
+                os.sync()
             shutil.rmtree(old, True)
             if os.path.exists(dst):
                 os.rename(dst, old)

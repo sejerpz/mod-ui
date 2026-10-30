@@ -16,9 +16,9 @@ import urllib.parse
 import re
 import unicodedata
 import io
-import zipfile
 
 from base64 import b64decode, b64encode
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from random import randint
 from tornado import gen, iostream, web, websocket
@@ -1779,6 +1779,9 @@ class BankSave(JsonRequestHandler):
 # two UIs on one image, or two installs of one UI, must not share cached assets; in nanoseconds, as a unit
 # without network time restarts its clock at 1970 and two installs can fall on the same second after boot
 CUSTOM_UI_VERSION_SUFFIX = "-%s.%i" % (ACTIVE_UI, os.stat(HTML_DIR).st_mtime_ns) if ACTIVE_UI else ""
+# unpacking or deleting a whole UI takes seconds on a unit, so it runs off the IOLoop;
+# one at a time, as both replace folders by rename
+UIS_EXECUTOR = ThreadPoolExecutor(1)
 
 class UIsList(JsonRequestHandler):
     def get(self):
@@ -1794,6 +1797,7 @@ class UIsChangeHandler(JsonRequestHandler):
             raise web.HTTPError(403)
 
 class UIsInstall(UIsChangeHandler):
+    @gen.coroutine
     def post(self):
         name    = self.get_argument('name')
         archive = self.request.files.get('archive')
@@ -1803,8 +1807,8 @@ class UIsInstall(UIsChangeHandler):
             return
 
         try:
-            install_zip(UIS_DIR, name, io.BytesIO(archive[0]['body']))
-        except (ValueError, zipfile.BadZipFile) as e:
+            yield UIS_EXECUTOR.submit(install_zip, UIS_DIR, name, io.BytesIO(archive[0]['body']))
+        except ValueError as e:
             self.write({'ok': False, 'error': str(e)})
             return
 
@@ -1826,6 +1830,7 @@ class UIsActivate(UIsChangeHandler):
         IOLoop.instance().add_callback(restart_services, False, True)
 
 class UIsRemove(UIsChangeHandler):
+    @gen.coroutine
     def post(self):
         name = self.get_argument('name')
 
@@ -1834,7 +1839,7 @@ class UIsRemove(UIsChangeHandler):
             return
 
         try:
-            remove_ui(UIS_DIR, name)
+            yield UIS_EXECUTOR.submit(remove_ui, UIS_DIR, name)
         except ValueError as e:
             self.write({'ok': False, 'error': str(e)})
             return

@@ -85,6 +85,26 @@ class TestInstall(unittest.TestCase):
             uis.install_zip(self.uis_dir, 'evil', make_zip({'<img src=x onerror=alert(1)>/../index.html': ''}))
         self.assertNotIn('<', str(ctx.exception))
 
+    def test_unreadable_archives_are_refused_without_their_names(self):
+        # zipfile's own errors name the member
+        evil = '<img src=x onerror=alert(1)>'
+        data = make_zip({evil: 'payload', 'index.html': 'x'}).getvalue()
+        corrupt = data.replace(b'payload', b'pAyload')  # the CRC no longer matches
+        entry = data.index(b'PK\x01\x02')  # the first central directory entry, the evil one
+        encrypted = data[:entry + 8] + bytes([data[entry + 8] | 1]) + data[entry + 9:]
+        for archive in (b'not a zip', corrupt, encrypted):
+            with self.assertRaises(ValueError) as ctx:
+                uis.install_zip(self.uis_dir, 'evil', io.BytesIO(archive))
+            self.assertNotIn('<', str(ctx.exception))
+        self.assertEqual(uis.list_uis(self.uis_dir), [])
+
+    def test_write_errors_are_refused_without_their_paths(self):
+        error = OSError(28, 'No space left on device', '/data/uis/.tmp-evil/<img src=x onerror=alert(1)>')
+        with mock.patch.object(zipfile.ZipFile, 'extractall', side_effect=error):
+            with self.assertRaises(ValueError) as ctx:
+                uis.install_zip(self.uis_dir, 'evil', make_zip({'index.html': 'x'}))
+        self.assertNotIn('<', str(ctx.exception))
+
     @mock.patch.object(uis, 'MAX_BYTES', 10)
     def test_oversized_archive_is_refused(self):
         with self.assertRaises(ValueError):
