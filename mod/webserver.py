@@ -15,8 +15,10 @@ import time
 import urllib.parse
 import re
 import unicodedata
+import io
 
 from base64 import b64decode, b64encode
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from random import randint
 from tornado import gen, iostream, web, websocket
@@ -45,7 +47,8 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
                           DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE, PEDALBOARDS_LABS_HTTP_ADDRESS,
-                          FEEDBACK_URL, API_KEY, TONE3000_CLIENT_ID)
+                          FEEDBACK_URL, API_KEY, TONE3000_CLIENT_ID,
+                          ACTIVE_UI, ACTIVE_UI_FILE, UIS_DIR)
 
 from mod import (
     TextFileFlusher, WINDOWS,
@@ -54,6 +57,7 @@ from mod import (
 )
 from mod.bank import list_banks, save_banks, remove_pedalboard_from_banks
 from mod.session import SESSION
+from mod.uis import install_zip, list_uis, remove_ui, same_origin, set_active
 from modtools.utils import (
     kPedalboardInfoUserOnly, kPedalboardInfoFactoryOnly, kPedalboardInfoBoth,
     init as lv2_init, cleanup as lv2_cleanup,
@@ -1771,6 +1775,77 @@ class BankSave(JsonRequestHandler):
         save_banks(banks)
         self.write(True)
 
+# User interfaces (experimental), see mod/uis.py
+# two UIs on one image, or two installs of one UI, must not share cached assets; in nanoseconds, as a unit
+# without network time restarts its clock at 1970 and two installs can fall on the same second after boot
+CUSTOM_UI_VERSION_SUFFIX = "-%s.%i" % (ACTIVE_UI, os.stat(HTML_DIR).st_mtime_ns) if ACTIVE_UI else ""
+# unpacking or deleting a whole UI takes seconds on a unit, so it runs off the IOLoop;
+# one at a time, as both replace folders by rename
+UIS_EXECUTOR = ThreadPoolExecutor(1)
+
+class UIsList(JsonRequestHandler):
+    def get(self):
+        self.write({
+            'active': ACTIVE_UI or '',
+            'uis': list_uis(UIS_DIR),
+        })
+
+class UIsChangeHandler(JsonRequestHandler):
+    def prepare(self):
+        # installing a UI installs code, so another site must not be able to post here
+        if not same_origin(self.request.headers.get('Origin'), self.request.host):
+            raise web.HTTPError(403)
+
+class UIsInstall(UIsChangeHandler):
+    @gen.coroutine
+    def post(self):
+        name    = self.get_argument('name')
+        archive = self.request.files.get('archive')
+
+        if not archive:
+            self.write({'ok': False, 'error': "No archive"})
+            return
+
+        try:
+            yield UIS_EXECUTOR.submit(install_zip, UIS_DIR, name, io.BytesIO(archive[0]['body']))
+        except ValueError as e:
+            self.write({'ok': False, 'error': str(e)})
+            return
+
+        # the UI being served was replaced, restart so it gets a new cache key
+        restart = name == ACTIVE_UI
+        self.write({'ok': True, 'restart': restart})
+        if restart:
+            IOLoop.instance().add_callback(restart_services, False, True)
+
+class UIsActivate(UIsChangeHandler):
+    def post(self):
+        try:
+            set_active(UIS_DIR, ACTIVE_UI_FILE, self.get_argument('name', ''))
+        except ValueError as e:
+            self.write({'ok': False, 'error': str(e)})
+            return
+
+        self.write({'ok': True})
+        IOLoop.instance().add_callback(restart_services, False, True)
+
+class UIsRemove(UIsChangeHandler):
+    @gen.coroutine
+    def post(self):
+        name = self.get_argument('name')
+
+        if name == ACTIVE_UI:
+            self.write({'ok': False, 'error': "Switch to another user interface before removing this one"})
+            return
+
+        try:
+            yield UIS_EXECUTOR.submit(remove_ui, UIS_DIR, name)
+        except ValueError as e:
+            self.write({'ok': False, 'error': str(e)})
+            return
+
+        self.write({'ok': True})
+
 class TemplateHandler(TimelessRequestHandler):
     @gen.coroutine
     def get(self, path):
@@ -1825,8 +1900,16 @@ class TemplateHandler(TimelessRequestHandler):
         if IMAGE_VERSION is not None and len(IMAGE_VERSION) > 1:
             # strip initial 'v' from version if present
             version = IMAGE_VERSION[1:] if IMAGE_VERSION[0] == "v" else IMAGE_VERSION
-            return url_escape(version)
+            return url_escape(version + CUSTOM_UI_VERSION_SUFFIX)
         return str(int(time.time()))
+
+    def get_image_version(self):
+        # the "v" argument is the asset cache key, without the active UI it is the version the page
+        # reports; the plugin store filters by that one and finds nothing for an unknown format
+        version = self.get_argument('v')
+        if CUSTOM_UI_VERSION_SUFFIX and version.endswith(CUSTOM_UI_VERSION_SUFFIX):
+            return version[:-len(CUSTOM_UI_VERSION_SUFFIX)]
+        return version
 
     def get_t3k_api_key(self):
         # precedence: user prefs > system key file next to the MOD api key > build-time env (MOD_TONE3000_CLIENT_ID)
@@ -1875,6 +1958,7 @@ class TemplateHandler(TimelessRequestHandler):
             'controlchain_url': CONTROLCHAIN_HTTP_ADDRESS,
             'hardware_profile': b64encode(json.dumps(SESSION.get_hardware_actuators()).encode("utf-8")),
             'version': self.get_argument('v'),
+            'image_version': self.get_image_version(),
             'bin_compat': hwdesc.get('bin-compat', "Unknown"),
             'codec_truebypass': 'true' if hwdesc.get('codec_truebypass', False) else 'false',
             'factory_pedalboards': hwdesc.get('factory_pedalboards', False),
@@ -1937,6 +2021,7 @@ class TemplateHandler(TimelessRequestHandler):
     def allguis(self):
         context = {
             'version': self.get_argument('v'),
+            'image_version': self.get_image_version(),
         }
         return context
 
@@ -1948,6 +2033,7 @@ class TemplateHandler(TimelessRequestHandler):
             'cloud_url': CLOUD_HTTP_ADDRESS,
             'controlchain_url': CONTROLCHAIN_HTTP_ADDRESS,
             'version': self.get_argument('v'),
+            'image_version': self.get_image_version(),
             'hmi_eeprom': 'true' if hwdesc.get('hmi_eeprom', False) else 'false',
             'preferences': json.dumps(prefs),
             'feedback_url': FEEDBACK_URL,
@@ -2615,6 +2701,11 @@ application = web.Application(
             (r"/switch_cpu_freq/", SwitchCpuFreq),
 
             (r"/save_user_id/", SaveUserId),
+
+            (r"/uis/list", UIsList),
+            (r"/uis/install", UIsInstall),
+            (r"/uis/activate", UIsActivate),
+            (r"/uis/remove", UIsRemove),
 
             (r"/(index.html)?$", TemplateHandler),
             (r"/([a-z0-9]+\.html)$", TemplateHandler),
