@@ -33,6 +33,13 @@
     .settings-page {
         bottom: 0px;
     }
+    #uis-form {
+        border: 2px dashed transparent;
+    }
+    #uis-form.uis-drop {
+        background: #2a2a2a;
+        border-color: #fff;
+    }
     .settings-page-content {
         background: #111;
         left: 245px;
@@ -131,7 +138,7 @@
     {% autoescape None %}
     SITEURL          = '{{cloud_url}}'
     CONTROLCHAIN_URL = '{{controlchain_url}}'
-    VERSION          = '{{version}}'
+    VERSION          = '{{image_version}}'
     var TEMPLATES    = {}
     var NOTIFICATIONS_ENABLED = true
     var HMI_EEPROM = {{hmi_eeprom}}
@@ -197,6 +204,65 @@ function refresh_sysprefs() {
         global: false,
         dataType: 'json'
     })
+}
+
+function refresh_uis() {
+    $.ajax({
+        url: '/uis/list',
+        method: 'GET',
+        success: function (resp) {
+            var list = $("#uis-list").empty()
+            $.each([''].concat(resp.uis), function (i, name) {
+                var label = $('<label>').appendTo(list)
+                $('<input type="radio" name="uis-active" autocomplete="off">')
+                    .val(name).prop("checked", name == resp.active).appendTo(label)
+                label.append(document.createTextNode(" " + (name || "Default") + " "))
+                if (name && name != resp.active) {
+                    $('<input type="button" class="uis-remove" value="Remove">').data('name', name).appendTo(label)
+                }
+                list.append('<br/>')
+            })
+        },
+        cache: false,
+        global: false,
+        dataType: 'json'
+    })
+}
+
+function uis_post(url, fields, callback) {
+    var data = new FormData()
+    $.each(fields, function (key, value) {
+        data.append(key, value)
+    })
+    return $.ajax({
+        url: url,
+        method: 'POST',
+        data: data,
+        processData: false,
+        contentType: false,
+        success: function (resp) {
+            if (resp.ok) {
+                callback(resp)
+            } else {
+                new Notification('error', resp.error, 5000)
+                refresh_uis()
+            }
+        },
+        error: function () {
+            new Notification('error', 'Communication failure', 5000)
+        },
+        cache: false,
+        dataType: 'json'
+    })
+}
+
+function show_uis_restart() {
+    var block = show_blocker()
+    block.html('<p>Restarting the web interface...</p>')
+
+    var re = $("<div class='button icon'>Reload</div>").appendTo(block);
+    re.css("background-image", "url(img/icons/25/reload.png)");
+    re.click(function () { location.reload(); });
 }
 
 function refresh_device_updates(respDev, respVer) {
@@ -526,6 +592,7 @@ $('document').ready(function() {
 
     refresh_sysinfo()
     refresh_sysprefs()
+    refresh_uis()
 
     if (PREFERENCES['dev-mode'] == "on") {
         $("#prefs-ui-developer-mode").prop("checked", true)
@@ -716,7 +783,7 @@ $('document').ready(function() {
     // --- Report a problem
 
     var problemReport = new ProblemReport({
-        version: '{{version}}',
+        version: '{{image_version}}',
         feedbackUrl: '{{feedback_url}}',
     })
     $("#button-action-report").click(function () {
@@ -731,6 +798,84 @@ $('document').ready(function() {
 
     $("#prefs-ui-labs-plugins").click(function () {
         config_set("show-labs-plugins", bool2str($(this).prop("checked")))
+    })
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // --- User interfaces
+
+    $("#uis-list").on("change", "input[name=uis-active]", function () {
+        var name = $(this).val()
+        if (!confirm("Switch to the " + (name || "Default") + " user interface?\nThis restarts the web interface.")) {
+            refresh_uis()
+            return
+        }
+        uis_post('/uis/activate', { name: name }, show_uis_restart)
+    })
+
+    $("#uis-list").on("click", ".uis-remove", function () {
+        var name = $(this).data('name')
+        if (confirm("Remove the " + name + " user interface?")) {
+            uis_post('/uis/remove', { name: name }, refresh_uis)
+        }
+    })
+
+    $("#uis-install-archive").change(function () {
+        var file  = this.files[0],
+            input = $("#uis-install-name")
+
+        // suggest a name from the file, unless one was typed
+        if (file && (!input.val() || input.val() == input.data('suggested'))) {
+            var name = file.name.replace(/\.zip$/i, '').toLowerCase()
+                                .replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z0-9]+/, '').substr(0, 32)
+                                .replace(/[-_]+$/, '')
+            input.val(name).data('suggested', name)
+        }
+    })
+
+    // a zip dropped anywhere on the section is chosen as if picked in the file input;
+    // dragenter and dragleave also fire for every child, so they are counted to know when the drag left
+    var uisDrags = 0
+    $("#uis-form").on("dragenter", function () {
+        uisDrags++
+        $(this).addClass('uis-drop')
+    }).on("dragleave", function () {
+        if (--uisDrags <= 0) {
+            uisDrags = 0
+            $(this).removeClass('uis-drop')
+        }
+    }).on("dragover", function (e) {
+        e.preventDefault()
+        e.originalEvent.dataTransfer.dropEffect = 'copy'
+    }).on("drop", function (e) {
+        e.preventDefault()
+        uisDrags = 0
+        $(this).removeClass('uis-drop')
+        if (e.originalEvent.dataTransfer.files.length) {
+            $("#uis-install-archive").prop('files', e.originalEvent.dataTransfer.files).change()
+        }
+    })
+
+    $("#button-action-uis-install").click(function () {
+        var button  = $(this),
+            name    = $("#uis-install-name").val(),
+            archive = $("#uis-install-archive")[0].files[0]
+
+        if (!archive) {
+            new Notification('error', 'Choose a zip file to install', 5000)
+            return
+        }
+
+        button.prop('disabled', true)
+        uis_post('/uis/install', { name: name, archive: archive }, function (resp) {
+            if (resp.restart) {
+                show_uis_restart()
+                return
+            }
+            new Notification('info', 'Installed the ' + name + ' user interface', 5000)
+            refresh_uis()
+        }).always(function () {
+            button.prop('disabled', false)
+        })
     })
 
     // ----------------------------------------------------------------------------------------------------------------
@@ -1173,6 +1318,30 @@ $('document').ready(function() {
                     </p>
                 </form>
 
+                <h1>User interfaces (EXPERIMENTAL)</h1>
+                <form class="form" id="uis-form">
+                    <p>
+                        Install another web interface for this unit and choose which one it serves.<br/>
+                        An installed interface is a full copy of this one, modified by someone else: it can break with any
+                        MOD OS update, and it has full access to the unit, so only install interfaces you trust.<br/>
+                        Switching restarts the web interface.
+                    </p>
+                    <div id="uis-list"></div>
+                    <p>
+                        <b>Install</b> a zip of the interface's <code>html</code> folder, or a GitHub source archive
+                        ("Download ZIP"), or drop it here. Installing again under the same name replaces it.
+                    </p>
+                    <label>
+                        Name: <input type="text" id="uis-install-name" autocomplete="off" placeholder="my-ui"></input>
+                    </label>
+                    <label>
+                        <input type="file" id="uis-install-archive" accept=".zip"></input>
+                    </label>
+                    <label>
+                        <input type="button" id="button-action-uis-install" value="Install"></input>
+                    </label>
+                </form>
+
                 <h1>Workarounds</h1>
                 <form class="form">
                     <div id="workarounds-autorestart-hmi">
@@ -1300,7 +1469,7 @@ $('document').ready(function() {
                 <form class="form">
                     <b>Unit:</b> <span id="info-system-unit">---</span><br/>
                     <b>Build Date:</b> <span id="info-system-date">---</span><br/>
-                    <b>OS Version:</b> {{version}}<br/>
+                    <b>OS Version:</b> {{image_version}}<br/>
                 </form>
 
                 <hr style="border:1px solid #333;"/>

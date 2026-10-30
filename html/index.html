@@ -88,7 +88,7 @@
     PEDALBOARDS_LABS_URL  = '{{pedalboards_labs_url}}'
     CONTROLCHAIN_URL = '{{controlchain_url}}'
     LV2_PLUGIN_DIR   = '{{lv2_plugin_dir}}'
-    VERSION          = '{{version}}'
+    VERSION          = '{{image_version}}'
     BIN_COMPAT       = '{{bin_compat}}'
     PLATFORM         = '{{platform}}'
     var SAMPLERATE   = {{sampleRate}}
@@ -221,7 +221,7 @@ $('document').ready(function() {
     // (group 0), this button is meant to stay only while the build is a release
     // candidate, and live in Settings the rest of the time.
     desktop.problemReport = new ProblemReport({
-        version: '{{version}}',
+        version: '{{image_version}}',
         feedbackUrl: '{{feedback_url}}',
         getPedalboard: function () {
             var plugins = desktop.pedalboard.data('plugins') || {}
