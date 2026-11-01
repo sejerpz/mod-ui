@@ -1861,6 +1861,33 @@ class PedalboardTeleports(JsonRequestHandler):
         SESSION.host.set_teleports(data, pbgen)
         self.write(True)
 
+class PedalboardHMIWidgets(JsonRequestHandler):
+    # What the display shows above the knobs, column by column: the knob addressing, or a widget a plugin draws.
+    def get(self):
+        host = SESSION.host
+        # the knobs are where subpages live, the first one tells how many
+        subpages = 1
+        for actuator in host.descriptor.get('actuators', []):
+            if actuator.get('subpages'):
+                subpages = len(actuator['subpages'])
+                break
+        self.write({
+            'columns'  : len(host.hmi_widget_columns()),
+            'pages'    : host.addressings.addressing_pages or 1,
+            'subpages' : subpages if host.addressings.has_hmi_subpages else 1,
+            'layout'   : host.hmi_widgets,
+            'available': host.hmi_widgets_available(),
+        })
+
+    def post(self):
+        try:
+            layout = json.loads(self.get_argument('widgets', ''))
+        except ValueError:
+            self.write(False)
+            return
+        SESSION.host.set_hmi_widgets(layout)
+        self.write(True)
+
 class PedalboardPluginMap(TimelessRequestHandler):
     """Display list of the live plugin graph, for the HMI to draw itself.
 
@@ -3061,6 +3088,7 @@ application = web.Application(
             (r"/pedalboard/list", PedalboardList),
             (r"/pedalboard/save", PedalboardSave),
             (r"/pedalboard/teleports/?", PedalboardTeleports),
+            (r"/pedalboard/hmi-widgets/?", PedalboardHMIWidgets),
             (r"/pedalboard/pack_bundle/?", PedalboardPackBundle),
             (r"/pedalboard/load_bundle/", PedalboardLoadBundle),
             (r"/pedalboard/load_remote/*(/[A-Za-z0-9_/]+[^/])/?", PedalboardLoadRemote),
