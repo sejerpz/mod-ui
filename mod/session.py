@@ -139,6 +139,8 @@ class Session(object):
         self.hmi.initialized = not self.hmi.isFake()
         uiConnected = bool(len(self.websockets) > 0)
         yield gen.Task(self.host.initialize_hmi, uiConnected)
+        # a panel that just booted knows no widget areas
+        yield gen.Task(self.host.hmi_widgets_sync)
 
     # This is very nasty, sorry
     def hmi_reinit_cb(self):

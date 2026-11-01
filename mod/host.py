@@ -84,6 +84,8 @@ from mod.mod_protocol import (
     CMD_PROFILE_LOAD,
     CMD_PROFILE_STORE,
     CMD_NEXT_PAGE,
+    CMD_WIDGET_AREA_ADD,
+    CMD_WIDGET_AREA_REMOVE,
     CMD_SCREENSHOT,
     CMD_AUDIO_FRAME_SIZE,
     CMD_UI_CONFIG,
@@ -478,6 +480,17 @@ class Host(object):
         # generation it was computed from and a stale one is dropped -- the browser's
         # teardown flags cannot cover the disconnect echoes, which arrive asynchronously.
         self.pedalboard_teleports_gen = 0
+        # Plugin widgets placed on the HMI display, a list of
+        # {'page', 'subpage', 'column', 'instance', 'symbol'}; an entry's area id is its index + 1.
+        self.hmi_widgets = []
+        # hmi-widgets.json as found in the bundle when it is a revision newer than this mod-ui reads: written back
+        # unchanged until the user places widgets here, so opening and saving the pedalboard does not lose it
+        self.hmi_widgets_kept = None
+        # area id -> instance id of the widgets mod-host has been told are visible
+        self.hmi_widgets_shown = {}
+        # one visibility update at a time: pages flipped quickly start a new one before the last is done
+        self.hmi_widgets_updating = False
+        self.hmi_widgets_update_again = False
         self.compare_snapshots = dict()
         self.compare_status = "empty"
         self.next_hmi_pedalboard_to_load = None
@@ -2495,6 +2508,8 @@ class Host(object):
             json.dumps(dict(self.pedalboard_teleports,
                             gen=self.pedalboard_teleports_gen)).encode("utf-8")).decode("utf-8"))
 
+        websocket.write_message(self.hmi_widgets_message())
+
         websocket.write_message("loading_end %d" % self.current_pedalboard_snapshot_id)
 
     # -----------------------------------------------------------------------------------------------------------------
@@ -2579,6 +2594,11 @@ class Host(object):
         self.pedalboard_teleports = {'names': {}, 'cables': []}
         self.pedalboard_teleports_gen += 1
         self.pedalboard_format_version = 1
+        # only when there is something to take down: a reset otherwise costs the panel nothing
+        self.hmi_widgets_kept = None
+        if self.hmi_widgets or self.hmi_widgets_shown:
+            self.hmi_widgets = []
+            self.hmi_widgets_sync()
 
         if bank_id is None:
             save_last_bank_and_pedalboard(0, "")
@@ -3004,6 +3024,13 @@ class Host(object):
             self.msg_callback("disconnect %s %s" % (ports[0], ports[1]))
 
         self.msg_callback("remove %s" % (instance))
+
+        if any(w['instance'] == instance for w in self.hmi_widgets):
+            self.hmi_widgets = [w for w in self.hmi_widgets if w['instance'] != instance]
+            self.msg_callback(self.hmi_widgets_message())
+            # a removal the panel asked for gets its areas back in caught_up(), once it listens again
+            self.hmi_widgets_sync(send_hmi=send_hmi)
+
         callback(ok)
 
     # -----------------------------------------------------------------------------------------------------------------
@@ -4040,6 +4067,7 @@ class Host(object):
             # NOTE: ignoring callback here, as HMI is handling a request right now
             self.hmi.control_add(next_addressing_data, hw_id, uri, None)
         self.addressings.current_page = idx % self.addressings.addressing_pages
+        self.hmi_widgets_update_visibility()
 
         # callback must be last action
         callback(True)
@@ -4424,6 +4452,9 @@ class Host(object):
             self.send_notmodified("state_load \"{}\"".format(bundlepath))
             self.presets_metadata.load(bundlepath, instances, abort_catcher)
             self.addressings.load(bundlepath, instances, skippedPortAddressings, abort_catcher)
+            self.load_pb_hmi_widgets(bundlepath)
+            self.msg_callback(self.hmi_widgets_message())
+            self.hmi_widgets_sync()
         else:
             # No bundle, so no message went out -- and so the generation must NOT advance.
             # Bumping silently would make every later POST look stale and be dropped.
@@ -4566,6 +4597,242 @@ class Host(object):
             return
         self.pedalboard_teleports = teleports
         self.pedalboard_modified = True
+
+    # -----------------------------------------------------------------------------------------------------------------
+    # HMI widgets
+    #
+    # The user decides, for each column of the display above the knobs, whether it shows the knob addressing or a
+    # widget a plugin draws. The firmware is told about every area of every page up front, so switching pages needs
+    # no round trip; mod-host is only told about the widgets in view, as only those draw.
+
+    def hmi_widget_columns(self):
+        # [x, y, width, height] of each column in display coordinates, from the hardware descriptor
+        return [c for c in self.descriptor.get('hmi_widget_columns', []) if isinstance(c, list) and len(c) == 4]
+
+    # What hmi-widgets.json holds and which revision of it: the file stays on people's devices long after this code
+    # changes, so a later mod-ui must be able to tell what it is reading and migrate it. Bump the version whenever
+    # an older mod-ui would misread the layout; one that only adds fields it can skip keeps the version.
+    HMI_WIDGETS_FILE_FORMAT  = "https://github.com/sejerpz/alabs-hmi-widgets#WidgetLayout"
+    HMI_WIDGETS_FILE_VERSION = 1
+
+    # ALABS_HMI_PixelFormat, as the hardware descriptor names them
+    HMI_WIDGET_PIXEL_FORMATS = ('mono1', 'gray4', 'rgb565', 'rgb888')
+
+    def hmi_widget_pixel_format(self):
+        # the pixel format of the display, mono when the descriptor does not say
+        try:
+            return self.HMI_WIDGET_PIXEL_FORMATS.index(str(self.descriptor.get('hmi_widget_pixel_format', 'mono1')).lower())
+        except ValueError:
+            return 0
+
+    def hmi_widget_fullscreen(self):
+        # [x, y, width, height] of the whole display for full screen widgets, None if the device has none
+        rect = self.descriptor.get('hmi_widget_fullscreen')
+        return rect if isinstance(rect, list) and len(rect) == 4 else None
+
+    def hmi_widget_area(self, widget):
+        if widget.get('fullscreen'):
+            return tuple(self.hmi_widget_fullscreen())
+        columns = self.hmi_widget_columns()
+        first, last = columns[widget['column']], columns[widget['column'] + widget['columns'] - 1]
+        x, y, _, height = first
+        return x, y, last[0] + last[2] - x, height
+
+    def hmi_widget_instance_id(self, instance):
+        # None for an instance that is not, or no longer, on the board
+        try:
+            instance_id = self.mapper.get_id_without_creating(instance)
+        except KeyError:
+            return None
+        return instance_id if instance_id in self.plugins and instance_id != PEDALBOARD_INSTANCE_ID else None
+
+    def hmi_widget_declarations(self, instance):
+        instance_id = self.hmi_widget_instance_id(instance)
+        if instance_id is None:
+            return {}
+        try:
+            widgets = get_plugin_info(self.plugins[instance_id]['uri'])['widgets'] or []
+        except Exception:
+            return {}
+        # only the widgets that can draw in the pixel format of this display
+        format_bit = 1 << self.hmi_widget_pixel_format()
+        return dict((w['symbol'], w) for w in widgets if w.get('formats', 1) & format_bit)
+
+    def hmi_widgets_available(self):
+        available = []
+        has_fullscreen = self.hmi_widget_fullscreen() is not None
+        for instance_id, plugin in self.plugins.items():
+            if instance_id == PEDALBOARD_INSTANCE_ID:
+                continue
+            for symbol, widget in self.hmi_widget_declarations(plugin['instance']).items():
+                fullscreen = bool(widget.get('fullscreen'))
+                if fullscreen and not has_fullscreen:
+                    continue
+                available.append({
+                    'instance'  : plugin['instance'],
+                    'symbol'    : symbol,
+                    'name'      : widget['name'],
+                    'columns'   : widget['columns'],
+                    'fullscreen': fullscreen,
+                })
+        return available
+
+    def hmi_widgets_message(self):
+        return "hmi_widgets %s" % b64encode(json.dumps(self.hmi_widgets).encode("utf-8")).decode("utf-8")
+
+    def hmi_widgets_validate(self, layout):
+        """
+        The entries of `layout` that can be placed: a widget the plugin declares, within the columns of the display,
+        not overlapping one placed before it on the same page and subpage. Each gets its 'columns' filled in.
+        A full screen widget takes every column of its page and subpage, and gets 'fullscreen' too.
+        """
+        ncolumns = len(self.hmi_widget_columns())
+        pages = self.addressings.addressing_pages or 1
+        valid, taken = [], set()
+
+        for entry in layout if isinstance(layout, list) else []:
+            try:
+                page, subpage, column = int(entry['page']), int(entry['subpage']), int(entry['column'])
+                instance, symbol = str(entry['instance']), str(entry['symbol'])
+            except (KeyError, TypeError, ValueError):
+                continue
+
+            declared = self.hmi_widget_declarations(instance).get(symbol)
+            if declared is None or page < 0 or page >= pages or subpage < 0:
+                continue
+
+            fullscreen = bool(declared.get('fullscreen'))
+            if fullscreen:
+                if self.hmi_widget_fullscreen() is None:
+                    continue
+                column, span = 0, ncolumns
+            else:
+                span = declared['columns']
+
+            cells = set((page, subpage, c) for c in range(column, column + span))
+            if column < 0 or column + span > ncolumns or cells & taken:
+                continue
+
+            taken |= cells
+            entry = {
+                'page'    : page,
+                'subpage' : subpage,
+                'column'  : column,
+                'columns' : span,
+                'instance': instance,
+                'symbol'  : symbol,
+            }
+            if fullscreen:
+                entry['fullscreen'] = True
+            valid.append(entry)
+
+        return valid
+
+    def load_pb_hmi_widgets(self, bundlepath):
+        data = safe_json_load(os.path.join(bundlepath, "hmi-widgets.json"), dict)
+        self.hmi_widgets = []
+        self.hmi_widgets_kept = None
+
+        if data.get('format') != self.HMI_WIDGETS_FILE_FORMAT:
+            return
+
+        version = data.get('version')
+        if not isinstance(version, int) or version > self.HMI_WIDGETS_FILE_VERSION:
+            logging.warning("hmi-widgets.json version %s is newer than this mod-ui reads, keeping it as is", version)
+            self.hmi_widgets_kept = data
+            return
+
+        self.hmi_widgets = self.hmi_widgets_validate(data.get('widgets'))
+
+    def set_hmi_widgets(self, layout):
+        layout = self.hmi_widgets_validate(layout)
+        if layout == self.hmi_widgets:
+            return
+        self.hmi_widgets = layout
+        self.hmi_widgets_kept = None
+        self.pedalboard_modified = True
+        self.msg_callback(self.hmi_widgets_message())
+        self.hmi_widgets_sync()
+
+    @gen.coroutine
+    def hmi_widgets_sync(self, callback=None, send_hmi=True):
+        """Tells the firmware every widget area again, and mod-host which widgets are in view."""
+        try:
+            # mod-host first: nothing may still draw into an area id that is about to change meaning
+            if self.hmi_widgets_shown:
+                self.hmi_widgets_shown = {}
+                yield gen.Task(self.send_notmodified, "hmi_widget_hide -1")
+
+            columns = self.hmi_widget_columns()
+
+            if send_hmi and self.hmi.initialized and columns:
+                yield gen.Task(self.hmi.send, "%s -1" % CMD_WIDGET_AREA_REMOVE)
+
+                for index, widget in enumerate(self.hmi_widgets):
+                    x, y, width, height = self.hmi_widget_area(widget)
+                    yield gen.Task(self.hmi.send, "%s %d %d %d %d %d %d %d" % (CMD_WIDGET_AREA_ADD,
+                                                                                 widget['page'], widget['subpage'],
+                                                                                 index + 1, x, y, width, height))
+
+            yield gen.Task(self.hmi_widgets_update_visibility)
+        except Exception:
+            logging.exception("[host] cannot sync the HMI widgets")
+
+        if callback is not None:
+            callback(True)
+
+    @gen.coroutine
+    def hmi_widgets_update_visibility(self, callback=None):
+        """Tells mod-host which widgets came into view and which left it, for the page and subpage on the HMI."""
+        # an update already running goes round once more when done, so it ends on the latest page
+        if self.hmi_widgets_updating:
+            self.hmi_widgets_update_again = True
+            if callback is not None:
+                callback(True)
+            return
+
+        self.hmi_widgets_updating = True
+        try:
+            while True:
+                self.hmi_widgets_update_again = False
+                yield self._hmi_widgets_update_visibility_once()
+                if not self.hmi_widgets_update_again:
+                    break
+        except Exception:
+            logging.exception("[host] cannot update the HMI widgets in view")
+        finally:
+            self.hmi_widgets_updating = False
+
+        if callback is not None:
+            callback(True)
+
+    @gen.coroutine
+    def _hmi_widgets_update_visibility_once(self):
+        page = self.addressings.current_page
+        # the knobs change subpage together, the first one speaks for all
+        subpage = self.addressings.hmi_hwsubpages.get(0) or 0
+
+        wanted = {}
+        for index, widget in enumerate(self.hmi_widgets):
+            if widget['page'] != page or widget['subpage'] != subpage:
+                continue
+            instance_id = self.hmi_widget_instance_id(widget['instance'])
+            if instance_id is not None:
+                wanted[index + 1] = (instance_id, widget)
+
+        for area_id in [a for a in self.hmi_widgets_shown if a not in wanted]:
+            self.hmi_widgets_shown.pop(area_id, None)
+            yield gen.Task(self.send_notmodified, "hmi_widget_hide %d" % area_id)
+
+        for area_id, (instance_id, widget) in wanted.items():
+            if area_id in self.hmi_widgets_shown:
+                continue
+            _, _, width, height = self.hmi_widget_area(widget)
+            self.hmi_widgets_shown[area_id] = instance_id
+            yield gen.Task(self.send_notmodified, "hmi_widget_show %d %s %d %d %d %d" % (instance_id,
+                                                                                         widget['symbol'],
+                                                                                         area_id, width, height,
+                                                                                         self.hmi_widget_pixel_format()))
 
     def load_pb_plugins(self, plugins, instances, rinstances, motos):
         for p in plugins:
@@ -4896,6 +5163,7 @@ class Host(object):
         self.save_state_presets_metadata(bundlepath)
         self.save_state_snapshots(bundlepath)
         self.save_state_teleports(bundlepath)
+        self.save_state_hmi_widgets(bundlepath)
         self.save_state_mainfile(bundlepath, title, titlesym)
 
     def save_state_manifest(self, bundlepath, titlesym):
@@ -4927,6 +5195,22 @@ class Host(object):
             instances[instance_id] = plugin['instance']
 
         self.addressings.save(bundlepath, instances)
+
+    def save_state_hmi_widgets(self, bundlepath):
+        widgetsfile = os.path.join(bundlepath, "hmi-widgets.json")
+        if self.hmi_widgets:
+            data = {
+                'format' : self.HMI_WIDGETS_FILE_FORMAT,
+                'version': self.HMI_WIDGETS_FILE_VERSION,
+                'widgets': self.hmi_widgets,
+            }
+            with TextFileFlusher(widgetsfile) as fh:
+                json.dump(data, fh, indent=4)
+        elif self.hmi_widgets_kept is not None:
+            with TextFileFlusher(widgetsfile) as fh:
+                json.dump(self.hmi_widgets_kept, fh, indent=4)
+        elif os.path.exists(widgetsfile):
+            os.remove(widgetsfile)
 
     def save_state_teleports(self, bundlepath):
         # Deliberately NOT in save_state_snapshots: the four snapshot routes reach that
@@ -6673,6 +6957,8 @@ _:b%i
 
                 for actuator_uri in actuator_uris:
                     yield gen.Task(self.addressings.hmi_load_current, actuator_uri)
+
+                yield gen.Task(self.hmi_widgets_sync)
             except Exception:
                 logging.exception("[host] cannot catch the panel up after a removal")
 
@@ -7785,6 +8071,7 @@ _:b%i
     def hmi_parameter_load_subpage(self, hw_id, subpage, callback):
         logging.debug("hmi parameter load subpage")
         self.addressings.hmi_load_subpage(hw_id, subpage)
+        self.hmi_widgets_update_visibility()
         callback(True)
 
     def hmi_next_control_page_compat(self, hw_id, props, callback):
@@ -8361,6 +8648,7 @@ _:b%i
 
         self.save_state_snapshots(self.pedalboard_path)
         self.save_state_teleports(self.pedalboard_path)
+        self.save_state_hmi_widgets(self.pedalboard_path)
         self.save_state_mainfile(self.pedalboard_path, self.pedalboard_name, titlesym)
         self.send_notmodified("state_save \"{}\"".format(self.pedalboard_path), host_callback)
 
