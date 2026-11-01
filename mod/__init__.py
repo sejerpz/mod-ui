@@ -12,7 +12,7 @@ from datetime import datetime
 from functools import wraps
 from unicodedata import normalize
 
-from mod.settings import HARDWARE_DESC_FILE
+from mod.settings import HARDWARE_DESC_FILE, HARDWARE_DESC_DIR
 
 
 WINDOWS = sys.platform == 'win32'
@@ -200,8 +200,41 @@ def symbolify(name):
     return name
 
 
+def merge_hardware_descriptor(desc, dropin):
+    """
+    Merges a drop-in over a hardware descriptor, in place.
+    Top-level keys replace the ones in the descriptor, lists included, except 'actuators': those are merged
+    by 'uri', the keys of an actuator replacing the ones it already has, and an actuator with a new 'uri' added.
+    """
+    for key, value in dropin.items():
+        if key != 'actuators' or not isinstance(value, list):
+            desc[key] = value
+            continue
+
+        actuators = desc.setdefault('actuators', [])
+        by_uri = dict((actuator.get('uri'), actuator) for actuator in actuators)
+
+        for actuator in value:
+            if not isinstance(actuator, dict):
+                continue
+            current = by_uri.get(actuator.get('uri'))
+            if current is None:
+                actuators.append(actuator)
+            else:
+                current.update(actuator)
+
+    return desc
+
 def get_hardware_descriptor():
-    return safe_json_load(HARDWARE_DESC_FILE, dict)
+    desc = safe_json_load(HARDWARE_DESC_FILE, dict)
+
+    # drop-ins in alphabetical order, so their names decide which one wins
+    if os.path.isdir(HARDWARE_DESC_DIR):
+        for filename in sorted(os.listdir(HARDWARE_DESC_DIR)):
+            if filename.endswith('.json'):
+                merge_hardware_descriptor(desc, safe_json_load(os.path.join(HARDWARE_DESC_DIR, filename), dict))
+
+    return desc
 
 
 def get_hardware_actuators():
