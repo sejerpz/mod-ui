@@ -214,6 +214,7 @@ static const bool kOnlyShowPluginsWithMODGUI = getenv("MOD_UI_ONLY_SHOW_PLUGINS_
     },                                               \
     nullptr,                                         \
     nullptr,                                         \
+    nullptr,                                         \
     nullptr                                          \
 }
 
@@ -304,6 +305,7 @@ inline void fill_iotype(PInfo* const info,
 #define LILV_NS_MODGUI          "http://moddevices.com/ns/modgui#"
 #define LILV_NS_MODPEDAL        "http://moddevices.com/ns/modpedal#"
 #define LILV_NS_MODPERFORMANCE  "http://moddevices.com/ns/modperformance#"
+#define LILV_NS_ALABS_HMI       "https://github.com/sejerpz/alabs-hmi-widgets#"
 #define LV2_NS_PORT_GROUPS      "http://lv2plug.in/ns/ext/port-groups#"
 
 #define MOD__CVPort LILV_NS_MOD "CVPort"
@@ -361,6 +363,10 @@ struct NamespaceDefinitions {
     LilvNode* modgui_knob;
     LilvNode* modgui_port;
     LilvNode* modgui_monitoredOutputs;
+    LilvNode* hmi_widget;
+    LilvNode* hmi_columns;
+    LilvNode* hmi_fullscreen;
+    LilvNode* hmi_pixel_format;
     LilvNode* atom_bufferType;
     LilvNode* atom_Sequence;
     LilvNode* midi_MidiEvent;
@@ -458,6 +464,10 @@ struct NamespaceDefinitions {
         modgui_knob              = lilv_new_uri(w, LILV_NS_MODGUI "knob");
         modgui_port              = lilv_new_uri(w, LILV_NS_MODGUI "port");
         modgui_monitoredOutputs  = lilv_new_uri(w, LILV_NS_MODGUI "monitoredOutputs");
+        hmi_widget               = lilv_new_uri(w, LILV_NS_ALABS_HMI "widget");
+        hmi_columns              = lilv_new_uri(w, LILV_NS_ALABS_HMI "columns");
+        hmi_fullscreen           = lilv_new_uri(w, LILV_NS_ALABS_HMI "fullscreen");
+        hmi_pixel_format         = lilv_new_uri(w, LILV_NS_ALABS_HMI "pixelFormat");
         atom_bufferType          = lilv_new_uri(w, LV2_ATOM__bufferType);
         atom_Sequence            = lilv_new_uri(w, LV2_ATOM__Sequence);
         midi_MidiEvent           = lilv_new_uri(w, LV2_MIDI__MidiEvent);
@@ -533,6 +543,10 @@ struct NamespaceDefinitions {
         lilv_node_free(modgui_knob);
         lilv_node_free(modgui_port);
         lilv_node_free(modgui_monitoredOutputs);
+        lilv_node_free(hmi_widget);
+        lilv_node_free(hmi_columns);
+        lilv_node_free(hmi_fullscreen);
+        lilv_node_free(hmi_pixel_format);
         lilv_node_free(atom_bufferType);
         lilv_node_free(atom_Sequence);
         lilv_node_free(midi_MidiEvent);
@@ -2621,6 +2635,128 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
     }
 
     // --------------------------------------------------------------------------------------------------------
+    // widgets
+    //
+    // a widget is a static declaration of what the plugin can draw on the device display.
+    // it grants no pixels by itself: the user places it on the display from the web app,
+    // and that is the only thing that gives the plugin an area to draw in.
+
+    if (LilvNodes* const widgetnodes = lilv_plugin_get_value(p, ns.hmi_widget))
+    {
+        const unsigned int maxwidgets = lilv_nodes_size(widgetnodes);
+
+        PluginWidget* const widgets = new PluginWidget[maxwidgets+1];
+        memset(widgets, 0, sizeof(PluginWidget) * (maxwidgets+1));
+
+        unsigned int widgetcount = 0;
+
+        LILV_FOREACH(nodes, it, widgetnodes)
+        {
+            const LilvNode* const widgetnode = lilv_nodes_get(widgetnodes, it);
+
+            // the symbol is the widget identity, a placement refers to it by name
+            LilvNode* const symbolnode = lilv_world_get(w, widgetnode, ns.lv2core_symbol, nullptr);
+
+            if (symbolnode == nullptr)
+            {
+                printf("NOTICE: Plugin '%s' declares a widget without symbol, ignored\n", info.uri);
+                continue;
+            }
+
+            const char* const symbol = lilv_node_as_string(symbolnode);
+
+            bool duplicated = false;
+            for (unsigned int i=0; i<widgetcount; ++i)
+            {
+                if (strcmp(widgets[i].symbol, symbol) == 0)
+                {
+                    duplicated = true;
+                    break;
+                }
+            }
+
+            if (duplicated)
+            {
+                printf("NOTICE: Plugin '%s' declares widget '%s' more than once, ignored\n", info.uri, symbol);
+                lilv_node_free(symbolnode);
+                continue;
+            }
+
+            // a widget takes 1 to HMI_WIDGET_MAX_COLUMNS contiguous columns, anything else cannot be placed
+            int columns = 1;
+
+            if (LilvNode* const columnsnode = lilv_world_get(w, widgetnode, ns.hmi_columns, nullptr))
+            {
+                columns = lilv_node_is_int(columnsnode) ? lilv_node_as_int(columnsnode) : 0;
+                lilv_node_free(columnsnode);
+            }
+
+            if (columns < 1 || columns > HMI_WIDGET_MAX_COLUMNS)
+            {
+                printf("NOTICE: Plugin '%s' declares widget '%s' with invalid columns, ignored\n",
+                       info.uri, symbol);
+                lilv_node_free(symbolnode);
+                continue;
+            }
+
+            PluginWidget& widget(widgets[widgetcount++]);
+
+            widget.valid = true;
+            widget.symbol = strdup(symbol);
+            widget.columns = static_cast<unsigned int>(columns);
+
+            // the whole display, title and footer included
+            if (LilvNode* const fullscreennode = lilv_world_get(w, widgetnode, ns.hmi_fullscreen, nullptr))
+            {
+                widget.fullscreen = lilv_node_is_bool(fullscreennode) && lilv_node_as_bool(fullscreennode);
+                lilv_node_free(fullscreennode);
+            }
+
+            // the pixel formats it can draw in, as bits in the order of ALABS_HMI_PixelFormat
+            if (LilvNodes* const formatnodes = lilv_world_find_nodes(w, widgetnode, ns.hmi_pixel_format, nullptr))
+            {
+                static const char* const formats[] = {
+                    LILV_NS_ALABS_HMI "Mono1", LILV_NS_ALABS_HMI "Gray4",
+                    LILV_NS_ALABS_HMI "RGB565", LILV_NS_ALABS_HMI "RGB888",
+                };
+
+                LILV_FOREACH(nodes, itf, formatnodes)
+                {
+                    const char* const format = lilv_node_as_uri(lilv_nodes_get(formatnodes, itf));
+
+                    for (unsigned int i=0; i<sizeof(formats)/sizeof(formats[0]); ++i)
+                    {
+                        if (format != nullptr && strcmp(format, formats[i]) == 0)
+                            widget.formats |= 1u << i;
+                    }
+                }
+
+                lilv_nodes_free(formatnodes);
+            }
+
+            if (widget.formats == 0)
+                widget.formats = 1u; // mono, the format widgets were first written for
+
+            // fallback to the symbol, so a widget is never left nameless in the web app
+            if (LilvNode* const namenode = lilv_world_get(w, widgetnode, ns.lv2core_name, nullptr))
+            {
+                widget.name = strdup(lilv_node_as_string(namenode));
+                lilv_node_free(namenode);
+            }
+            else
+            {
+                widget.name = strdup(symbol);
+            }
+
+            lilv_node_free(symbolnode);
+        }
+
+        info.widgets = widgets;
+
+        lilv_nodes_free(widgetnodes);
+    }
+
+    // --------------------------------------------------------------------------------------------------------
     // ports
 
     std::unordered_map<std::string, PluginPortGroup> portGroups;
@@ -3759,6 +3895,16 @@ static void _clear_plugin_info(PluginInfo& info)
                 free((void*)info.presets[i].path);
         }
         delete[] info.presets;
+    }
+
+    if (info.widgets != nullptr)
+    {
+        for (int i=0; info.widgets[i].valid; ++i)
+        {
+            free((void*)info.widgets[i].symbol);
+            free((void*)info.widgets[i].name);
+        }
+        delete[] info.widgets;
     }
 
     memset(&info, 0, sizeof(PluginInfo));

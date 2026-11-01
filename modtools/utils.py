@@ -328,6 +328,19 @@ class PluginPreset(Structure):
         ("path", c_char_p),
     ]
 
+# how many columns a widget can take on the display, see HMI_WIDGET_MAX_COLUMNS in utils/utils.h
+HMI_WIDGET_MAX_COLUMNS = 3
+
+class PluginWidget(Structure):
+    _fields_ = [
+        ("valid", c_bool),
+        ("symbol", c_char_p),
+        ("name", c_char_p),
+        ("columns", c_uint),
+        ("fullscreen", c_bool),
+        ("formats", c_uint),
+    ]
+
 class PluginInfo(Structure):
     _fields_ = [
         ("valid", c_bool),
@@ -356,6 +369,7 @@ class PluginInfo(Structure):
         ("portGroups", POINTER(PluginPortGroup)),
         ("parameters", POINTER(PluginParameter)),
         ("presets", POINTER(PluginPreset)),
+        ("widgets", POINTER(PluginWidget)),
     ]
 
 # a subset of PluginInfo
@@ -570,6 +584,7 @@ c_structp_types = (POINTER(PluginGUIPort),
                    POINTER(PluginPort),
                    POINTER(PluginParameter),
                    POINTER(PluginPreset),
+                   POINTER(PluginWidget),
                    POINTER(PluginPortGroup),
                    POINTER(PedalboardPlugin),
                    POINTER(PedalboardConnection),
