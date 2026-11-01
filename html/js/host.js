@@ -596,6 +596,11 @@ $('document').ready(function() {
             return
         }
 
+        // the display widgets live server side, the window asks for them every time it opens
+        if (cmd == "hmi_widgets") {
+            return
+        }
+
         if (cmd == "teleports") {
             desktop.pedalboard.pedalboard("applyTeleports", JSON.parse(atob(data)))
             return
