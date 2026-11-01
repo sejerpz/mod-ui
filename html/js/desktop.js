@@ -12,6 +12,8 @@ function Desktop(elements) {
         zoomOut: $('<div>'),
         addMidiButton: $('<div>'),
         midiPortsWindow: $('<div>'),
+        hmiWidgetsButton: $('<div>'),
+        hmiWidgetsWindow: $('<div>'),
         midiPortsList: $('<div>'),
         pedalPresetsWindow: $('<div>'),
         pedalPresetsList: $('<div>'),
@@ -146,6 +148,10 @@ function Desktop(elements) {
     this.midiDevices = new MidiPortsWindow({
         midiPortsWindow: elements.midiPortsWindow,
         midiPortsList: elements.midiPortsList,
+    })
+
+    this.hmiWidgets = new HMIWidgetsWindow({
+        window: elements.hmiWidgetsWindow,
     })
 
     this.saveConfigValue = function (key, value, callback) {
@@ -1028,6 +1034,9 @@ function Desktop(elements) {
 
     elements.addMidiButton.click(function () {
         self.showMidiDeviceList()
+    })
+    elements.hmiWidgetsButton.click(function () {
+        self.hmiWidgets.start()
     })
     elements.saveButton.click(function () {
         self.saveCurrentPedalboard(false)

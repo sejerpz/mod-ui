@@ -137,6 +137,8 @@ $('document').ready(function() {
         addMidiButton: $('#mod-show-midi-port'),
         midiPortsWindow: $('#midi-ports-window'),
         midiPortsList: $("#midi-ports-list"),
+        hmiWidgetsButton: $('#pedalboard-info .js-hmi-widgets'),
+        hmiWidgetsWindow: $('#hmi-widgets-window'),
         pedalPresetsWindow: $('#pedal-presets-window'),
         pedalPresetsList: $("#pedal-presets-list"),
         pedalPresetsOverlay: $("#pedal-presets-list-input"),
@@ -405,6 +407,7 @@ $('document').ready(function() {
 <script type="text/javascript" src="js/effects.js?v={{version}}"></script>
 <script type="text/javascript" src="js/cloudplugin.js?v={{version}}"></script>
 <script type="text/javascript" src="js/mididevices.js?v={{version}}"></script>
+<script type="text/javascript" src="js/hmiwidgets.js?v={{version}}"></script>
 <script type="text/javascript" src="js/snapshot.js?v={{version}}"></script>
 <script type="text/javascript" src="js/hardware.js?v={{version}}"></script>
 <script type="text/javascript" src="js/share.js?v={{version}}"></script>
@@ -701,7 +704,13 @@ $('document').ready(function() {
                     </div>
                     <button class="js-help-toggle" data-help-id="help-button">Help</button>
                     <button class="js-cv-addressing" id="js-cv-addressing-toggle" data-help-id="pedalboard-cv-addressing">Manage CV Ports</button>
-                    <button class="js-pb-addressing" id="js-pb-addressing-toggle" data-help-id="pedalboard-bindings">Bindings</button>
+                    <div id="js-device-menu" style="display:inline-block;" data-help-id="pedalboard-bindings">
+                        <button class="js-device menu-trigger">Device</button>
+                        <ul class="drop-menu clearfix" style="cursor:pointer;text-align:left;">
+                            <li class="js-pb-addressing">Bindings</li>
+                            <li class="js-hmi-widgets">Display</li>
+                        </ul>
+                    </div>
                     <div id="js-preset-menu" style="display:inline-block;" data-help-id="pedalboard-snapshots">
                         <button class="js-preset menu-trigger">Snapshots</button>
                         <ul class="drop-menu clearfix js-pedalboard-presets-menu" style="cursor:pointer;text-align:left;">
@@ -768,6 +777,27 @@ $('document').ready(function() {
                     <button type="button" class="js-reset-peaks">Reset peaks</button>
                     <button class="js-close">Close</button>
                 </div>
+            </div>
+        </div>
+
+        <div id="hmi-widgets-window" class="save-popup mod-hidden">
+            <div class="mod-box" id="hmi-widgets-box">
+                <h1>Device Display</h1>
+                <form class="bottom">
+                    <fieldset>
+                        <p>Each column above the knobs shows the knob addressing, or a widget drawn by a plugin of this pedalboard.</p>
+                        <p class="js-empty">No plugin in this pedalboard offers display widgets.</p>
+                        <div class="controls clearfix hmi-widgets-where">
+                            <select class="js-page"></select>
+                            <div class="hmi-widgets-subpages js-subpages"></div>
+                        </div>
+                        <div class="controls clearfix hmi-widgets-columns js-columns"></div>
+                        <div class="controls actions">
+                            <button class="js-cancel btn btn-danger">Cancel</button>
+                            <button class="js-submit btn btn-success">Save</button>
+                        </div>
+                    </fieldset>
+                </form>
             </div>
         </div>
 

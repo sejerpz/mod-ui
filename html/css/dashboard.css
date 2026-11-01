@@ -1134,6 +1134,83 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     cursor:pointer;
 }
 
+/* the Device menu took the place of the Bindings button, and its icon */
+header#pedalboard-actions button.js-device {
+    background-image:url(../img/icons/36/bind.png);
+}
+header#pedalboard-actions button.js-device:hover {
+    background-color:#883996;
+}
+
+#hmi-widgets-window .mod-box {
+    width:560px;
+    margin:-150px -310px;
+}
+#hmi-widgets-window select {
+    margin-right:6px;
+}
+.hmi-widgets-where {
+    margin:10px 0;
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+#hmi-widgets-window .hmi-widgets-where select {
+    margin:0;
+}
+/* the subpage switch, in the style of the A/B compare one */
+.hmi-widgets-subpages {
+    display:inline-flex;
+    margin-left:auto;
+}
+.hmi-widgets-subpage {
+    font-size:14px;
+    line-height:30px;
+    height:32px;
+    padding:0 12px;
+    text-align:center;
+    border:solid rgb(51, 51, 51);
+    border-width:1px 1px 1px 0;
+    cursor:pointer;
+}
+.hmi-widgets-subpage:first-child {
+    border-left-width:1px;
+    border-radius:8px 0 0 8px;
+}
+.hmi-widgets-subpage:last-child {
+    border-radius:0 8px 8px 0;
+}
+.hmi-widgets-subpage:hover {
+    color:white;
+    background-color:rgb(51, 51, 51);
+}
+.hmi-widgets-subpage.selected {
+    background-color:rgb(136, 57, 150);
+    color:white;
+    cursor:default;
+}
+.hmi-widgets-columns {
+    display:flex;
+    gap:6px;
+}
+.hmi-widgets-column {
+    flex:1;
+    min-height:64px;
+    padding:6px;
+    border:1px solid #444;
+}
+.hmi-widgets-column select {
+    width:100%;
+}
+.hmi-widgets-column-widget {
+    border-color:rgb(136, 57, 150);
+}
+.hmi-widgets-note {
+    margin:6px 0 0;
+    font-size:12px;
+    opacity:.8;
+}
+
 #midi-ports-window .mod-box {
     width:500px;
     margin:-150px -280px;
