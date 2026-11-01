@@ -174,6 +174,21 @@ typedef struct {
     const char* path;
 } PluginPreset;
 
+// how many columns a widget can take on the display, one above each knob on the Dwarf
+#define HMI_WIDGET_MAX_COLUMNS 3
+
+// a display widget declared by a plugin with ahw:widget, see https://github.com/sejerpz/alabs-hmi-widgets
+// the plugin only declares what it can draw: the user places it on the display from the web app,
+// and only then the plugin is told where to draw
+typedef struct {
+    bool valid;
+    const char* symbol; // stable identifier, unique within the plugin
+    const char* name;   // short label for the web app
+    unsigned int columns; // 1 to HMI_WIDGET_MAX_COLUMNS
+    bool fullscreen;      // takes the whole display, columns ignored
+    unsigned int formats; // pixel formats it draws in, bit N for ALABS_HMI_PixelFormat N; mono alone when not declared
+} PluginWidget;
+
 typedef struct {
     bool valid;
     const char* uri;
@@ -201,6 +216,7 @@ typedef struct {
     const PluginPortGroup* portGroups;
     const PluginParameter* parameters;
     const PluginPreset* presets;
+    const PluginWidget* widgets;
 } PluginInfo;
 
 typedef struct {
