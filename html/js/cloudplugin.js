@@ -716,12 +716,26 @@ JqueryClass('cloudPluginBox', {
 				render.appendTo(featuredCanvas)
 				render.find('img').on('load', factory(render.find('img')));
 			}
-			var columns = $(window).width() >= 1650 ? 5 : 3;
+			// as many as fit where they are, each 230 wide at least, an odd number so one
+			// is in the middle, the window's width telling while that is not shown yet
+			var featuredColumns = function () {
+				var room = featuredCanvas.width() || $(window).width() - 420
+				return Math.min(room >= 1150 ? 5 : room >= 690 ? 3 : 1, plugins.length)
+			}
 			featuredCanvas.slick({
-				slidesToShow: Math.min(columns, plugins.length),
+				slidesToShow: featuredColumns(),
 				centerPadding: '60px',
 				centerMode: true,
 			});
+			var fitFeatured = function () {
+				var columns = featuredColumns()
+				if (featuredCanvas.is(':visible') && columns != featuredCanvas.slick('slickGetOption', 'slidesToShow')) {
+					featuredCanvas.slick('slickSetOption', 'slidesToShow', columns, true)
+				}
+			}
+			$(window).on('resize', fitFeatured)
+			self.on('windowopen', fitFeatured)
+			fitFeatured()
 			self.data('featuredInitialized', true)
 		}
 
