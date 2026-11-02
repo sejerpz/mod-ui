@@ -664,6 +664,12 @@ JqueryClass('pedalboard', {
             ev.preventDefault()
             ev.stopPropagation()
 
+            // the plugin shown alone stays where showPlugin put it: two fingers on a
+            // touchpad would zoom it away
+            if (self.data('pluginView')) {
+                return
+            }
+
             var maxS = self.data('maxScale')
             var minS = self.data('minScale')
             var step = (maxS - minS) / 5
@@ -743,14 +749,14 @@ JqueryClass('pedalboard', {
             // Gestures for tablets
         var startScale, canvasX, canvasY
         self[0].addEventListener('gesturestart', function (ev) {
-            if (ev.handled) return
+            if (ev.handled || self.data('pluginView')) return
             startScale = self.data('scale')
             canvasX = (ev.pageX - self.offset().left) / startScale
             canvasY = (ev.pageY - self.offset().top) / startScale
             ev.preventDefault()
         })
         self[0].addEventListener('gesturechange', function (ev) {
-            if (ev.handled) return
+            if (ev.handled || self.data('pluginView')) return
             var maxS = self.data('maxScale')
             var minS = self.data('minScale')
             var scale = self.data('scale')
@@ -820,7 +826,8 @@ JqueryClass('pedalboard', {
         self[0].addEventListener('pointermove', function (ev) {
             if (! fingers[ev.pointerId]) return
             fingers[ev.pointerId] = { pageX: ev.pageX, pageY: ev.pageY }
-            if (! pinch) return
+            // nor a pinch, the plugin shown alone stays put
+            if (! pinch || self.data('pluginView')) return
             var s = spread()
             var newScale = pinch.scale * s.distance / pinch.distance
             newScale = Math.min(self.data('maxScale'), newScale)
