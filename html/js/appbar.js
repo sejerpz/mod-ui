@@ -61,6 +61,8 @@ JqueryClass('appBar', {
             // menu's places as buttons of their own, the whole A/B comparer and the CPU
             // and RAM with their figures
             self.toggleClass('wide', room >= 1440)
+            // and the page too, for the board's zoom, see gridFillScale in pedalboard.js
+            $('body').toggleClass('wide-screen', room >= 1440)
             // A small screen, or window, by its short side under 600, for what does not
             // fit one, as the dialogs rising from the bottom. A screen of no known size
             // is not one

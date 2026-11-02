@@ -3015,9 +3015,18 @@ JqueryClass('pedalboard', {
             self.find('.mod-viewed').removeClass('mod-viewed')
         }, 400)
         var fit = self.pedalboard('gridFitScale')
+        var fill = self.pedalboard('gridFillScale', fit)
         self.data('gridFit', fit)
         self.data('minScale', fit)
-        self.pedalboard('zoom', fit, 0, 0, 0, 0, 400)
+        if (fill > fit) {
+            // back to the rows, with the plugin that was shown in the middle
+            var icon = self.data('plugins')[view.instance]
+            var cell = icon && icon.data && icon.data('gridCell')
+            var middle = cell ? (cell.col + 0.5) * PLACEMENT_CELL.width : 0
+            self.pedalboard('gridZoomToFill', fit, fill, middle, cell ? self.parent().width() / 2 : 0, 400)
+        } else {
+            self.pedalboard('zoom', fit, 0, 0, 0, 0, 400)
+        }
         // and the canvas sized for it, should the cells in use have changed meanwhile
         setTimeout(function () {
             self.pedalboard('adapt', true)
@@ -3092,6 +3101,38 @@ JqueryClass('pedalboard', {
                            height / ((rows + PLACEMENT_SPARE) * PLACEMENT_CELL.height))
     },
 
+    // Grid mode's zoom to start from, the board's canvas fitted as gridFitScale. On a
+    // desktop's wide screen the whole board. On a phone's or a tablet's, where the whole
+    // board is too small to use, its rows fill the height, from its first column, the
+    // rest a pan away, and zooming out still shows all of it
+    gridFillScale: function (fit) {
+        var self = $(this)
+        if ($('body').hasClass('wide-screen')) {
+            return fit
+        }
+        var plugins = self.data('plugins')
+        var rows = 1
+        for (var instance in plugins) {
+            var cell = plugins[instance].data && plugins[instance].data('gridCell')
+            if (cell) {
+                rows = Math.max(rows, cell.row + 1)
+            }
+        }
+        var height = self.parent().height() - (self.data('coveredBottom') || 0)
+        return Math.max(fit, Math.min(1, height / ((rows + PLACEMENT_SPARE) * PLACEMENT_CELL.height)))
+    },
+
+    // The canvas at the whole board's zoom, without going there, then to the fill's,
+    // see gridFillScale: one zoom, not two. `canvasX` and `screenX` say what to show
+    gridZoomToFill: function (fit, fill, canvasX, screenX, time) {
+        var self = $(this)
+        self.data('minScale', fit)
+        self.width(self.parent().width() / fit)
+        self.height(self.parent().height() / fit)
+        self.pedalboard('positionHardwarePorts')
+        self.pedalboard('zoom', fill, canvasX, 0, screenX, 0, time)
+    },
+
     // Enlarge the pedalboard to a minimum size capable of accommodating all plugins.
     adapt: function (forcedUpdate) {
         var self = $(this)
@@ -3107,11 +3148,21 @@ JqueryClass('pedalboard', {
                 return
             }
             var fit = self.pedalboard('gridFitScale')
-            if (fit == self.data('gridFit') && ! forcedUpdate) {
+            var same = fit == self.data('gridFit')
+            if (same && ! forcedUpdate) {
                 return
             }
             self.data('gridFit', fit)
-            self.pedalboard('scaleCanvas', fit, self.data('skipAnimations') || forcedUpdate ? 0 : 400, true)
+            var time = self.data('skipAnimations') || forcedUpdate ? 0 : 400
+            var fill = self.pedalboard('gridFillScale', fit)
+            if (fill > fit) {
+                // the same board laid out again stays where it was across, a new one
+                // starts from its first column
+                var at = same && self.data('currentZoom') || { canvasX: 0, screenX: 0 }
+                self.pedalboard('gridZoomToFill', fit, fill, at.canvasX, at.screenX, time)
+            } else {
+                self.pedalboard('scaleCanvas', fit, time, true)
+            }
             return
         }
         // First, get the minmum bounding rectangle,
