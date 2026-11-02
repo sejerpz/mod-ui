@@ -2648,6 +2648,22 @@ body.app-bar-mode #pedalboards-library > .box {
     zoom: var(--touch-zoom, 1);
 }
 
+/* Down to the bottom of the screen, where the desktop's bottom bar was: the dock floats
+   over what is there, which scrolls out from under it */
+body.app-bar-mode #pedalboards-library,
+body.app-bar-mode #pedalboards-library .pedalboards,
+body.app-bar-mode #bank-library,
+body.app-bar-mode #bank-library #bank-list,
+body.app-bar-mode #bank-library #bank-edit,
+body.app-bar-mode #bank-library #bank-pedalboards,
+body.app-bar-mode #bank-library #bank-pedalboards-search,
+body.app-bar-mode #bank-library #bank-pedalboards-result {
+    bottom: 0;
+}
+body.app-bar-mode #bank-library #bank-list {
+    padding-bottom: 96px;
+}
+
 /* its title, search and view modes on one line, the title giving way, on two on a
    narrow screen, the pedalboards below them */
 body.app-bar-mode #pedalboards-library header {
