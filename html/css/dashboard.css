@@ -3190,20 +3190,50 @@ body.app-bar-mode #plugins-library.grid-library.open {
     opacity: 0.96;
 }
 
+/* Sized for a finger however wide the page is laid out, see --touch-zoom in
+   js/appbar.js, as the dialogs: the column, and what is in it each on its own. On a
+   narrow screen held upright a little narrower, the plugin between them has room */
 .mod-plugin-view-side {
     position: absolute;
     top: 0;
-    width: 132px;
+    width: calc(132px * var(--touch-zoom, 1));
     z-index: 1000;
     box-sizing: border-box;
-    padding: 16px 12px;
+    padding: calc(16px * var(--touch-zoom, 1)) calc(12px * var(--touch-zoom, 1));
     overflow-y: auto;
+    /* the backdrop's, a little darker: the plugin's jacks and cables go under it, not
+       under what it says */
+    background: rgba(12, 12, 12, 0.92);
     opacity: 0;
     transition: opacity 0.4s ease, transform 0.4s ease;
     touch-action: pan-y;
     color: #ccc;
     text-align: center;
     user-select: none;
+}
+
+body.narrow-screen .mod-plugin-view-side {
+    width: calc(104px * var(--touch-zoom, 1));
+    padding: calc(12px * var(--touch-zoom, 1)) calc(8px * var(--touch-zoom, 1));
+}
+
+/* there, what is in it a little smaller too, the way to unplug as wide as the column */
+body.narrow-screen .mod-plugin-view-side .disconnect {
+    padding: 6px 8px 5px;
+    font-size: 11px;
+    letter-spacing: 0;
+}
+
+body.narrow-screen .mod-plugin-view-side .entry {
+    padding: 6px;
+}
+
+body.narrow-screen .mod-plugin-view-side .entry .label {
+    font-size: 12px;
+}
+
+.mod-plugin-view-side > * {
+    zoom: var(--touch-zoom, 1);
 }
 
 .mod-plugin-view-side.inputs {
