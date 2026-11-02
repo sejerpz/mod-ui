@@ -81,18 +81,26 @@ JqueryClass('performanceBox', {
                 }
             },
 
+            // The one chosen marked and brought to the middle of the list, along the
+            // bottom or down the side, see main.css. By the list's own scroll, which a
+            // finger still on the page does not stop, as it does scrollIntoView's
             scrollAndSelectElement: function(elementSelector) {
                 let element = $(elementSelector)
 
                 if (element && element[0]) {
                     element.addClass("selected")
 
-                    element[0].scrollIntoView({
-                        "behavior" : "smooth",
-                        "block": "start",
-                        "container": "nearest",
-                        "inline": "nearest"
-                    });
+                    const list = self.data("resultCanvasPlugins")
+                    const el = element[0]
+                    if (list[0].scrollWidth > list[0].clientWidth) {
+                        list.stop(true).animate({
+                            scrollLeft: el.offsetLeft - (list[0].clientWidth - el.offsetWidth) / 2
+                        }, 250)
+                    } else {
+                        list.stop(true).animate({
+                            scrollTop: el.offsetTop - (list[0].clientHeight - el.offsetHeight) / 2
+                        }, 250)
+                    }
                 }
             },
 
@@ -238,6 +246,26 @@ JqueryClass('performanceBox', {
             return false
         }
 
+        // The plugins listed down the side rather than along the bottom, see main.css
+        const sideways = window.matchMedia('screen and (max-width: 1022px) and (orientation: landscape)')
+
+        // Goes to the next plugin, or the one before, the snapshots first of all: whether
+        // there is one that way
+        const step = function (dir) {
+            const index = Math.max(0, self.data("selectedIndex") + dir)
+            const pluginDiv = $("#mod-performance-plugin-" + index.toString())
+
+            if (index == self.data("selectedIndex") || ! pluginDiv[0]) {
+                return false
+            }
+            const selectedElement = index == 0 ? ":presets" : pluginDiv.data("plugin")
+            if (! selectedElement) {
+                return false
+            }
+            self.data('selectElement')(selectedElement)
+            return true
+        }
+
         const canvas = self.data("resultCanvasPlugins")
         canvas.bind("mousewheel", function(event, delta, deltaX, deltaY) {
             let index = self.data("selectedIndex")
@@ -264,8 +292,100 @@ JqueryClass('performanceBox', {
             }
             event.preventDefault();
         });
-        canvas.bind("swipe", function(e) {
-            console.log(`swipe ${e}`)
+
+        // A finger along the list of plugins, the way it runs, goes to the next one or
+        // the one before, one a swipe, as on what is shown, see below: it is not scrolled
+        // by hand, the one chosen is brought into it. Not while arranging them, when a
+        // finger drags them
+        let listSwipe = null
+        canvas.on('pointerdown', function (e) {
+            const ev = e.originalEvent
+            listSwipe = ev.pointerType == 'mouse' || ! ev.isPrimary || self.data("inDesign") ? null :
+                        { id: ev.pointerId, x: ev.clientX, y: ev.clientY, down: sideways.matches }
+        }).on('pointermove', function (e) {
+            const ev = e.originalEvent
+            if (! listSwipe || ev.pointerId != listSwipe.id) {
+                return
+            }
+            const along = listSwipe.down ? ev.clientY - listSwipe.y : ev.clientX - listSwipe.x
+            if (Math.abs(along) < 30) {
+                return
+            }
+            listSwipe = null
+            step(along < 0 ? 1 : -1)
+        }).on('pointerup pointercancel', function () {
+            listSwipe = null
+        })
+
+        // A finger on what is shown, the way the list runs, across with it along the
+        // bottom, up and down with it down the side (see main.css): a carousel. What is
+        // shown follows the finger, and let go a quarter of the way on, or flicked, the
+        // next plugin comes, or the one before, and it goes back otherwise. Not starting
+        // on the controls, which take the finger themselves, as a slider anywhere along
+        // it, see touchSlider in js/modgui.js, nor the other way, which scrolls
+        const settingsCanvas = self.data('resultCanvasPluginSettings')
+        const controls = '.mod-knob-image, .mod-switch-image, .mod-enumerated-list, .mod-presets-menu, ' +
+                         '.mod-ab-toggle, .mod-address, .mod-knob-snapshot-status, input, select, textarea, button, a'
+        let swipe = null
+        const slide = function (el, along, down, animated) {
+            el.style.transition = animated ? 'transform 0.2s ease, opacity 0.2s ease' : ''
+            el.style.transform = along ? (down ? 'translateY(' : 'translateX(') + along + 'px)' : ''
+        }
+        settingsCanvas.on('pointerdown', function (e) {
+            const ev = e.originalEvent
+            if (ev.pointerType == 'mouse' || ! ev.isPrimary || $(ev.target).closest(controls).length) {
+                swipe = null
+                return
+            }
+            swipe = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: Date.now(),
+                      down: sideways.matches, along: 0, going: false }
+        }).on('pointermove', function (e) {
+            const ev = e.originalEvent
+            if (! swipe || ev.pointerId != swipe.id) {
+                return
+            }
+            const along = swipe.down ? ev.clientY - swipe.y : ev.clientX - swipe.x
+            const across = swipe.down ? ev.clientX - swipe.x : ev.clientY - swipe.y
+            if (! swipe.going) {
+                if (Math.abs(along) < 12 && Math.abs(across) < 12) {
+                    return
+                }
+                // the other way, a scroll
+                if (Math.abs(across) >= Math.abs(along)) {
+                    swipe = null
+                    return
+                }
+                swipe.going = true
+                try {
+                    this.setPointerCapture(ev.pointerId)
+                } catch (err) {}
+            }
+            swipe.along = along
+            slide(this, along, swipe.down, false)
+        }).on('pointerup pointercancel', function (e) {
+            const ev = e.originalEvent
+            if (! swipe || ev.pointerId != swipe.id) {
+                return
+            }
+            const s = swipe
+            swipe = null
+            if (! s.going) {
+                return
+            }
+            const el = this
+            const rect = el.getBoundingClientRect()
+            const size = s.down ? rect.height : rect.width
+            const fast = Math.abs(s.along) / Math.max(1, Date.now() - s.t) > 0.5
+            const dir = s.along < 0 ? 1 : -1
+            if (e.type == 'pointerup' && (Math.abs(s.along) > size / 4 || fast) && step(dir)) {
+                // out the way it went, then in place for the next, which fades in
+                slide(el, -dir * size, s.down, true)
+                setTimeout(function () {
+                    slide(el, 0, s.down, false)
+                }, 200)
+            } else {
+                slide(el, 0, s.down, true)
+            }
         })
 
         // The crossed eye, as the dock's while performing, see js/appbar.js: plain while

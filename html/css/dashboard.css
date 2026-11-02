@@ -2632,6 +2632,11 @@ body.app-bar-mode #performance header {
     pointer-events: none;
 }
 
+/* sized for a finger as the board's title, see --touch-zoom in js/appbar.js */
+body.app-bar-mode #performance header {
+    zoom: var(--touch-zoom, 1);
+}
+
 body.app-bar-mode #performance header h1 {
     margin: 0;
     line-height: 42px;
@@ -2643,6 +2648,80 @@ body.app-bar-mode #performance header h1 {
 body.app-bar-mode #performance .remote {
     top: 0;
     bottom: calc(80px * var(--touch-zoom, 1));
+}
+
+/* Its plugins, along the bottom or, on a screen lying low, down the left, sized for a
+   finger however wide the page is laid out, see --touch-zoom in js/appbar.js, the
+   plugin shown taking the rest. Their room 200 wide or high, see main.css, zoomed */
+body.app-bar-mode #performance .js-performance-plugins {
+    zoom: var(--touch-zoom, 1);
+}
+/* the snapshots start under the title, which floats over them */
+body.app-bar-mode #performance .snapshot-container {
+    padding-top: calc(56px * var(--touch-zoom, 1) + 12px);
+}
+/* What is shown, a carousel the way the list runs, see js/performance.js: the browser
+   scrolls it the other way, the carousel takes that one. The list the same, a swipe
+   along it going to the next plugin */
+@media screen and (min-width: 1023px), screen and (orientation: portrait) {
+    body.app-bar-mode #performance .js-performance-plugin-settings {
+        bottom: calc(200px * var(--touch-zoom, 1));
+    }
+    body.app-bar-mode #performance .js-performance-plugin-settings,
+    body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
+    body.app-bar-mode #performance .js-performance-plugin-settings .snapshot-container {
+        touch-action: pan-y;
+    }
+    /* the list's own way taken by a swipe, see js/performance.js */
+    body.app-bar-mode #performance .js-performance-plugins,
+    body.app-bar-mode #performance .js-performance-plugins * {
+        touch-action: pan-y;
+    }
+}
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    body.app-bar-mode #performance .js-performance-plugin-settings {
+        left: calc(200px * var(--touch-zoom, 1));
+    }
+    body.app-bar-mode #performance .js-performance-plugin-settings,
+    body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
+    body.app-bar-mode #performance .js-performance-plugin-settings .snapshot-container {
+        touch-action: pan-x;
+    }
+    /* the list's own way taken by a swipe, see js/performance.js */
+    body.app-bar-mode #performance .js-performance-plugins,
+    body.app-bar-mode #performance .js-performance-plugins * {
+        touch-action: pan-x;
+    }
+    /* a few at a time down the side, rather than each as high as the screen */
+    body.app-bar-mode #performance .js-performance-plugins .plugin {
+        height: 130px;
+        justify-content: flex-end;
+        overflow: hidden;
+    }
+    /* the picture in what is left of it above the name, whatever its shape */
+    body.app-bar-mode #performance .js-performance-plugins .plugin .thumb {
+        flex: 1 1 0;
+        min-height: 0;
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 24px 6px;
+    }
+    body.app-bar-mode #performance .js-performance-plugins .plugin .thumb img {
+        min-width: 0;
+        min-height: 0;
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    /* the one chosen marked, as along the bottom, see main.css */
+    body.app-bar-mode #performance .js-performance-plugins .selected > .label-container {
+        background-color: #883996;
+    }
 }
 
 body.app-bar-mode #plugins-library.grid-library {
@@ -4015,14 +4094,10 @@ body.app-bar-mode .mod-settings .mod-pedal-settings header:not(:has(> :not(.mod-
     display: none !important;
 }
 
-/* and what it leaves comes down a little from the top, under the floating one: more
-   where the screen is not small, see small-screen in js/appbar.js */
+/* and what it leaves starts under the floating one, the view's title, 12 down and 44
+   high: as zoomed as the settings are, see --touch-zoom in js/appbar.js */
 body.app-bar-mode #performance .mod-settings .mod-pedal-settings {
-    padding-top: 24px;
-}
-
-body.app-bar-mode:not(.small-screen) #performance .mod-settings .mod-pedal-settings {
-    padding-top: 48px;
+    padding-top: 64px;
 }
 
 body.app-bar-mode .mod-settings .mod-pedal-settings header .mod-monitors {
