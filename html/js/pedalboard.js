@@ -3719,6 +3719,12 @@ JqueryClass('pedalboard', {
                 }
             }
 
+            // all its bindings at once, by the settings' close, see the hardware
+            // manager's openPlugin; the dock of a plugin shown alone has it too
+            $('<button class="btn mod-bindings">').text('Bindings').click(function () {
+                self.data('hardwareManager').openPlugin(instance)
+            }).insertBefore(settings.find('.mod-toolbar .js-close'))
+
             for (symbol in pluginGui.controls) {
                 port = pluginGui.controls[symbol]
                 if (symbol == ':bypass') {

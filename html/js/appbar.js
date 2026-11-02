@@ -673,6 +673,10 @@ JqueryClass('appBar', {
             options.pedalboard.pedalboard('leavePluginView')
         })
         action('Info', 'information')
+        action('Bindings', 'bindings', function () {
+            var icon = options.pedalboard.data('plugins')[viewed]
+            icon && icon.data('settings').find('.mod-bindings').click()
+        })
         action('Settings', 'settings')
         // asked first: on a phone it is a finger away from Settings, and there is no undo
         action('Remove', 'remove', function () {

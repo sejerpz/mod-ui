@@ -91,6 +91,12 @@ function HardwareManager(options) {
         // Running as mod-app
         isApp: function () { return false },
 
+        // A plugin's gui, by its instance, or null
+        getGui: function (instance) { return null },
+
+        // A plugin on the board, by its instance, or null
+        getPlugin: function (instance) { return null },
+
         // used to save config on the server side
         saveConfigValue: function( key, value, callback ) { },
     }, options)
@@ -104,6 +110,9 @@ function HardwareManager(options) {
     }
 
     this.cvOutputPorts = []
+
+    // Told of every binding made or undone here, see addressNow
+    this.changed = $.Callbacks()
     this.ccActuators = []
 
     this.setBeatsPerMinuteValue = function (bpm) {
@@ -998,8 +1007,16 @@ function HardwareManager(options) {
         }
       }
       var lastTap = {}
-      deviceTable.find('td').click(function () {
+      deviceTable.find('td').click(function (e) {
         if ($(this).hasClass('disabled')) {
+          return
+        }
+        // in a control's own dialog a cell, free or its own, goes to its settings for
+        // there, see openAssignWizard: a tap on it, not showDynamicField's own click
+        if (! model.is_overview) {
+          if (e.originalEvent) {
+            self.openAssignWizard(model, true, $(this))
+          }
           return
         }
         var actuatorUri = $(this).attr('data-uri')
@@ -1492,6 +1509,21 @@ function HardwareManager(options) {
           model.form.find('.js-save, .js-binding-remove').toggle(! free)
         }
 
+        // A control's own dialog: on the device a cell is picked rather than saved, the
+        // advanced settings with it, see openAssignWizard; elsewhere Assign, or Learn
+        // for MIDI. Remove and, on the device, Settings for a binding it has
+        if (! model.is_overview) {
+          var type = model.typeInput.val()
+          var bound = model.addressing?.uri && model.addressing.uri != kNullAddressURI
+          var onDevice = type === deviceOption
+          model.form.find('.js-binding-remove').toggle(!! bound).removeClass('disabled').text('Remove')
+          model.form.find('.js-binding-settings').toggle(onDevice && !! bound && startsWith(model.addressing.uri, deviceOption))
+          if (! model.form.find('.desktop-app-exclusive:visible').length) {
+            model.form.find('.js-save').toggle(! onDevice).removeClass('disabled').text(type === kMidiLearnURI ? 'Learn' : 'Assign')
+            model.form.find('.advanced-toggle').not('.mod-hidden').toggle(! onDevice)
+          }
+        }
+
         // whose control it is, by its plugin's thumbnail
         var thumbnail = model.form.find('h1 .addressing-thumb')
         if (model.plugin && model.plugin.effect) {
@@ -1551,7 +1583,7 @@ function HardwareManager(options) {
       return short(port.ranges.minimum) + ' – ' + short(port.ranges.maximum) + units
     }
 
-    // Where a binding is, in short: "P1 · Knob 1", or the kind of it but the device's
+    // Where a binding is, in short: "P1 · I · Knob 1", or the kind of it but the device's
     this.placeOf = function (addressing) {
       var uri = addressing.uri || ''
       if (uri == kMidiLearnURI || startsWith(uri, kMidiCustomPrefixURI)) {
@@ -1568,6 +1600,11 @@ function HardwareManager(options) {
       }
       var actuator = HARDWARE_PROFILE.filter(function (a) { return a.uri == uri })[0]
       var name = actuator ? (actuator.gname || actuator.name) : uri
+      // its subpage too, as "II" out of "Endless Knobs - Subpage II"
+      var subpages = actuator && actuator.subpages
+      if (subpages && subpages[addressing.subpage || 0]) {
+        name = subpages[addressing.subpage || 0].split(' ').pop() + ' · ' + name
+      }
       return addressing.page != null ? 'P' + (parseInt(addressing.page) + 1) + ' · ' + name : name
     }
 
@@ -1582,55 +1619,30 @@ function HardwareManager(options) {
       return place.join(' · ')
     }
 
-    // Assigning a parameter to a free cell of the overview's device: a wizard in the
-    // dialog itself, over its table, each step sliding in over the one before. First the
-    // parameters that cell's actuator can control, by plugin, those bound elsewhere
-    // there too but not to be picked, then the picked one's settings, the advanced ones,
-    // borrowed for it, already filled in. Assign saves it as Modify would, and back to
-    // the table, the new binding picked in it
-    this.openAssignWizard = function (model) {
-      var form = model.form
-      var box = form.find('.mod-box')
-      var cell = model.deviceTable.find('td.selected')
-      if (! cell.length || cell.hasClass('binded') || cell.hasClass('disabled') || box.hasClass('wizard-open')) {
-        return
-      }
-      var actuatorUri = cell.attr('data-uri')
-      var page = cell.attr('data-page')
-      var subpage = cell.attr('data-subpage')
-      var place = self.cellPlace(actuatorUri, page, subpage)
-
-      var header = $('<div class="wizard-header">' +
-                       '<span class="wizard-back">&lsaquo;</span>' +
-                       '<img class="wizard-thumb">' +
-                       '<div class="wizard-title"><strong></strong><span></span></div>' +
-                       '<span class="wizard-close">&times;</span>' +
-                     '</div>')
-      var wizard = $('<div class="addressing-wizard">' +
-                       '<div class="wizard-stage"></div>' +
-                       '<div class="wizard-actions">' +
-                         '<span class="btn wizard-cancel">Back</span>' +
-                         '<span class="btn wizard-assign">Assign</span>' +
-                       '</div>' +
-                     '</div>')
-      var stage = wizard.find('.wizard-stage')
-      var main = form.find('.main-form-container')
-      var advanced = form.find('.advanced-container')
-      var settings = advanced.find('.actuator-label, .range, .led-colour, .momentary-sw, .sensitivity')
-      var step = null
-      var query = ''
-      var picked = null
-
-      // a step in, over the one before, from the right going on and from the left going
-      // back, the title with it
-      var slide = function (content, title, sub, thumbnail, dir, done) {
-        var old = stage.children('.wizard-step')
-        var next = $('<div class="wizard-step"/>').append(content).appendTo(stage)
-        var titles = header.find('.wizard-title')
+    // The frame of a wizard over a dialog's box: a title of its own with the way back,
+    // its steps sliding in over each other, from the right going on and from the left
+    // going back, the title with them, and its actions under them
+    this.wizardFrame = function () {
+      var frame = {}
+      frame.header = $('<div class="wizard-header">' +
+                         '<span class="wizard-back">&lsaquo;</span>' +
+                         '<img class="wizard-thumb">' +
+                         '<div class="wizard-title"><strong></strong><span></span></div>' +
+                         '<span class="wizard-close">&times;</span>' +
+                       '</div>')
+      frame.wizard = $('<div class="addressing-wizard">' +
+                         '<div class="wizard-stage"></div>' +
+                         '<div class="wizard-actions"></div>' +
+                       '</div>')
+      frame.stage = frame.wizard.find('.wizard-stage')
+      frame.actions = frame.wizard.find('.wizard-actions')
+      frame.slide = function (content, title, sub, thumbnail, dir, done) {
+        var old = frame.stage.children('.wizard-step')
+        var next = $('<div class="wizard-step"/>').append(content).appendTo(frame.stage)
+        var titles = frame.header.find('.wizard-title')
         titles.find('strong').text(title)
         titles.find('span').text(sub)
-        header.find('.wizard-thumb').attr('src', thumbnail || '').toggle(!! thumbnail)
-        wizard.find('.wizard-assign').toggle(step == 'settings')
+        frame.header.find('.wizard-thumb').attr('src', thumbnail || '').toggle(!! thumbnail)
         if (! dir) {
           old.remove()
           return
@@ -1647,6 +1659,291 @@ function HardwareManager(options) {
           old.remove()
           next.removeClass('wizard-in-' + dir)
         }, 300)
+      }
+      return frame
+    }
+
+    // A plugin's bindings: a row for each of its controls that can be bound, with where
+    // it is, which opens that control's own dialog over it. On a device with pages, a
+    // whole page of them at once too: Fill a page, which says what goes where before
+    // doing it, its continuous controls on the knobs, subpage by subpage, its switches
+    // on the footswitches, and leaves out those already bound
+    this.openPlugin = function (instance) {
+      var plugin = options.getPlugin(instance)
+      var gui = plugin && plugin.data('gui')
+      if (! gui || ! gui.controls) {
+        return
+      }
+      var label = plugin.data('label') || gui.effect.label || gui.effect.name
+      var thumbnail = self.thumbnailOf(gui)
+      var form = $('<div class="mod-pedal-settings-address addressing-plugin"><div class="mod-box wizard-open"></div></div>')
+      var frame = self.wizardFrame()
+      var step = null
+
+      var ports = []
+      for (var symbol in gui.controls) {
+        if (self.isAddressable(plugin, symbol)) {
+          ports.push(gui.controls[symbol])
+        }
+      }
+
+      var close = function () {
+        self.changed.remove(refresh)
+        $('body').off('keydown', escape)
+        form.remove()
+      }
+      var escape = function (e) {
+        // the topmost dialog only, a control's own may be over it
+        if (e.keyCode == 27 && $('body > .mod-pedal-settings-address').last()[0] == form[0]) {
+          close()
+          return false
+        }
+      }
+      var buttons = function (list) {
+        frame.actions.empty()
+        $.each(list, function (i, button) {
+          $('<span class="btn"/>').addClass(button[2] || '').text(button[0]).click(button[1]).appendTo(frame.actions)
+        })
+        frame.header.find('.wizard-back').css('visibility', step == 'list' ? 'hidden' : '')
+      }
+
+      // a place on the device: a slot of an actuator on a page, free or not
+      var slotsOf = function (page) {
+        var slots = []
+        $.each(HARDWARE_PROFILE, function (i, actuator) {
+          if (! startsWith(actuator.uri, deviceOption) || actuator.actuator_group) {
+            return
+          }
+          var subpages = actuator.subpages ? actuator.subpages.length : 1
+          for (var s = 0; s < subpages; s++) {
+            slots.push({ actuator: actuator, page: page, subpage: s, order: i,
+                         knob: actuator.modes.indexOf(':float:') >= 0 })
+          }
+        })
+        // the knobs subpage by subpage, then the rest
+        return slots.sort(function (a, b) {
+          return (b.knob - a.knob) || (a.subpage - b.subpage) || (a.order - b.order)
+        })
+      }
+      var isFree = function (slot) {
+        var taken = function (uri) {
+          return (self.addressingsByActuator[uri] || []).some(function (key) {
+            var addressing = self.addressingsData[key]
+            return addressing && addressing.page == slot.page &&
+                   (addressing.subpage == null || addressing.subpage == slot.subpage)
+          })
+        }
+        if (taken(slot.actuator.uri)) {
+          return false
+        }
+        // a group of footswitches bound on the page holds them all
+        return ! HARDWARE_PROFILE.some(function (group) {
+          return group.actuator_group && group.actuator_group.indexOf(slot.actuator.uri) >= 0 && taken(group.uri)
+        })
+      }
+      var slotPlace = function (slot) {
+        return self.cellPlace(slot.actuator.uri, slot.page, slot.subpage).split(' · ').slice(1).join(' · ')
+      }
+      var isSwitch = function (port) {
+        var properties = port.properties || []
+        return port.symbol == ':bypass' || properties.indexOf("toggled") >= 0 || properties.indexOf("trigger") >= 0
+      }
+
+      var list = function (dir) {
+        step = 'list'
+        var rows = $('<div class="group"/>')
+        $.each(ports, function (i, port) {
+          var addressing = self.addressingsData[instance + '/' + port.symbol]
+          var row = $('<div class="row"><div class="text"><span class="name"></span><span class="sub"></span></div><span class="where"></span><span class="go">&rsaquo;</span></div>')
+          row.find('.name').text(port.name)
+          row.find('.sub').text(self.describePort(port))
+          row.find('.where').text(addressing ? self.placeOf(addressing) : '–').toggleClass('none', ! addressing)
+          row.click(function () {
+            self.open(instance, port, label)
+          })
+          rows.append(row)
+        })
+        if (! ports.length) {
+          rows = $('<div class="wizard-empty"/>').text('Nothing of this plugin can be bound')
+        }
+        frame.slide(rows, label, 'Bindings', thumbnail, dir)
+        var fills = ADDRESSING_PAGES > 0 && HARDWARE_PROFILE.some(function (a) { return startsWith(a.uri, deviceOption) })
+        buttons([['Close', close]].concat(fills ? [['Fill a page…', function () { pages('next') }, 'wizard-assign']] : []))
+      }
+      var refresh = function () {
+        if (step == 'list') {
+          list(null)
+        }
+      }
+
+      var pages = function (dir) {
+        step = 'pages'
+        var content = $('<div><div class="wizard-hint">Its controls on a page of the device, the continuous ones on the knobs, the switches on the footswitches.</div></div>')
+        var grid = $('<div class="wizard-pages"/>').appendTo(content)
+        for (var page = 0; page < ADDRESSING_PAGES; page++) {
+          var free = slotsOf(page).filter(isFree).length
+          $('<span class="wizard-page"/>').addClass('page-' + (page + 1)).toggleClass('full', free == 0)
+            .append($('<b/>').text(page + 1), $('<small/>').text(free + ' free'))
+            .click(function (page) {
+              return function () {
+                plan(page, 'next')
+              }
+            }(page))
+            .appendTo(grid)
+        }
+        frame.slide(content, 'Fill a page', label, thumbnail, dir)
+        buttons([['Back', function () { list('back') }]])
+      }
+
+      var plan = function (page, dir) {
+        step = 'plan'
+        var slots = slotsOf(page).filter(isFree)
+        var items = []
+        $.each(ports, function (i, port) {
+          if (port.symbol == ':presets') {
+            return
+          }
+          var addressing = self.addressingsData[instance + '/' + port.symbol]
+          if (addressing) {
+            items.push({ port: port, why: 'already on ' + self.placeOf(addressing) })
+            return
+          }
+          var fits = self.availableActuators(instance, port, false)
+          var candidates = slots.filter(function (slot) { return fits[slot.actuator.uri] })
+          var knobs = candidates.filter(function (slot) { return slot.knob })
+          var others = candidates.filter(function (slot) { return ! slot.knob })
+          var slot = (isSwitch(port) ? others.concat(knobs) : knobs.concat(others))[0]
+          if (! slot) {
+            items.push({ port: port, why: 'no free place for it' })
+            return
+          }
+          slots.splice(slots.indexOf(slot), 1)
+          items.push({ port: port, slot: slot, on: true })
+        })
+
+        var content = $('<div><div class="wizard-hint">What goes where. Leave out what you do not want.</div></div>')
+        var rows = $('<div class="group wizard-plan"/>').appendTo(content)
+        var apply = null
+        var count = function () {
+          var n = items.filter(function (item) { return item.slot && item.on }).length
+          apply.text('Apply ' + n).toggleClass('disabled', n == 0)
+        }
+        $.each(items, function (i, item) {
+          var row = $('<div class="row"><div class="text"><span class="name"></span><span class="sub"></span></div><span class="to"></span></div>')
+          row.find('.name').text(item.port.name)
+          row.find('.sub').text(self.describePort(item.port))
+          row.find('.to').text(item.slot ? '→ ' + slotPlace(item.slot) : item.why)
+          if (item.slot) {
+            $('<span class="switch on"/>').click(function () {
+              item.on = ! item.on
+              $(this).toggleClass('on', item.on)
+              row.toggleClass('off', ! item.on)
+              count()
+            }).appendTo(row)
+          } else {
+            row.addClass('skipped')
+          }
+          rows.append(row)
+        })
+        frame.slide(content, 'Page ' + (page + 1), label + ' · fill a page', thumbnail, dir)
+        buttons([['Back', function () { pages('back') }],
+                 ['Apply', function () {
+                   if (! $(this).hasClass('disabled')) {
+                     fill(page, items.filter(function (item) { return item.slot && item.on }))
+                   }
+                 }, 'wizard-assign']])
+        apply = frame.actions.find('.wizard-assign')
+        count()
+      }
+
+      // one after the other, as each is done, with the defaults its dialog would have
+      var fill = function (page, todo) {
+        var done = 0
+        var next = function () {
+          if (done == todo.length) {
+            new Notification('info', done + ' bound on page ' + (page + 1), 3000)
+            list('back')
+            return
+          }
+          var item = todo[done++]
+          var port = item.port
+          var actuator = item.slot.actuator
+          var properties = port.properties || []
+          var sensitivity = $('<select/>')
+          self.buildSensitivityOptions(sensitivity, port, actuator.steps, null)
+          var coloured = actuator.modes.indexOf(':colouredlist:') >= 0 && properties.indexOf("enumeration") >= 0 &&
+                         properties.indexOf("preferColouredListByDefault") >= 0 ? 1 : 0
+          var momentary = 0
+          if (actuator.modes.indexOf(':momentarytoggle:') >= 0 && properties.indexOf("enumeration") < 0 &&
+              properties.indexOf("tapTempo") < 0 && properties.indexOf("trigger") < 0) {
+            momentary = properties.indexOf("preferMomentaryOffByDefault") >= 0 ? 2
+                      : properties.indexOf("preferMomentaryOnByDefault") >= 0 ? 1 : 0
+          }
+          self.addressNow(instance, port, actuator,
+                          port.ranges.minimum, port.ranges.maximum,
+                          port.symbol == ':bypass' ? label : (port.shortName || port.name),
+                          sensitivity.val(), false, null, [],
+                          String(page), String(item.slot.subpage),
+                          coloured, momentary, undefined,
+                          undefined, next)
+        }
+        next()
+      }
+
+      frame.header.find('.wizard-back').click(function () {
+        if (step == 'pages') {
+          list('back')
+        } else if (step == 'plan') {
+          pages('back')
+        }
+      })
+      frame.header.find('.wizard-close').click(close)
+      form.find('.mod-box').append(frame.header, frame.wizard)
+      self.changed.add(refresh)
+      $('body').on('keydown', escape)
+      form.appendTo($('body'))
+      list(null)
+    }
+
+    // Assigning a parameter to a cell of the device: a wizard in the dialog itself,
+    // over its table, each step sliding in over the one before. In the overview, from
+    // a free cell, first the parameters that cell's actuator can control, by plugin,
+    // those bound elsewhere there too but not to be picked, then the picked one's
+    // settings. In a control's own dialog, `single`, straight to its settings, for the
+    // cell picked: there, a move from where it is, or its own cell, a change of them.
+    // The settings are the advanced ones, borrowed for it, already filled in, and the
+    // last action saves them, as Modify or Save would: back to the overview's table,
+    // the new binding picked in it, or away with the control's dialog
+    this.openAssignWizard = function (model, single, cell) {
+      var form = model.form
+      var box = form.find('.mod-box')
+      cell = cell || model.deviceTable.find('td.selected')
+      if (! cell.length || cell.hasClass('disabled') || box.hasClass('wizard-open') || (! single && cell.hasClass('binded'))) {
+        return
+      }
+      var actuatorUri = cell.attr('data-uri')
+      var page = cell.attr('data-page')
+      var subpage = cell.attr('data-subpage')
+      var place = self.cellPlace(actuatorUri, page, subpage)
+      var current = model.addressing || {}
+      var boundHere = single && cell.hasClass('selected')
+      var moving = single && ! boundHere && startsWith(current.uri || '', deviceOption)
+
+      var frame = self.wizardFrame()
+      var header = frame.header
+      var wizard = frame.wizard
+      var main = form.find('.main-form-container')
+      var advanced = form.find('.advanced-container')
+      var settings = advanced.find('.actuator-label, .range, .led-colour, .momentary-sw, .sensitivity')
+      var cancel = $('<span class="btn wizard-cancel">Back</span>').appendTo(frame.actions)
+      var assign = $('<span class="btn wizard-assign"/>').text(moving ? 'Move' : boundHere ? 'Save' : 'Assign').appendTo(frame.actions)
+      var step = null
+      var query = ''
+      var picked = single ? { instance: model.instance, port: model.port, gui: model.plugin, label: model.plugin_label } : null
+
+      var slide = function (content, title, sub, thumbnail, dir, done) {
+        assign.toggle(step == 'settings')
+        frame.slide(content, title, sub, thumbnail, dir, done)
       }
 
       // the borrowed settings back where they were, in the advanced ones
@@ -1675,6 +1972,14 @@ function HardwareManager(options) {
         header.remove()
         wizard.addClass('wizard-leaving wizard-out-back')
         main.addClass('wizard-in-back')
+        if (single) {
+          // the control's own binding, as it was, rather than the cell picked
+          cell.removeClass('pick')
+          var own = startsWith(current.uri || '', deviceOption)
+          model.hmiPageInput.val(own ? current.page : '')
+          model.hmiSubPageInput.val(own ? current.subpage : '')
+          model.hmiUriInput.val(own ? current.uri : '')
+        }
         setTimeout(function () {
           giveBack()
           wizard.remove()
@@ -1744,11 +2049,13 @@ function HardwareManager(options) {
       }
 
       var parameterSettings = function (dir) {
-        model.instance = picked.instance
-        model.port = picked.port
-        model.plugin = picked.gui
-        model.plugin_label = picked.label
-        model.addressing = {}
+        if (! single) {
+          model.instance = picked.instance
+          model.port = picked.port
+          model.plugin = picked.gui
+          model.plugin_label = picked.label
+          model.addressing = {}
+        }
         self.updateView(model)
         // the cell, as selectAddressing left it, and what its actuator lets be set
         model.hmiPageInput.val(page)
@@ -1756,16 +2063,22 @@ function HardwareManager(options) {
         model.hmiUriInput.val(actuatorUri)
         self.toggleAdvancedItemsVisibility(model.port,
                                            model.sensitivity, model.ledColourMode, model.momentarySwMode,
-                                           model.actuators[actuatorUri], null)
+                                           model.actuators[actuatorUri], boundHere ? current.steps : null)
         var content = $('<div class="wizard-settings"/>')
-        content.append($('<div class="wizard-where"/>').append('Goes to ', $('<b/>').text(place)))
-        content.append($('<div class="wizard-fields"/>').append(settings))
+        var where = $('<div class="wizard-where"/>')
+        if (moving) {
+          where.append('Moves from ', $('<b/>').text(self.cellPlace(current.uri, current.page, current.subpage || 0)),
+                       ' to ', $('<b/>').text(place))
+        } else {
+          where.append(boundHere ? 'On ' : 'Goes to ', $('<b/>').text(place))
+        }
+        content.append(where, $('<div class="wizard-fields"/>').append(settings))
         step = 'settings'
-        slide(content, picked.port.name, picked.label, self.thumbnailOf(picked.gui), dir)
+        slide(content, picked.port.name, picked.label, picked.gui ? self.thumbnailOf(picked.gui) : null, dir)
       }
 
       var back = function () {
-        if (step == 'settings') {
+        if (step == 'settings' && ! single) {
           unpick()
           parameters('back')
         } else {
@@ -1774,17 +2087,18 @@ function HardwareManager(options) {
       }
 
       header.find('.wizard-back').click(back)
-      wizard.find('.wizard-cancel').click(back)
+      cancel.click(back)
       header.find('.wizard-close').click(function () {
         form.find('.mod-box > .js-close').click()
       })
 
-      wizard.find('.wizard-assign').click(function () {
+      assign.click(function () {
         if (step != 'settings') {
           return
         }
         var port = picked.port
-        self.saveCurrentAddressing(function (ok, addressing) {
+        // in a control's own dialog, saving takes the dialog away
+        self.saveCurrentAddressing(single ? null : function (ok, addressing) {
           if (! ok || ! addressing) {
             return
           }
@@ -1807,7 +2121,12 @@ function HardwareManager(options) {
       setTimeout(function () {
         wizard.removeClass('wizard-in-next')
       }, 300)
-      parameters(null)
+      if (single) {
+        cell.addClass('pick')
+        parameterSettings(null)
+      } else {
+        parameters(null)
+      }
     }
 
     const _open = function (model) {
@@ -1866,6 +2185,9 @@ function HardwareManager(options) {
         self.updateView(model)
 
         self.buildDeviceTable(model, model.addressing)
+        if (! model.is_overview) {
+          model.deviceTable.find('td.selected').text(model.pname)
+        }
         if (model.is_overview) {
           self.buildMidiTable(model, null)
           self.buildCVTable(model, null)
@@ -1880,8 +2202,9 @@ function HardwareManager(options) {
             if(jbtn.attr('data-value') == model.typeInput.val()) {
               btn.addClass('selected')
             }
-            // Hide None tab in the pedalboard overview
-            if ((!model.port || model.is_overview) && (jbtn.attr('data-value') === kNullAddressURI)) {
+            // Hide None tab: in the pedalboard overview, and in a control's own dialog,
+            // where Remove unbinds it
+            if (jbtn.attr('data-value') === kNullAddressURI) {
               jbtn.hide()
             }
             // Device and Control Chain need MOD hardware. Under MOD Desktop the
@@ -2094,8 +2417,6 @@ function HardwareManager(options) {
           //   }
           //   console.log('add binding')
           // })
-        } else {
-          form.find('.btn.js-binding-remove').hide()
         }
 
         self.showAdvancedContainer = function(visibility) {
@@ -2180,12 +2501,37 @@ function HardwareManager(options) {
             }
         })
 
+        // what the bindings are assigned to, in the title bar rather than over the table
+        var titlebar = $('<div class="addressing-titlebar"/>')
+        model.form.find('.mod-box > h1').before(titlebar)
+        titlebar.append(model.form.find('.mod-box > h1'), model.form.find('.main-form-container > .mod'))
+
+        if (! model.is_overview) {
+          model.form.addClass('addressing-single')
+          // whose control it is, by the plugin's name where it has no label of its own
+          var effect = model.plugin && model.plugin.effect
+          if (effect && ! $.trim(model.form.find('.addressing-of').text())) {
+            model.form.find('.addressing-of').text(effect.label || effect.name)
+          }
+          if (effect && ! model.plugin_label) {
+            model.plugin_label = effect.label || effect.name
+          }
+          form.find('.btn.js-close').text("Close")
+          form.find('.js-binding-remove').click(function () {
+            model.typeInput.val(kNullAddressURI)
+            self.saveCurrentAddressing()
+          })
+          form.find('.js-binding-settings').click(function () {
+            self.openAssignWizard(model, true, model.deviceTable.find('td.selected'))
+          })
+          // not bound yet: the device first, or what there is
+          if (model.typeInput.val() === kNullAddressURI) {
+            form.find('.js-type').filter(function () { return $(this).css('display') != 'none' }).first().click()
+          }
+        }
+
         if (model.is_overview) {
           model.form.addClass('addressing-overview')
-          // what the bindings are assigned to, in the title bar rather than over the table
-          var titlebar = $('<div class="addressing-titlebar"/>')
-          model.form.find('.mod-box > h1').before(titlebar)
-          titlebar.append(model.form.find('.mod-box > h1'), model.form.find('.main-form-container > .mod'))
           model.form.find('.js-binding-add').click(function () {
             self.openAssignWizard(model)
           })
@@ -2212,7 +2558,8 @@ function HardwareManager(options) {
         port: port,
         plugin_label: plugin_label,
         plugins: null,
-        plugin: null
+        // its gui, for its thumbnail
+        plugin: options.getGui(instance)
       }
       _open(model)
     }
@@ -2287,6 +2634,9 @@ function HardwareManager(options) {
                 console.log("Addressing failed for port " + port.symbol);
                 return;
             }
+            setTimeout(function () {
+                self.changed.fire(instanceAndSymbol)
+            }, 0)
             // remove old one first
             var unaddressing = false
             if (currentAddressing.uri && currentAddressing.uri != kNullAddressURI) {

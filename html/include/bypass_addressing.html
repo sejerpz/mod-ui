@@ -1,7 +1,7 @@
 <div class="mod-pedal-settings-address">
     <div class="mod-spacer"></div>
     <div class="mod-box">
-        <h1 class="pull-left"><span class="addressing-of">{{label}}</span><span class="addressing-dash"> - </span><strong>{{name}}</strong></h1><span class="js-close close">&times;</span>
+        <h1 class="pull-left"><img class="addressing-thumb" style="display: none;"><span class="addressing-of">{{label}}</span><span class="addressing-dash"> - </span><strong>{{name}}</strong></h1><span class="js-close close">&times;</span>
         <div class="clearfix"></div>
         <hr style="margin-top:0px" />
         <form class="bottom form">
@@ -34,11 +34,11 @@
                     <input type="hidden" name="hmi-subpage" type="number">
                     <input type="hidden" name="hmi-uri">
                   </div>
-                  <span class="dynamic-field midi-learn-hint" style="display: none;">To map this parameter to your MIDI controller, press "save" and move the desired control on your MIDI device.</span>
+                  <span class="dynamic-field midi-learn-hint" style="display: none;">To map this parameter to your MIDI controller, press "Learn" and move the desired control on your MIDI device.</span>
                   <span class="dynamic-field midi-learn-custom" style="display: none;">
                     This parameter is currently mapped to <span class="midi-custom-uri"></span>.
-                    In order to map this parameter to a different MIDI control, press "save" and move the desired control on your MIDI device.
-                    Press "cancel" to retain the current mapping.
+                    In order to map this parameter to a different MIDI control, press "Learn" and move the desired control on your MIDI device.
+                    Close keeps the current mapping.
                   </span>
                   <span class="dynamic-field no-cc" style="display: none;">
                     No Control Chain device detected,
@@ -66,14 +66,16 @@
                 <hr class="col-xs-12" style="padding:0;margin:0 0 10px;" />
                 <div class="buttons-container textright clearfix">
                     <span class="btn btn-danger js-close">Cancel</span>
+                    <span class="btn btn-warning js-binding-remove" style="display: none;">Remove</span>
                     <span class="btn btn-success js-save">Save</span>
+                    <span class="btn js-binding-settings" style="display: none;">Settings</span>
                     <span class="btn advanced-toggle">Advanced</span>
                 </div>
               </div>
 
               <div class="advanced-container" style="display: none;">
                   <span class="advanced-pin-toggle icon-pin"></span>
-                  <div class="form-group clearfix">
+                  <div class="actuator-label form-group clearfix">
                       <label>Label</label>
                       <div class="mod-controls">
                           <input class="form-control" name="label" type="text"/>

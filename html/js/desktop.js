@@ -215,6 +215,14 @@ function Desktop(elements) {
             }
             self.pedalboard.pedalboard('setPortEnabled', instance, portSymbol, enabled, feedback, forceAddress, momentaryMode)
         },
+        getGui: function (instance) {
+            var plugin = self.pedalboard.data('plugins')[instance]
+            return plugin && plugin.data ? plugin.data('gui') : null
+        },
+        getPlugin: function (instance) {
+            var plugin = self.pedalboard.data('plugins')[instance]
+            return plugin && plugin.data ? plugin : null
+        },
         renderForm: function (instance, port) {
             var label
 
