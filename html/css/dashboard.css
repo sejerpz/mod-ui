@@ -6812,3 +6812,27 @@ body.app-bar-mode #notifications > section {
 body.app-bar-mode #notifications .progressbar {
     width: calc(100% - 16px);
 }
+
+/* The screens that wait, see js/wait.js, and the one of a lost connection: their
+   spinner, message and icon sized for a finger however wide the page is laid out, see
+   --touch-zoom in js/appbar.js */
+body.app-bar-mode .blocker .loadinganim {
+    width: calc(100px * var(--touch-zoom, 1));
+    height: calc(100px * var(--touch-zoom, 1));
+}
+
+body.app-bar-mode .blocker p {
+    box-sizing: border-box;
+    margin-top: calc(60px * var(--touch-zoom, 1));
+    padding: 0 calc(16px * var(--touch-zoom, 1));
+    font-size: calc(20px * var(--touch-zoom, 1));
+}
+
+body.app-bar-mode .blocker.screen-disconnected {
+    background-size: calc(100px * var(--touch-zoom, 1)) calc(100px * var(--touch-zoom, 1));
+}
+
+body.app-bar-mode .blocker.screen-disconnected .button {
+    margin-top: calc(120px * var(--touch-zoom, 1));
+    transform: translate(-50%, -50%) scale(var(--touch-zoom, 1));
+}
