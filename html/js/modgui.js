@@ -1463,6 +1463,7 @@ function GUI(effect, options) {
 
     this.render = function (instance, callback, skipNamespace) {
         self.instance = instance
+        self.skipNamespace = skipNamespace
 
         var render = function () {
             self.preRender()
@@ -2486,6 +2487,23 @@ function GUI(effect, options) {
                 sheet.remove()
             }
         }).appendTo('body')
+    }
+
+    // The plugin's own face once more, for the performance view to flip to, see
+    // js/performance.js: its controls work, and follow the others as the settings' do.
+    // Made the first time it is asked for, then kept
+    this.performanceIcon = function () {
+        if (! self.iconPerformance) {
+            var icon = $('<div class="mod-pedal mod-pedal-performance">')
+            if (self.instance) {
+                icon.attr('mod-instance', self.instance)
+            }
+            icon.html(Mustache.render(effect.gui.iconTemplate || options.defaultIconTemplate,
+                                      self.getTemplateData(effect, self.skipNamespace)))
+            self.assignControlFunctionality(icon, false)
+            self.iconPerformance = icon
+        }
+        return self.iconPerformance
     }
 
     this.assignControlFunctionality = function (element, onlySetValues) {

@@ -2660,6 +2660,31 @@ body.app-bar-mode #performance .js-performance-plugins {
 body.app-bar-mode #performance .snapshot-container {
     padding-top: calc(56px * var(--touch-zoom, 1) + 12px);
 }
+/* A plugin's own face in the performance view, flipped to from its settings, see
+   js/performance.js: in the middle of where they were, under the title, as big as fits
+   there. Without its actions, which are the board's */
+body.app-bar-mode #performance .mod-performance-face {
+    position: absolute;
+    top: calc(56px * var(--touch-zoom, 1));
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+body.app-bar-mode #performance .mod-performance-face > .mod-pedal {
+    position: relative;
+    left: auto;
+    top: auto;
+    flex: none;
+    transform-origin: center;
+}
+body.app-bar-mode #performance .mod-performance-face .mod-actions {
+    display: none;
+}
+
 /* What is shown, a carousel the way the list runs, see js/performance.js: the browser
    scrolls it the other way, the carousel takes that one. The list the same, a swipe
    along it going to the next plugin */

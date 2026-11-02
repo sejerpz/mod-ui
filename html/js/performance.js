@@ -71,7 +71,9 @@ JqueryClass('performanceBox', {
                         //TODO: if element is plugin, show plugin settings
                         const plugin = element
                         const plugins = self.data("plugins")
-                        const settings = plugin.settingsPerformance[0];
+                        // its own face, if that is what is shown, see flip below
+                        const settings = self.data("face") ? self.data("faceOf")(plugin)[0]
+                                                           : plugin.settingsPerformance[0];
 
                         selectedIndex = plugins.indexOf(plugin) + 1 // +1 'cause 0 is the snapshot page
 
@@ -317,15 +319,116 @@ JqueryClass('performanceBox', {
             listSwipe = null
         })
 
+        // What is shown, and where on it a finger is taken by a control rather than by the
+        // gestures below
+        const settingsCanvas = self.data('resultCanvasPluginSettings')
+        const controls = '.mod-knob-image, .mod-switch-image, .mod-enumerated-list, .mod-presets-menu, ' +
+                         '.mod-ab-toggle, .mod-address, .mod-knob-snapshot-status, input, select, textarea, button, a, ' +
+                         '[mod-role=input-control-port], [mod-role=bypass], [mod-role=presets]'
+
+        // A plugin's own face, which a double tap on its settings, off their controls,
+        // flips to, as the focus view's, see js/appbar.js, and one on the face back: its
+        // controls work there too. As big as fits where the settings were, up to twice
+        // its size. It stays the face shown going to another plugin, the snapshots
+        // having no other
+        const faceOf = function (plugin) {
+            const face = $('<div class="mod-performance-face">').append(plugin.performanceIcon())
+            fitFace(face, 20)
+            return face
+        }
+        // once it is shown, which may be after the settings before it have faded out
+        const fitFace = function (face, tries) {
+            // as big as what it holds, placed inside it, as the board makes its plugins
+            const icon = face.children('.mod-pedal')
+            const inner = icon.children().first()
+            const width = inner[0] && inner[0].offsetWidth, height = inner[0] && inner[0].offsetHeight
+            if (! width || ! height || ! face.width()) {
+                if (tries) {
+                    setTimeout(function () {
+                        fitFace(face, tries - 1)
+                    }, 50)
+                }
+                return
+            }
+            const scale = Math.min(2, (face.width() - 32) / width, (face.height() - 32) / height)
+            icon.css({ width: width, height: height, transform: 'scale(' + scale + ')' })
+        }
+        self.data('faceOf', faceOf)
+        $(window).on('resize', function () {
+            settingsCanvas.find('.mod-performance-face').each(function () {
+                fitFace($(this))
+            })
+        })
+        const FLIP = 350
+        const flip = function () {
+            const element = self.data("selectedElement")
+            if (! element || element === ":presets" || settingsCanvas.hasClass('mod-flip-away')) {
+                return
+            }
+            const toFace = ! self.data("face")
+            settingsCanvas.removeClass('mod-flip-back').addClass('mod-flip-away')
+            setTimeout(function () {
+                self.data("face", toFace)
+                // the settings and the face are kept, with what they do, for next time
+                settingsCanvas.children().detach()
+                settingsCanvas.append(toFace ? faceOf(element) : element.settingsPerformance)
+                settingsCanvas.removeClass('mod-flip-away').addClass('mod-flip-back')
+                setTimeout(function () {
+                    settingsCanvas.removeClass('mod-flip-back')
+                }, FLIP)
+            }, FLIP)
+        }
+        // A tap on the plugin in the list already shown flips it too, rather than
+        // choosing it again. Not while arranging them
+        let listDown = null, listFlipped = false
+        canvas.on('pointerdown', function (e) {
+            const item = $(e.originalEvent.target).closest('.plugin')
+            listDown = item.hasClass('selected') ? e.originalEvent : null
+        }).on('pointerup', function (e) {
+            const ev = e.originalEvent
+            const down = listDown
+            listDown = null
+            if (! down || down.pointerId != ev.pointerId || self.data("inDesign") ||
+                Math.abs(ev.clientX - down.clientX) > 10 || Math.abs(ev.clientY - down.clientY) > 10) {
+                return
+            }
+            listFlipped = true
+            flip()
+        })
+        // the tap's click, which would choose it again, kept from it
+        canvas[0].addEventListener('click', function (e) {
+            if (listFlipped) {
+                listFlipped = false
+                e.stopPropagation()
+            }
+        }, true)
+
+        let tapped = 0, tapDown = null
+        settingsCanvas.on('pointerdown', function (e) {
+            tapDown = e.originalEvent
+        }).on('pointerup', function (e) {
+            const ev = e.originalEvent
+            const down = tapDown
+            tapDown = null
+            if (! down || down.pointerId != ev.pointerId ||
+                Math.abs(ev.clientX - down.clientX) > 10 || Math.abs(ev.clientY - down.clientY) > 10 ||
+                $(ev.target).closest(controls).length) {
+                return
+            }
+            if (Date.now() - tapped < 350) {
+                tapped = 0
+                flip()
+            } else {
+                tapped = Date.now()
+            }
+        })
+
         // A finger on what is shown, the way the list runs, across with it along the
         // bottom, up and down with it down the side (see main.css): a carousel. What is
         // shown follows the finger, and let go a quarter of the way on, or flicked, the
         // next plugin comes, or the one before, and it goes back otherwise. Not starting
         // on the controls, which take the finger themselves, as a slider anywhere along
         // it, see touchSlider in js/modgui.js, nor the other way, which scrolls
-        const settingsCanvas = self.data('resultCanvasPluginSettings')
-        const controls = '.mod-knob-image, .mod-switch-image, .mod-enumerated-list, .mod-presets-menu, ' +
-                         '.mod-ab-toggle, .mod-address, .mod-knob-snapshot-status, input, select, textarea, button, a'
         let swipe = null
         const slide = function (el, along, down, animated) {
             el.style.transition = animated ? 'transform 0.2s ease, opacity 0.2s ease' : ''
