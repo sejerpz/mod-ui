@@ -2592,13 +2592,13 @@ body.app-bar-mode .mod-title-tools #zoom-controllers > span:hover {
     opacity: 1;
 }
 
-/* always on, a touch screen's, see desktop's gridModeLocked: shown, not a button */
-.mod-title-tools .grid-toggle.locked {
-    cursor: default;
-}
-
+/* always on, a touch screen's, see desktop's gridModeLocked: shown, not a button, in
+   grey rather than lit, there being no choice */
+.mod-title-tools .grid-toggle.locked,
 .mod-title-tools .grid-toggle.locked:hover {
-    background-color: rgba(136, 57, 150, 0.35);
+    color: #bbb;
+    background-color: rgba(255, 255, 255, 0.1);
+    cursor: default;
 }
 
 body.app-bar-mode #pedalboard-info > h1 {
