@@ -67,6 +67,10 @@ JqueryClass('appBar', {
             var side = Math.min(screen.width, screen.height) || Infinity
             side = Math.min(side, room, page.clientHeight / zoom || Infinity)
             $('body').toggleClass('small-screen', side < 600)
+            // Narrow, under 600 across whatever the other way, the dialogs rise from the
+            // bottom and take the whole width, a narrow window on a desktop as a phone
+            // held upright
+            $('body').toggleClass('narrow-screen', room < 600)
             self.trigger('fitviewport')
         }
         fitViewport()

@@ -4932,27 +4932,126 @@ body.app-bar-mode .plugin-info .box {
     margin-bottom: calc(96px * var(--touch-zoom, 1));
 }
 
-/* The bindings dialog (also a single control's addressing), with the dock: the title
-   and the buttons stay where they are and what is between them scrolls, rather than the
-   whole box. Its box is a column, down to the table itself */
+/* The bindings dialog, of a single control or the overview of all, with the dock: dark
+   as the other dialogs, see .mod-sheet, a card in the middle, rising from the bottom on
+   a narrow screen, see narrow-screen in js/appbar.js. Its title on top, the actions at
+   the bottom, the way out at the top right and in between what it is assigned to, which
+   scrolls, and the advanced settings, beside it where there is room, under it where
+   there is not. It is as tall whatever it is assigned to, the device's pages the
+   tallest, so that it keeps still as the tabs change. As .mod-sheet its parts are sized
+   for a finger, the card not, see --touch-zoom in js/appbar.js. The box's width is the
+   hardware manager's, which animates it as the advanced settings come and go: here it
+   is the card's own */
+body.app-bar-mode .mod-pedal-settings-address {
+    position: fixed;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-spacer,
+body.app-bar-mode .mod-pedal-settings-address .mod-box > .clearfix,
+body.app-bar-mode .mod-pedal-settings-address .mod-box > hr,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container hr {
+    display: none;
+}
+
 body.app-bar-mode .mod-pedal-settings-address .mod-box {
+    position: relative;
+    top: auto;
+    left: auto;
     display: flex;
     flex-direction: column;
+    width: calc(820px * var(--touch-zoom, 1)) !important;
+    max-width: calc(100% - 32px);
+    height: calc(660px * var(--touch-zoom, 1));
+    max-height: calc(100% - 48px);
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: calc(16px * var(--touch-zoom, 1));
+    background: #161616;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 16px;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1,
-body.app-bar-mode .mod-pedal-settings-address .mod-box > .close {
-    flex: none;
+body.app-bar-mode .mod-pedal-settings-address .mod-box:has(.advanced-container:not([style*="none"])) {
+    width: calc(1100px * var(--touch-zoom, 1)) !important;
 }
 
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address {
+    justify-content: flex-end;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .mod-box,
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .mod-box:has(.advanced-container:not([style*="none"])) {
+    width: 100% !important;
+    max-width: none;
+    height: calc(100% - 40px);
+    max-height: none;
+    border-bottom: none;
+    border-radius: calc(20px * var(--touch-zoom, 1)) calc(20px * var(--touch-zoom, 1)) 0 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > * {
+    zoom: var(--touch-zoom, 1);
+}
+
+/* the control's name, and under it whose it is */
 body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 {
-    align-self: flex-start;
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    float: none;
+    min-height: 56px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 10px 60px 10px 20px;
+    border-bottom: 1px solid #333;
+    font-size: 13px;
+    line-height: 1.2;
+    font-weight: normal;
+    text-transform: none;
+    color: #999;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 strong {
+    order: -1;
+    flex-basis: 100%;
+    overflow: hidden;
+    color: #fff;
+    font-size: 20px;
+    font-weight: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .addressing-dash {
+    display: none;
 }
 
 body.app-bar-mode .mod-pedal-settings-address .mod-box > .close {
     position: absolute;
-    align-self: flex-end;
+    top: 6px;
+    right: 8px;
+    float: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    color: #bbb;
+    font-size: 30px;
+    font-weight: normal;
+    line-height: 42px;
+    text-align: center;
+    text-shadow: none;
+    opacity: 1;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > .close:active {
+    background: rgba(255, 255, 255, 0.12);
 }
 
 body.app-bar-mode .mod-pedal-settings-address .mod-box > .form {
@@ -4963,44 +5062,513 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box > .form {
     margin: 0;
 }
 
+/* What it is assigned to, the advanced settings beside it and the actions under both:
+   the column they are in is no box of its own here */
 body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: "main side" "actions actions";
     flex: 1 1 auto;
     min-height: 0;
 }
 
 body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container > div:first-child {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+    display: contents;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container > div:first-child > * {
-    flex: none;
-}
-
-body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container > div:first-child > .main-form-container {
+body.app-bar-mode .mod-pedal-settings-address .mod-box .main-form-container {
+    grid-area: main;
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
+    width: auto;
     min-height: 0;
+    box-sizing: border-box;
+    padding: 12px 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 body.app-bar-mode .mod-pedal-settings-address .main-form-container > * {
     flex: none;
 }
 
-/* the controls' table scrolls, under the tabs of what the binding is assigned to.
-   Like it, the tables of the other tabs */
-body.app-bar-mode .mod-pedal-settings-address .main-form-container > .dynamic-field {
-    flex: 1 1 auto;
+body.app-bar-mode .mod-pedal-settings-address .mod-box .advanced-container {
+    grid-area: side;
+    position: relative;
+    width: 300px;
     min-height: 0;
-    overflow: auto;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 12px 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-left: 1px solid #333;
+    background: rgba(0, 0, 0, 0.18);
 }
 
-/* the advanced settings beside it scroll on their own, should they not fit */
-body.app-bar-mode .mod-pedal-settings-address .mod-box .advanced-container {
-    min-height: 0;
-    overflow-y: auto;
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .mod-box .form-container {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas: "main" "side" "actions";
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .mod-box .advanced-container {
+    width: auto;
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid #333;
+}
+
+/* the small titles, over what it is assigned to and over each advanced setting */
+body.app-bar-mode .mod-pedal-settings-address .main-form-container label,
+body.app-bar-mode .mod-pedal-settings-address .advanced-container label {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 0 4px 6px;
+    color: #999;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .form-group {
+    margin: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .form-group::before,
+body.app-bar-mode .mod-pedal-settings-address .form-group::after,
+body.app-bar-mode .mod-pedal-settings-address .buttons-container::before,
+body.app-bar-mode .mod-pedal-settings-address .buttons-container::after {
+    display: none;
+}
+
+/* None, Device, MIDI...: one of them, as the dock's mode, under its title */
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .mod {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 20px;
+    padding: 3px;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .mod > label {
+    position: absolute;
+    top: -21px;
+    left: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .btn.js-type {
+    flex: 1 0 auto;
+    height: 40px;
+    margin: 0;
+    padding: 0 10px;
+    border: none;
+    border-radius: 9px;
+    background: none;
+    color: #fff;
+    font-size: 16px;
+    line-height: 40px;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .btn.js-type.selected {
+    background: #883996;
+}
+
+/* the musical tempo, over it, when the control has one */
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .tempo {
+    margin-bottom: 14px;
+    color: #ccc;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .tempo > div {
+    margin: 0 4px 8px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .tempo input[type=checkbox] {
+    margin: 0 6px 0 0;
+    accent-color: #883996;
+}
+
+/* what a tab has to say, MIDI learn, no Control Chain device or no CV port: a note */
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > span.dynamic-field,
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .desktop-app-exclusive {
+    display: block;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #1c1c1c;
+    color: #ccc;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .main-form-container .midi-custom-uri {
+    color: #c79bd0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .main-form-container > .dynamic-field:not(span) {
+    margin-top: 14px;
+}
+
+/* fields: the advanced settings', the Control Chain actuator and the CV port */
+body.app-bar-mode .mod-pedal-settings-address .mod-controls {
+    float: none;
+    width: 100%;
+}
+
+body.app-bar-mode .mod-pedal-settings-address input[type=text],
+body.app-bar-mode .mod-pedal-settings-address input[type=number],
+body.app-bar-mode .mod-pedal-settings-address select {
+    width: 100% !important;
+    height: 44px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    background: #1c1c1c;
+    color: #fff;
+    font: inherit;
+    box-shadow: none;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+body.app-bar-mode .mod-pedal-settings-address input:focus,
+body.app-bar-mode .mod-pedal-settings-address select:focus {
+    outline: none;
+    border-color: #883996;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-range input[type=number] {
+    flex: 1;
+    float: none;
+    text-align: center;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-range span {
+    flex: none;
+    width: auto;
+    float: none;
+    color: #777;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .advanced-container .form-group {
+    margin-bottom: 14px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .advanced-container .advanced-pin-toggle {
+    top: 6px;
+    right: 6px;
+    color: #777;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .advanced-container .advanced-pin-toggle.pinned {
+    color: #c79bd0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .advanced-container .no-selection {
+    color: #999;
+}
+
+/* the actions, where the dock was: away, Advanced and the rest at the other end */
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .buttons-container {
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 12px 16px;
+    border-top: 1px solid #333;
+    background: rgba(17, 17, 17, 0.6);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .btn {
+    min-width: 96px;
+    height: 48px;
+    margin: 0;
+    padding: 0 18px;
+    border: 1px solid #444;
+    border-radius: 12px;
+    background: #2c2c2c;
+    color: #fff;
+    font-size: 16px;
+    line-height: 46px;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .btn:active {
+    background: #3a3a3a;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-close {
+    margin-right: auto;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .advanced-toggle {
+    order: 1;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-binding-remove {
+    order: 2;
+    border-color: #5a2a2a;
+    background: #2a1c1c;
+    color: #ff8a86;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-save {
+    order: 3;
+    border-color: #883996;
+    background: #883996;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .btn.disabled {
+    opacity: 0.35;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .buttons-container .btn {
+    flex: 1;
+    min-width: 0;
+    padding: 0 8px;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .buttons-container .js-close {
+    margin-right: 0;
+}
+
+/* The device: a row a page, the page's colour at its start, its actuators in a group
+   of columns each, see buildDeviceTable in js/hardware.js. Where it is free the column
+   says what it is; where purple, what it is assigned to; the one this control goes to
+   in full. On a narrow screen a group at a time, by its tab */
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages-tabs {
+    display: none;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .hmi-pages-tabs {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 8px;
+    padding: 3px;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .hmi-pages .hmi-pages-hidden {
+    display: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages-tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 38px;
+    padding: 2px 4px;
+    border: none;
+    border-radius: 9px;
+    background: none;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.1;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages-tabs button.on {
+    background: #883996;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+    font-size: 14px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages th {
+    height: 30px;
+    padding: 0 4px;
+    background: #1f1f1f;
+    color: #999;
+    font-size: 13px;
+    font-weight: normal;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages .hmi-pages-groups th {
+    color: #c79bd0;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages .hmi-pages-names th {
+    border-bottom: 1px solid #3a3a3a;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages .hmi-page {
+    width: 44px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody th.hmi-page {
+    background: #232323;
+    color: #ddd;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(1) th { box-shadow: inset 4px 0 0 #ff6666; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(2) th { box-shadow: inset 4px 0 0 #ffff66; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(3) th { box-shadow: inset 4px 0 0 #66ffff; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(4) th { box-shadow: inset 4px 0 0 #bb7cd5; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(5) th { box-shadow: inset 4px 0 0 #f5a77e; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(6) th { box-shadow: inset 4px 0 0 #66ff66; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(7) th { box-shadow: inset 4px 0 0 #ff66ff; }
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:nth-child(8) th { box-shadow: inset 4px 0 0 #8080ff; }
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td {
+    height: 44px;
+    padding: 0 4px;
+    border-top: 1px solid #333;
+    border-left: 1px solid #333;
+    color: #ccc;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages tbody tr:first-child td {
+    border-top: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages .hmi-pages-first {
+    border-left: 2px solid #4a4a4a;
+}
+
+/* free: its column already says which actuator it is */
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td:not(.binded):not(.selected):not(.disabled) {
+    font-size: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td:not(.binded):not(.selected):not(.disabled)::before {
+    content: '–';
+    color: #555;
+    font-size: 14px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td:active {
+    background: rgba(136, 57, 150, 0.85);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td.binded {
+    background: #2f2532;
+    color: #c79bd0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td.disabled {
+    background: repeating-linear-gradient(135deg, #262626 0 6px, #2a2a2a 6px 12px);
+    color: #6a6a6a;
+    cursor: default;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td.selected {
+    background: #883996;
+    color: #fff;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td.accept-drop {
+    outline: 2px dashed #c79bd0;
+    outline-offset: -3px;
+}
+
+/* the overview's MIDI, Control Chain and CV bindings: a row each */
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table-overview,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table-overview {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table-overview tr,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table-overview tr,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr.odd,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table-overview tr.odd,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table-overview tr.odd {
+    height: 48px;
+    background: none;
+    box-shadow: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview th,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table-overview th,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table-overview th {
+    height: 32px;
+    padding: 0 14px;
+    border: none;
+    background: #1f1f1f;
+    color: #999;
+    font-size: 13px;
+    font-weight: normal;
+    text-align: left;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview td,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table-overview td,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table-overview td {
+    padding: 0 14px;
+    border: none;
+    border-top: 1px solid #353535;
+    text-align: left;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr.selected,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table-overview tr.selected,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table-overview tr.selected {
+    background: #3a2a3e;
+    box-shadow: inset 3px 0 0 #c79bd0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table .no-selection,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cc-table .no-selection,
+body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-form-container .cv-table .no-selection {
+    height: auto;
+    padding: 22px 12px;
+    color: #999;
+    font-size: 15px;
 }
 
 /* Grid mode's cabling by touch: a tap on an output starts a cable, a tap on an input
@@ -5066,7 +5634,7 @@ body.app-bar-mode .mod-cv-input.input-connecting:not(.input-connected)::before {
 
 /* A dialog with the app bar, see .mod-sheet-popup in index.html: dark as the plugin
    settings and the connect pane, a card in the middle of the screen, rising from the
-   bottom on a small one held upright, see small-screen in js/appbar.js. Its title on
+   bottom on a narrow one, see narrow-screen in js/appbar.js. Its title on
    top with the way out, its actions at the bottom, where the dock was before it went
    away, see js/appbar.js, and what is between scrolls. Its parts are sized for a
    finger however wide the page is laid out, see --touch-zoom in js/appbar.js, each on
@@ -5099,18 +5667,16 @@ body.app-bar-mode .mod-sheet-popup .mod-sheet {
     text-align: left;
 }
 
-@media (orientation: portrait) {
-    body.app-bar-mode.small-screen .mod-sheet-popup .mod-sheet {
-        left: 0;
-        right: 0;
-        top: auto;
-        bottom: 0;
-        width: auto;
-        max-width: none;
-        transform: none;
-        border-bottom: none;
-        border-radius: calc(20px * var(--touch-zoom, 1)) calc(20px * var(--touch-zoom, 1)) 0 0;
-    }
+body.app-bar-mode.narrow-screen .mod-sheet-popup .mod-sheet {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    transform: none;
+    border-bottom: none;
+    border-radius: calc(20px * var(--touch-zoom, 1)) calc(20px * var(--touch-zoom, 1)) 0 0;
 }
 
 body.app-bar-mode .mod-sheet-popup .mod-sheet > * {
@@ -5236,10 +5802,8 @@ body.app-bar-mode .mod-sheet-popup .mod-sheet .btn.disabled {
 }
 
 /* on a narrow screen, the actions share the whole width */
-@media (orientation: portrait) {
-    body.app-bar-mode.small-screen .mod-sheet-popup .mod-sheet .actions .btn {
-        flex: 1;
-    }
+body.app-bar-mode.narrow-screen .mod-sheet-popup .mod-sheet .actions .btn {
+    flex: 1;
 }
 
 body.app-bar-mode .mod-sheet-popup .mod-sheet input[type=text],

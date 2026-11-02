@@ -655,76 +655,54 @@ function HardwareManager(options) {
       // let momentarySwMode = model.momentarySwMode
       let port = model.port
       var table = $('<table/>').addClass('hmi-table')
-      var row, cell, ctable, uri, uriAddressings, usedAddressings, addressing
-      var actuator, actuatorName, actuatorSubPages, groupActuator, groupAddressings, lastGroupName, subpageTables = {}
+      var row, cell, uri, uriAddressings, usedAddressings, addressing
+      var actuator, groupActuator, groupAddressings, lastGroupName
       const draggableOptions = { disabled: !model.is_overview, cursor: "move", opacity: 0.8, helper: "clone" }
 
       if (ADDRESSING_PAGES > 0)
       {
-        // build header row
-        var headerRow = $('<tr/>')
-        for (var i = 1; i <= ADDRESSING_PAGES; i++) {
-          headerRow.append($('<th>Page '+i+'</th>'))
+        // A row for each page, with all the device has on it: an actuator with subpages
+        // has a column in a group for each of them, the others one in their own group,
+        // where a group of actuators goes with the actuators it is made of. On a narrow
+        // screen the groups are a tab each, see .hmi-pages in css/dashboard.css
+        var columnGroups = [], groupsByName = {}
+        var addColumn = function (name, column) {
+          var columnGroup = groupsByName[name]
+          if (!columnGroup) {
+            columnGroup = groupsByName[name] = { name: name, columns: [] }
+            columnGroups.push(columnGroup)
+          }
+          columnGroup.columns.push(column)
         }
-        table.append(headerRow)
+        var groupOf = function (actuator) {
+          if (actuator.actuator_group) {
+            for (var i in HARDWARE_PROFILE) {
+              if (HARDWARE_PROFILE[i].uri == actuator.actuator_group[0] && HARDWARE_PROFILE[i].group) {
+                return HARDWARE_PROFILE[i].group
+              }
+            }
+          }
+          return actuator.group || ''
+        }
 
         for (var actuatorUri in actuators) {
           if (!startsWith(actuatorUri, deviceOption)) {
             continue
           }
           actuator = actuators[actuatorUri]
-          actuatorSubPages = actuator.subpages || [null]
-          usedAddressings = self.addressingsByActuator[actuatorUri]
-
-          // pre-create groups for subpages
           if (actuator.subpages) {
-            for (var i in actuator.subpages) {
-              lastGroupName = actuator.subpages[i]
-              if (!subpageTables[lastGroupName]) {
-                  deviceTable.append(table)
-                  deviceTable.append($('<div class="group-strike">'+ lastGroupName +'</div>'))
-                  table = subpageTables[lastGroupName] = $('<table/>').addClass('hmi-table')
-              } else {
-                  table = subpageTables[lastGroupName]
-              }
+            for (var i = 0; i < actuator.subpages.length; i++) {
+              addColumn(actuator.subpages[i], { uri: actuatorUri, subpage: i, name: actuator.name })
             }
-            ctable = null
-            lastGroupName = null
-
-          // actuator belongs to a new group (compared to last one)
-          } else if (actuator.group && actuator.group != lastGroupName) {
-              deviceTable.append(table)
-              deviceTable.append($('<div class="group-strike">'+ actuator.group +'</div>'))
-              ctable = table = $('<table/>').addClass('hmi-table')
-              lastGroupName = actuator.group
-
-          // there was a group before, but not anymore, so create a "no-group" group
-          } else if (lastGroupName && !actuator.group) {
-              deviceTable.append(table)
-              deviceTable.append($('<div class="group-strike">No Group</div>'))
-              ctable = table = $('<table/>').addClass('hmi-table')
-              lastGroupName = null
-
-          // no groups ever in use, just act normal
           } else {
-              ctable = table
+            addColumn(groupOf(actuator), { uri: actuatorUri, subpage: 0,
+                                           name: actuator.group ? (actuator.gname || actuator.name) : actuator.name })
           }
+        }
 
-          for (var actSubPage = 0; actSubPage < actuatorSubPages.length; actSubPage++) {
-            row = $('<tr/>')
-            if (actuator.subpages) {
-                ctable = subpageTables[actuatorSubPages[actSubPage]]
-            }
-
-            // add the columns
-            for (var addrPage = 0; addrPage < ADDRESSING_PAGES; addrPage++) {
-              // define a fixed width avoid table shrink on drag & drop
-              const col = $("<col style='width: 86px;'/>")
-              ctable.append(col)
-            }
-
-            for (var addrPage = 0; addrPage < ADDRESSING_PAGES; addrPage++) {
-              actuatorName = lastGroupName ? (actuator.gname || actuator.name) : actuator.name
+        var cellFor = function (actuatorUri, addrPage, actSubPage, actuatorName) {
+              actuator = actuators[actuatorUri]
+              usedAddressings = self.addressingsByActuator[actuatorUri]
               cell = $('<td data-page="'+ addrPage +'" data-subpage="'+ actSubPage +'" data-uri="'+ actuatorUri +'">'+ actuatorName +'</td>')
               if (currentAddressing &&
                   currentAddressing.uri == actuatorUri &&
@@ -774,11 +752,53 @@ function HardwareManager(options) {
                   }
                 }
               }
-              row.append(cell)
-            }
-            ctable.append(row)
-          }
+              return cell
         }
+
+        // "Endless Knobs - Subpage I" is "Subpage I", under the title of the knobs
+        var groupTitle = function (name) {
+          return name.split(' - ').pop()
+        }
+
+        var tabs = $('<div class="hmi-pages-tabs"/>')
+        var groupsRow = $('<tr class="hmi-pages-groups"><th class="hmi-page"></th></tr>')
+        var namesRow = $('<tr class="hmi-pages-names"><th class="hmi-page">Page</th></tr>')
+        var body = $('<tbody/>')
+        table = $('<table/>').addClass('hmi-pages')
+
+        $.each(columnGroups, function (n, columnGroup) {
+          groupsRow.append($('<th/>').attr('colspan', columnGroup.columns.length).attr('data-group', n)
+                                     .addClass('hmi-pages-first').text(groupTitle(columnGroup.name)))
+          tabs.append($('<button type="button"/>').attr('data-group', n).text(groupTitle(columnGroup.name)))
+          $.each(columnGroup.columns, function (k, column) {
+            namesRow.append($('<th/>').attr('data-group', n).toggleClass('hmi-pages-first', k == 0).text(column.name))
+          })
+        })
+
+        for (var addrPage = 0; addrPage < ADDRESSING_PAGES; addrPage++) {
+          row = $('<tr/>').append($('<th class="hmi-page"/>').text(addrPage + 1))
+          $.each(columnGroups, function (n, columnGroup) {
+            $.each(columnGroup.columns, function (k, column) {
+              row.append(cellFor(column.uri, addrPage, column.subpage, column.name)
+                           .attr('data-group', n).toggleClass('hmi-pages-first', k == 0))
+            })
+          })
+          body.append(row)
+        }
+
+        table.append($('<thead/>').append(groupsRow, namesRow), body)
+
+        // a tab at a time, first the one with this binding
+        var showGroup = function (n) {
+          tabs.children().removeClass('on').filter('[data-group="' + n + '"]').addClass('on')
+          table.find('[data-group]').addClass('hmi-pages-hidden').filter('[data-group="' + n + '"]').removeClass('hmi-pages-hidden')
+        }
+        tabs.on('click', 'button', function () {
+          showGroup($(this).attr('data-group'))
+        })
+        showGroup(body.find('td.selected').attr('data-group') || 0)
+
+        deviceTable.append(tabs)
       }
       else
       {
