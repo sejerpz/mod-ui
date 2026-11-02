@@ -2635,6 +2635,13 @@ body.app-bar-mode #plugins-library.grid-library.open {
     transform: none;
 }
 
+/* its title, tabs and plugins sized for a finger however wide the page is laid out,
+   see --touch-zoom in js/appbar.js, each on its own, as the dialogs: the library itself
+   is not zoomed, so that it fits the screen's own size */
+body.app-bar-mode #plugins-library.grid-library > * {
+    zoom: var(--touch-zoom, 1);
+}
+
 /* sized for a finger however wide the page is laid out, see --touch-zoom in
    js/appbar.js */
 .mod-app-bar {
