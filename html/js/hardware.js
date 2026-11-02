@@ -997,6 +997,7 @@ function HardwareManager(options) {
           return acceptDrop
         }
       }
+      var lastTap = {}
       deviceTable.find('td').click(function () {
         if ($(this).hasClass('disabled')) {
           return
@@ -1005,11 +1006,21 @@ function HardwareManager(options) {
         var page = $(this).attr('data-page')
         var subpage = $(this).attr('data-subpage')
 
+        // A second tap on the same free cell of the overview, soon after the first: straight
+        // to assigning it a parameter, as its Assign... would
+        var now = Date.now()
+        var twice = model.is_overview && lastTap.cell === this && now - lastTap.time < 350 && ! $(this).hasClass('binded')
+        lastTap = { cell: this, time: now }
+
         // Remove 'selected' class to all cells then add it to the clicked one
         deviceTable.find('td').removeClass('selected')
         $(this).addClass('selected')
 
         selectAddressing(page, subpage, actuatorUri)
+
+        if (twice) {
+          self.openAssignWizard(model)
+        }
       })
       .droppable(dropOptions)
 
@@ -1467,19 +1478,336 @@ function HardwareManager(options) {
           // enable save only if port and addressing have a value
           if (model.port && model.addressing?.uri) {
             model.form.find('.js-save').removeClass('disabled')
-            //model.form.find('.js-binding-add').addClass('disabled')
             model.form.find('.js-binding-remove').removeClass('disabled')
           } else {
             model.form.find('.js-save').addClass('disabled')
-            // if not addressed and a hmiUri is selected
-            // if (!model.addressing?.uri && model.hmiUriInput.val()) {
-            //   model.form.find('.js-binding-add').removeClass('disabled')
-            // } else {
-            //   model.form.find('.js-binding-add').addClass('disabled')
-            // }
             model.form.find('.js-binding-remove').addClass('disabled')
           }
+
+          // a free cell of the device picked: it can be assigned a parameter, in place of
+          // modifying or deleting what is not there
+          var free = model.typeInput.val() === deviceOption &&
+                     model.deviceTable.find('td.selected').not('.binded').length > 0
+          model.form.find('.js-binding-add').toggle(free)
+          model.form.find('.js-save, .js-binding-remove').toggle(! free)
         }
+
+        // whose control it is, by its plugin's thumbnail
+        var thumbnail = model.form.find('h1 .addressing-thumb')
+        if (model.plugin && model.plugin.effect) {
+          thumbnail.attr('src', self.thumbnailOf(model.plugin)).show()
+        } else {
+          thumbnail.removeAttr('src').hide()
+        }
+    }
+
+    // A plugin's thumbnail, as the library's, or the default one where it has none
+    this.thumbnailOf = function (gui) {
+      var effect = gui && gui.effect
+      if (effect && effect.gui && effect.gui.thumbnail) {
+        var ver = [effect.builder, effect.microVersion, effect.minorVersion, effect.release].join('_')
+        return '/effect/image/thumbnail.png?uri=' + escape(effect.uri) + '&v=' + ver
+      }
+      return '/resources/pedals/default-thumbnail.png'
+    }
+
+    // Whether a plugin's control can be bound, as its settings tell: a bindings button
+    // for it, and for the bypass its switch shown, see pedalboard.js
+    this.isAddressable = function (plugin, symbol) {
+      var settings = plugin.data('settings')
+      if (! settings) {
+        return false
+      }
+      if (symbol == ':bypass') {
+        return settings.find('[mod-role=bypass-address]').length > 0 &&
+               settings.find('.mod-switch.bypass').css('display') != 'none'
+      }
+      if (symbol == ':presets') {
+        return settings.find('[mod-role=presets-address]').length > 0
+      }
+      return settings.find('[mod-role=input-control-address][mod-port-symbol="' + symbol + '"]').length > 0
+    }
+
+    // A control's values, in short: its range, its choices, or what it does
+    this.describePort = function (port) {
+      var properties = port.properties || []
+      var short = function (value) {
+        return String(parseFloat(Number(value).toFixed(2)))
+      }
+      if (port.symbol == ':bypass' || properties.indexOf("toggled") >= 0) {
+        return "On / Off"
+      }
+      if (port.symbol == ':presets') {
+        return "The plugin's presets"
+      }
+      if (properties.indexOf("trigger") >= 0) {
+        return "Trigger"
+      }
+      if (properties.indexOf("enumeration") >= 0 && port.scalePoints && port.scalePoints.length) {
+        var labels = port.scalePoints.map(function (point) { return point.label })
+        return labels.slice(0, 4).join(', ') + (labels.length > 4 ? ', ...' : '')
+      }
+      var units = port.units && port.units.symbol ? ' ' + port.units.symbol : ''
+      return short(port.ranges.minimum) + ' – ' + short(port.ranges.maximum) + units
+    }
+
+    // Where a binding is, in short: "P1 · Knob 1", or the kind of it but the device's
+    this.placeOf = function (addressing) {
+      var uri = addressing.uri || ''
+      if (uri == kMidiLearnURI || startsWith(uri, kMidiCustomPrefixURI)) {
+        return 'MIDI'
+      }
+      if (isCvUri(uri)) {
+        return 'CV'
+      }
+      if (is_control_chain_uri(uri)) {
+        return 'Control Chain'
+      }
+      if (uri == kBpmURI) {
+        return 'Tempo'
+      }
+      var actuator = HARDWARE_PROFILE.filter(function (a) { return a.uri == uri })[0]
+      var name = actuator ? (actuator.gname || actuator.name) : uri
+      return addressing.page != null ? 'P' + (parseInt(addressing.page) + 1) + ' · ' + name : name
+    }
+
+    // A cell of the device in full: "Page 3 · Subpage I · Knob 1"
+    this.cellPlace = function (actuatorUri, page, subpage) {
+      var actuator = HARDWARE_PROFILE.filter(function (a) { return a.uri == actuatorUri })[0] || { name: actuatorUri }
+      var place = ['Page ' + (parseInt(page) + 1)]
+      if (actuator.subpages && actuator.subpages[subpage]) {
+        place.push(actuator.subpages[subpage].split(' - ').pop())
+      }
+      place.push(actuator.group ? (actuator.gname || actuator.name) : actuator.name)
+      return place.join(' · ')
+    }
+
+    // Assigning a parameter to a free cell of the overview's device: a wizard in the
+    // dialog itself, over its table, each step sliding in over the one before. First the
+    // parameters that cell's actuator can control, by plugin, those bound elsewhere
+    // there too but not to be picked, then the picked one's settings, the advanced ones,
+    // borrowed for it, already filled in. Assign saves it as Modify would, and back to
+    // the table, the new binding picked in it
+    this.openAssignWizard = function (model) {
+      var form = model.form
+      var box = form.find('.mod-box')
+      var cell = model.deviceTable.find('td.selected')
+      if (! cell.length || cell.hasClass('binded') || cell.hasClass('disabled') || box.hasClass('wizard-open')) {
+        return
+      }
+      var actuatorUri = cell.attr('data-uri')
+      var page = cell.attr('data-page')
+      var subpage = cell.attr('data-subpage')
+      var place = self.cellPlace(actuatorUri, page, subpage)
+
+      var header = $('<div class="wizard-header">' +
+                       '<span class="wizard-back">&lsaquo;</span>' +
+                       '<img class="wizard-thumb">' +
+                       '<div class="wizard-title"><strong></strong><span></span></div>' +
+                       '<span class="wizard-close">&times;</span>' +
+                     '</div>')
+      var wizard = $('<div class="addressing-wizard">' +
+                       '<div class="wizard-stage"></div>' +
+                       '<div class="wizard-actions">' +
+                         '<span class="btn wizard-cancel">Back</span>' +
+                         '<span class="btn wizard-assign">Assign</span>' +
+                       '</div>' +
+                     '</div>')
+      var stage = wizard.find('.wizard-stage')
+      var main = form.find('.main-form-container')
+      var advanced = form.find('.advanced-container')
+      var settings = advanced.find('.actuator-label, .range, .led-colour, .momentary-sw, .sensitivity')
+      var step = null
+      var query = ''
+      var picked = null
+
+      // a step in, over the one before, from the right going on and from the left going
+      // back, the title with it
+      var slide = function (content, title, sub, thumbnail, dir, done) {
+        var old = stage.children('.wizard-step')
+        var next = $('<div class="wizard-step"/>').append(content).appendTo(stage)
+        var titles = header.find('.wizard-title')
+        titles.find('strong').text(title)
+        titles.find('span').text(sub)
+        header.find('.wizard-thumb').attr('src', thumbnail || '').toggle(!! thumbnail)
+        wizard.find('.wizard-assign').toggle(step == 'settings')
+        if (! dir) {
+          old.remove()
+          return
+        }
+        old.addClass('wizard-leaving wizard-out-' + dir)
+        next.addClass('wizard-in-' + dir)
+        titles.removeClass('wizard-in-next wizard-in-back')
+        titles[0].offsetWidth
+        titles.addClass('wizard-in-' + dir)
+        setTimeout(function () {
+          if (done) {
+            done()
+          }
+          old.remove()
+          next.removeClass('wizard-in-' + dir)
+        }, 300)
+      }
+
+      // the borrowed settings back where they were, in the advanced ones
+      var giveBack = function () {
+        var before = advanced.find('.cv-op-mode')
+        if (before.length) {
+          before.before(settings)
+        } else {
+          advanced.append(settings)
+        }
+      }
+
+      // nothing picked any more: the overview as it was, with all the actuators
+      var unpick = function () {
+        picked = null
+        model.port = null
+        model.plugin = null
+        model.instance = ""
+        model.plugin_label = ""
+        model.addressing = {}
+        self.updateView(model)
+      }
+
+      var close = function () {
+        box.removeClass('wizard-open')
+        header.remove()
+        wizard.addClass('wizard-leaving wizard-out-back')
+        main.addClass('wizard-in-back')
+        setTimeout(function () {
+          giveBack()
+          wizard.remove()
+          main.removeClass('wizard-in-back')
+        }, 300)
+      }
+
+      var parameters = function (dir) {
+        var content = $('<div class="wizard-parameters"/>')
+        var search = $('<input type="search" class="wizard-search" placeholder="Search a plugin or a parameter">').val(query)
+        var list = $('<div class="wizard-list"/>')
+        var fill = function () {
+          var q = query.toLowerCase()
+          list.empty()
+          $.each(model.plugins || {}, function (instance, plugin) {
+            var gui = plugin.data && plugin.data('gui')
+            if (! gui || ! gui.controls) {
+              return
+            }
+            var label = plugin.data('label') || gui.effect.label || gui.effect.name
+            var rows = $('<div class="group"/>')
+            for (var symbol in gui.controls) {
+              var port = gui.controls[symbol]
+              if (! self.isAddressable(plugin, symbol) || ! self.availableActuators(instance, port, false)[actuatorUri]) {
+                continue
+              }
+              if (q && (label + ' ' + port.name).toLowerCase().indexOf(q) < 0) {
+                continue
+              }
+              var addressing = self.addressingsData[instance + '/' + symbol]
+              var row = $('<div class="row"><div class="text"><span class="name"></span><span class="sub"></span></div></div>')
+              row.find('.name').text(port.name)
+              row.find('.sub').text(self.describePort(port))
+              if (addressing) {
+                row.addClass('taken').append($('<span class="where"/>').text(self.placeOf(addressing)))
+              } else {
+                row.append('<span class="go">&rsaquo;</span>')
+                row.click(function (instance, port, gui, label) {
+                  return function () {
+                    picked = { instance: instance, port: port, gui: gui, label: label }
+                    parameterSettings('next')
+                  }
+                }(instance, port, gui, label))
+              }
+              rows.append(row)
+            }
+            if (rows.children().length) {
+              var head = $('<div class="wizard-plugin"><img><b></b><span></span></div>')
+              head.find('img').attr('src', self.thumbnailOf(gui))
+              head.find('b').text(label)
+              head.find('span').text(rows.children().length)
+              list.append(head, rows)
+            }
+          })
+          if (! list.children().length) {
+            list.append($('<div class="wizard-empty"/>').text(query ? 'No parameter matches' : 'No parameter can be bound here'))
+          }
+        }
+        search.on('input', function () {
+          query = search.val()
+          fill()
+        })
+        fill()
+        content.append(search, list)
+        step = 'parameters'
+        slide(content, 'Choose a parameter', 'for ' + place, null, dir, dir == 'back' ? giveBack : null)
+      }
+
+      var parameterSettings = function (dir) {
+        model.instance = picked.instance
+        model.port = picked.port
+        model.plugin = picked.gui
+        model.plugin_label = picked.label
+        model.addressing = {}
+        self.updateView(model)
+        // the cell, as selectAddressing left it, and what its actuator lets be set
+        model.hmiPageInput.val(page)
+        model.hmiSubPageInput.val(subpage)
+        model.hmiUriInput.val(actuatorUri)
+        self.toggleAdvancedItemsVisibility(model.port,
+                                           model.sensitivity, model.ledColourMode, model.momentarySwMode,
+                                           model.actuators[actuatorUri], null)
+        var content = $('<div class="wizard-settings"/>')
+        content.append($('<div class="wizard-where"/>').append('Goes to ', $('<b/>').text(place)))
+        content.append($('<div class="wizard-fields"/>').append(settings))
+        step = 'settings'
+        slide(content, picked.port.name, picked.label, self.thumbnailOf(picked.gui), dir)
+      }
+
+      var back = function () {
+        if (step == 'settings') {
+          unpick()
+          parameters('back')
+        } else {
+          close()
+        }
+      }
+
+      header.find('.wizard-back').click(back)
+      wizard.find('.wizard-cancel').click(back)
+      header.find('.wizard-close').click(function () {
+        form.find('.mod-box > .js-close').click()
+      })
+
+      wizard.find('.wizard-assign').click(function () {
+        if (step != 'settings') {
+          return
+        }
+        var port = picked.port
+        self.saveCurrentAddressing(function (ok, addressing) {
+          if (! ok || ! addressing) {
+            return
+          }
+          // the table anew, with the new binding, picked in it, on its tab
+          model.actuators = self.availableActuators(model.instance, null, false)
+          model.deviceTable.empty()
+          self.buildDeviceTable(model, {})
+          var bound = model.deviceTable.find('td[data-uri="' + actuatorUri + '"][data-page="' + page + '"][data-subpage="' + subpage + '"]')
+          model.deviceTable.find('.hmi-pages-tabs button[data-group="' + bound.attr('data-group') + '"]').click()
+          bound.click().addClass('hmi-pages-new')
+          close()
+          new Notification('info', port.name + ' assigned to ' + place, 3000)
+        })
+      })
+
+      form.find('.mod-box > h1').before(header)
+      form.find('.form-container').append(wizard)
+      box.addClass('wizard-open')
+      wizard.addClass('wizard-in-next')
+      setTimeout(function () {
+        wizard.removeClass('wizard-in-next')
+      }, 300)
+      parameters(null)
     }
 
     const _open = function (model) {
@@ -1625,7 +1953,7 @@ function HardwareManager(options) {
           self.buildDeviceTable(model, model.addressing)
         })
 
-        self.saveCurrentAddressing = function() {
+        self.saveCurrentAddressing = function(done) {
             self.saveAddressing(
               model.instance,
               model.port,
@@ -1685,6 +2013,9 @@ function HardwareManager(options) {
                       }
                     }
                   }
+                }
+                if (done) {
+                  done(ok, addressing)
                 }
               }
             );
@@ -1850,6 +2181,10 @@ function HardwareManager(options) {
         })
 
         if (model.is_overview) {
+          model.form.addClass('addressing-overview')
+          model.form.find('.js-binding-add').click(function () {
+            self.openAssignWizard(model)
+          })
           model.form.find('.js-save').addClass('disabled').text('Modify')
           model.form.find('.assign-label').text("Assigned to")
         }

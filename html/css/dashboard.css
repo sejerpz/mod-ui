@@ -5033,6 +5033,29 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .addressing-dash {
     display: none;
 }
 
+/* in the overview, what is picked, after the board's name */
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .overview-plugin-name {
+    margin-left: 0.25em;
+}
+
+/* the plugin's thumbnail before it, when it is a plugin's */
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 {
+    position: relative;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1:has(.addressing-thumb[src]) {
+    padding-left: 64px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .addressing-thumb {
+    position: absolute;
+    top: 50%;
+    left: 16px;
+    max-width: 36px;
+    max-height: 40px;
+    transform: translateY(-50%);
+}
+
 body.app-bar-mode .mod-pedal-settings-address .mod-box > .close {
     position: absolute;
     top: 6px;
@@ -5122,7 +5145,8 @@ body.app-bar-mode.narrow-screen .mod-pedal-settings-address .mod-box .advanced-c
 
 /* the small titles, over what it is assigned to and over each advanced setting */
 body.app-bar-mode .mod-pedal-settings-address .main-form-container label,
-body.app-bar-mode .mod-pedal-settings-address .advanced-container label {
+body.app-bar-mode .mod-pedal-settings-address .advanced-container label,
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard label {
     display: block;
     float: none;
     width: auto;
@@ -5229,6 +5253,7 @@ body.app-bar-mode .mod-pedal-settings-address .mod-controls {
 }
 
 body.app-bar-mode .mod-pedal-settings-address input[type=text],
+body.app-bar-mode .mod-pedal-settings-address input[type=search],
 body.app-bar-mode .mod-pedal-settings-address input[type=number],
 body.app-bar-mode .mod-pedal-settings-address select {
     width: 100% !important;
@@ -5271,7 +5296,8 @@ body.app-bar-mode .mod-pedal-settings-address .mod-range span {
     color: #777;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .advanced-container .form-group {
+body.app-bar-mode .mod-pedal-settings-address .advanced-container .form-group,
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .form-group {
     margin-bottom: 14px;
 }
 
@@ -5335,7 +5361,8 @@ body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-binding-rem
     color: #ff8a86;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-save {
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-save,
+body.app-bar-mode .mod-pedal-settings-address .buttons-container .js-binding-add {
     order: 3;
     border-color: #883996;
     background: #883996;
@@ -5569,6 +5596,344 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .main-for
     padding: 22px 12px;
     color: #999;
     font-size: 15px;
+}
+
+/* The overview's free cell picked: a + in it, for what Assign... gives it, see
+   openAssignWizard in js/hardware.js. Just bound, it flashes */
+body.app-bar-mode .mod-pedal-settings-address.addressing-overview .hmi-pages td.selected:not(.binded) {
+    background: #3a2a3e;
+    box-shadow: inset 0 0 0 2px #c79bd0;
+    font-size: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address.addressing-overview .hmi-pages td.selected:not(.binded)::before {
+    content: '+';
+    color: #c79bd0;
+    font-size: 20px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .hmi-pages td.hmi-pages-new {
+    animation: hmi-pages-new 1.2s ease-out;
+}
+
+@keyframes hmi-pages-new {
+    from { background: #c79bd0; color: #fff; }
+}
+
+/* Assigning a parameter to it, a wizard over the table, see openAssignWizard in
+   js/hardware.js: a title of its own with the way back, the steps sliding in over each
+   other, from the right going on, from the left going back, and its own actions */
+body.app-bar-mode .mod-pedal-settings-address .wizard-header {
+    display: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open > h1,
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open > .close,
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open .main-form-container,
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open .buttons-container,
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open .advanced-container {
+    display: none !important;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open > .wizard-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 56px;
+    box-sizing: border-box;
+    padding: 6px 8px 6px 6px;
+    border-bottom: 1px solid #333;
+    overflow: hidden;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-back,
+body.app-bar-mode .mod-pedal-settings-address .wizard-close {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    color: #bbb;
+    font-size: 30px;
+    line-height: 42px;
+    text-align: center;
+    cursor: pointer;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-back:active,
+body.app-bar-mode .mod-pedal-settings-address .wizard-close:active {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-thumb {
+    flex: none;
+    max-width: 36px;
+    max-height: 40px;
+    margin-right: 6px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-title {
+    flex: 1;
+    min-width: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-title strong,
+body.app-bar-mode .mod-pedal-settings-address .wizard-title span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-title strong {
+    font-size: 20px;
+    font-weight: normal;
+    line-height: 1.2;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-title span {
+    color: #999;
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard {
+    grid-row: 1 / -1;
+    grid-column: 1 / -1;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: #161616;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-stage {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-step {
+    flex: 1 1 auto;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: #161616;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-step.wizard-leaving {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-in-next,
+body.app-bar-mode .mod-pedal-settings-address .wizard-in-back,
+body.app-bar-mode .mod-pedal-settings-address .wizard-out-next,
+body.app-bar-mode .mod-pedal-settings-address .wizard-out-back {
+    animation-duration: 0.28s;
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-in-next { position: relative; z-index: 1; animation-name: wizard-in-next; }
+body.app-bar-mode .mod-pedal-settings-address .wizard-out-next { animation-name: wizard-out-next; animation-fill-mode: forwards; }
+body.app-bar-mode .mod-pedal-settings-address .wizard-in-back { animation-name: wizard-in-back; }
+body.app-bar-mode .mod-pedal-settings-address .wizard-out-back { z-index: 2; animation-name: wizard-out-back; animation-fill-mode: forwards; }
+body.app-bar-mode .mod-pedal-settings-address .wizard-title.wizard-in-next { animation-name: wizard-title-next; }
+body.app-bar-mode .mod-pedal-settings-address .wizard-title.wizard-in-back { animation-name: wizard-title-back; }
+
+@keyframes wizard-in-next { from { transform: translateX(100%); } }
+@keyframes wizard-out-next { to { transform: translateX(-30%); opacity: 0; } }
+@keyframes wizard-in-back { from { transform: translateX(-30%); opacity: 0; } }
+@keyframes wizard-out-back { to { transform: translateX(100%); } }
+@keyframes wizard-title-next { from { transform: translateX(24px); opacity: 0; } }
+@keyframes wizard-title-back { from { transform: translateX(-24px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+    body.app-bar-mode .mod-pedal-settings-address .wizard-in-next,
+    body.app-bar-mode .mod-pedal-settings-address .wizard-in-back,
+    body.app-bar-mode .mod-pedal-settings-address .wizard-out-next,
+    body.app-bar-mode .mod-pedal-settings-address .wizard-out-back {
+        animation: none;
+    }
+}
+
+/* its parameters, by plugin, with its thumbnail */
+body.app-bar-mode .mod-pedal-settings-address input.wizard-search {
+    margin-bottom: 4px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-plugin {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 4px 6px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-plugin img {
+    flex: none;
+    max-width: 28px;
+    max-height: 32px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-plugin b {
+    overflow: hidden;
+    color: #c79bd0;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-plugin span {
+    color: #666;
+    font-size: 12px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .group {
+    overflow: hidden;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 6px 12px 6px 16px;
+    cursor: pointer;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row + .row {
+    border-top: 1px solid #353535;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row:active {
+    background: rgba(136, 57, 150, 0.85);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row .text {
+    flex: 1;
+    min-width: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row .name,
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row .sub {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row .sub {
+    color: #999;
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row .go {
+    color: #777;
+    font-size: 22px;
+}
+
+/* bound elsewhere: there, where, but not to be picked */
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row.taken {
+    cursor: default;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row.taken:active {
+    background: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row.taken .name {
+    color: #777;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-wizard .row .where {
+    flex: none;
+    padding: 0 7px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    color: #999;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-empty {
+    padding: 28px 12px;
+    color: #999;
+    text-align: center;
+}
+
+/* its settings: where it goes, then the advanced ones, two columns where there is room */
+body.app-bar-mode .mod-pedal-settings-address .wizard-where {
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    border: 1px solid #4a2d50;
+    border-radius: 12px;
+    background: #2f2532;
+    color: #c79bd0;
+    font-size: 14px;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-where b {
+    color: #fff;
+    font-weight: normal;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 16px;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .wizard-fields {
+    grid-template-columns: 1fr;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid #333;
+    background: rgba(17, 17, 17, 0.6);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-actions .btn {
+    min-width: 96px;
+    height: 48px;
+    margin: 0;
+    padding: 0 18px;
+    border: 1px solid #444;
+    border-radius: 12px;
+    background: #2c2c2c;
+    color: #fff;
+    font-size: 16px;
+    line-height: 46px;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .wizard-actions .wizard-assign {
+    margin-left: auto;
+    border-color: #883996;
+    background: #883996;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .wizard-actions .btn {
+    flex: 1;
+    min-width: 0;
 }
 
 /* Grid mode's cabling by touch: a tap on an output starts a cable, a tap on an input
