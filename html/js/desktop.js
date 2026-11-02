@@ -2548,41 +2548,183 @@ Desktop.prototype.saveCurrentPedalboard = function (asNew, callback) {
         return
     }
 
-    self.saveBox.saveBox('save', "", self.title, asNew,
-        function (ok, errorOrPath, title) {
-            if (!ok) {
-                new Error(errorOrPath)
-                return
-            }
+    // Saving over the pedalboard as it is goes straight on, saving it anew asks for a
+    // name first, see prepareSaveBox
+    var asking = asNew || ! self.title
+    var banks = asking ? self.prepareSaveBox(asNew) : null
 
-            if (asNew || title || ! self.title) {
-                self.titleBox.removeClass("blend");
-                self.previousPedalboardList = null
-            }
+    var save = function (name) {
+        self.saveBox.saveBox('save', "", name, asNew,
+            function (ok, errorOrPath, title) {
+                if (!ok) {
+                    new Error(errorOrPath)
+                    return
+                }
 
-            self.title = title
-            self.pedalboardBundle = errorOrPath
-            self.pedalboardEmpty = false
-            self.setPedalboardAsModified(false)
-            const newTitle = title + " - " + self.pedalboardPresetName
-            self.titleBox.text(newTitle)
-            self.performanceTitleBox.text(newTitle)
+                // to the end of the banks chosen in the box, if any
+                if (banks) {
+                    banks(errorOrPath, title)
+                }
 
-            if (self.previousPedalboardList != null) {
-                for (var i=0; i<self.previousPedalboardList.length; i++) {
-                    var pedal = self.previousPedalboardList[i]
-                    if (pedal.bundle == self.pedalboardBundle) {
-                        pedal.version += 1
-                        break
+                if (asNew || title || ! self.title) {
+                    self.titleBox.removeClass("blend");
+                    self.previousPedalboardList = null
+                }
+
+                self.title = title
+                self.pedalboardBundle = errorOrPath
+                self.pedalboardEmpty = false
+                self.setPedalboardAsModified(false)
+                const newTitle = title + " - " + self.pedalboardPresetName
+                self.titleBox.text(newTitle)
+                self.performanceTitleBox.text(newTitle)
+
+                if (self.previousPedalboardList != null) {
+                    for (var i=0; i<self.previousPedalboardList.length; i++) {
+                        var pedal = self.previousPedalboardList[i]
+                        if (pedal.bundle == self.pedalboardBundle) {
+                            pedal.version += 1
+                            break
+                        }
                     }
                 }
-            }
 
-            new Notification("info", sprintf('Pedalboard "%s" saved', title), 2000)
+                new Notification("info", sprintf('Pedalboard "%s" saved', title), 2000)
 
-            if (callback)
-                callback()
+                if (callback)
+                    callback()
+            })
+    }
+
+    if (! asking) {
+        save(self.title)
+        return
+    }
+    // as new, the name the server would give it anyway, see get_unique_name in mod/__init__.py
+    self.pedalboardListFunction(function (pedals) {
+        self.saveBoxNames = pedals.filter(function (pedal) {
+            return ! pedal.factory
+        }).map(function (pedal) {
+            return pedal.title
         })
+        save(asNew && self.title ? uniquePedalboardName(self.title, self.saveBoxNames) : self.title)
+        self.saveBox.find('input[type=text]').trigger('input').select()
+    })
+}
+
+// The name a pedalboard is saved with when `name` is taken, as get_unique_name in
+// mod/__init__.py: "Name (2)", then "Name (3)" and on
+function uniquePedalboardName (name, names) {
+    if (names.indexOf(name) < 0) {
+        return name
+    }
+    var match = /^(.*) \(([0-9]*)\)$/.exec(name)
+    var base = match ? match[1] : name
+    var num = match ? parseInt(match[2]) : 1
+    do {
+        num += 1
+    } while (names.indexOf(base + ' (' + num + ')') >= 0)
+    return base + ' (' + num + ')'
+}
+
+// The box saving the pedalboard anew: the pedalboard as it is, the name, what it will
+// really be saved as and the banks it can be added to. Returns what adds it to the
+// banks chosen, once saved
+Desktop.prototype.prepareSaveBox = function (asNew) {
+    var self = this
+    var box = self.saveBox
+    var input = box.find('input[type=text]')
+    var hint = box.find('.js-hint')
+    var chips = box.find('.js-bank-chips').empty()
+    var chosen = {}
+
+    box.find('h1').text(asNew && self.title ? 'Save pedalboard as' : 'Save pedalboard')
+    self.saveBoxNames = self.previousPedalboardList ? self.previousPedalboardList.map(function (pedal) {
+        return pedal.title
+    }) : []
+
+    // the pedalboard as the library shows it, but for a new one, which has no picture
+    var shown = !! (asNew && self.title && self.pedalboardBundle)
+    var board = box.find('.js-board').toggle(shown)
+    if (shown) {
+        board.find('.thumb').attr('src', '/pedalboard/image/thumbnail.png?bundlepath=' +
+                                         escape(self.pedalboardBundle) + '&tstamp=' + Date.now())
+        board.find('.js-board-title').text(self.title)
+        board.find('.js-board-modified').toggle(!! self.pedalboardModified)
+        var count = Object.keys(self.pedalboard.data('plugins') || {}).length
+        board.find('.js-board-sub').text(count + (count == 1 ? ' plugin' : ' plugins') +
+                                         (self.pedalboardPresetName ? ' · snapshot "' + self.pedalboardPresetName + '"' : ''))
+    }
+
+    var update = function () {
+        var name = input.val().trim()
+        box.find('.js-clear').toggle(input.val().length > 0)
+        var saved = uniquePedalboardName(name, self.saveBoxNames)
+        if (! name) {
+            hint.removeClass('warn').text('Give it a name to save it.')
+        } else if (saved != name) {
+            hint.addClass('warn').html(sprintf('"%s" already exists: it will be saved as <b>"%s"</b>.',
+                                               $('<i>').text(name).html(), $('<i>').text(saved).html()))
+        } else if (asNew && self.title) {
+            hint.removeClass('warn').text(sprintf('Saved as a new pedalboard, "%s" stays as it is.', self.title))
+        } else {
+            hint.removeClass('warn').text('Saved to your pedalboards.')
+        }
+    }
+    input.off('.savebox').on('input.savebox keyup.savebox', update)
+    box.find('.js-clear').off('click').click(function () {
+        input.val('').trigger('keyup').focus()
+    })
+
+    // the banks, as chips, none chosen
+    box.find('.js-banks').hide()
+    $.ajax({
+        url: '/banks',
+        cache: false,
+        dataType: 'json',
+        success: function (banks) {
+            box.find('.js-banks').toggle(banks.length > 0)
+            $.each(banks, function (i, bank) {
+                $('<button type="button">').text(bank.title).click(function () {
+                    chosen[bank.title] = ! chosen[bank.title]
+                    $(this).toggleClass('on', chosen[bank.title])
+                    return false
+                }).appendTo(chips)
+            })
+        },
+    })
+
+    return function (bundlepath, title) {
+        if (! Object.keys(chosen).some(function (bank) { return chosen[bank] })) {
+            return
+        }
+        $.ajax({
+            url: '/banks',
+            cache: false,
+            dataType: 'json',
+            success: function (banks) {
+                var added = []
+                $.each(banks, function (i, bank) {
+                    if (chosen[bank.title]) {
+                        bank.pedalboards.push({ bundle: bundlepath, title: title })
+                        added.push(bank.title)
+                    }
+                })
+                $.ajax({
+                    type: 'POST',
+                    url: '/banks/save',
+                    data: JSON.stringify(banks),
+                    cache: false,
+                    success: function () {
+                        new Notification('info', sprintf('"%s" added to %s', title, added.join(', ')), 2000)
+                    },
+                    error: function () {
+                        new Bug("Couldn't add the pedalboard to the banks")
+                    },
+                })
+            },
+        })
+    }
 }
 
 Desktop.prototype.shareCurrentPedalboard = function (callback) {

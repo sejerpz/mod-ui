@@ -383,6 +383,7 @@ $('document').ready(function() {
             snapshotSaveAsButton: $('#pedalboard-info .js-preset-save-as'),
             snapshotManageButton: $('#pedalboard-info .js-preset-manage'),
             snapshotDialogs: $('#pedal-presets-window, #save-preset'),
+            saveWindow: $('#save-pedalboard'),
             saveButton: $('#pedalboard-info .js-save'),
             cpuButton: $('#main-menu #mod-cpu'),
             cpuText: $('#cpu-bar-text'),
@@ -604,20 +605,36 @@ $('document').ready(function() {
     <div id="pedalboard">
 
         <!-- SAVE PEDALBOARD WINDOW -->
-        <div id="save-pedalboard" class="save-popup mod-hidden">
-            <div class="mod-box">
-                <h1 class="pull-left">Saving Pedalboard</h1><span class="js-cancel-saving close">&times;</span>
-                <form class="bottom">
-                    <div class="clearfix"></div>
-                    <div class="controls">
-                        <label>Name</label>
-                        <input type="text" class="form-control"/>
+        <div id="save-pedalboard" class="save-popup mod-sheet-popup mod-hidden">
+            <div class="mod-box mod-sheet">
+                <header>
+                    <h1>Save pedalboard as</h1>
+                    <span class="js-cancel-saving close">&times;</span>
+                </header>
+                <div class="body">
+                    <div class="js-board board">
+                        <img class="thumb" alt=""/>
+                        <div class="label">
+                            <span class="name"><span class="js-board-title"></span><span class="js-board-modified badge">modified</span></span>
+                            <span class="js-board-sub sub"></span>
+                        </div>
                     </div>
-                    <div class="controls actions">
-                        <button class="js-cancel-saving btn btn-danger">Cancel</button>
-                        <button class="js-save btn btn-success">Save</button>
+                    <label class="field-label" for="save-pedalboard-name">Name</label>
+                    <div class="field">
+                        <input id="save-pedalboard-name" type="text" placeholder="Untitled" autocomplete="off"/>
+                        <span class="js-clear clear">&times;</span>
                     </div>
-                </form>
+                    <p class="js-hint hint"></p>
+                    <div class="js-banks">
+                        <label class="field-label">Add to bank</label>
+                        <div class="js-bank-chips chips"></div>
+                        <p class="hint">Optional: it is added at the end of the banks chosen.</p>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="js-cancel-saving btn">Cancel</button>
+                    <button class="js-save btn btn-primary">Save</button>
+                </div>
             </div>
         </div>
         <!-- END SAVE PEDALBOARD WINDOW -->

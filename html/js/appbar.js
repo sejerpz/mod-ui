@@ -387,14 +387,15 @@ JqueryClass('appBar', {
         ]}]).appendTo(tools).children('.toggle').empty()
             .append($('<span class="name">').text('Snapshots'), $('<i class="icon-camera">'))
 
-        // The snapshot dialogs take the room the dock would cover: it slides away while
-        // one is up. They open and close with show() and hide(), whatever opened them,
+        // The snapshot dialogs, and the one saving the pedalboard, take the room the dock
+        // would cover: it slides away while one is up. They open and close with show() and hide(), whatever opened them,
         // and so do the plugins' CPU usage, see below, and the MIDI ports. So do the
         // bindings and the CV ports, which are added to the page while open, and the
         // windows of a plugin the board shows alone, see below. It comes back over them
         // to ask whether to go on with something one of them does, see confirm below
         var dialogs = $()
-        var shown = options.snapshotDialogs.add(options.cpuLoadWindow).add(options.midiPortsWindow)
+        var shown = options.snapshotDialogs.add(options.saveWindow).add(options.cpuLoadWindow)
+                                           .add(options.midiPortsWindow)
         var makeRoom = function () {
             self.toggleClass('away', ! self.hasClass('confirming') &&
                                      (shown.filter(':visible').length > 0 ||

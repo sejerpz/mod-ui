@@ -6995,6 +6995,124 @@ body.app-bar-mode .mod-sheet-popup .mod-sheet input:focus {
     border-color: #883996;
 }
 
+body.app-bar-mode .mod-sheet-popup .mod-sheet .btn[disabled] {
+    opacity: 0.35;
+}
+
+/* Saving the pedalboard anew, see prepareSaveBox in js/desktop.js: the pedalboard as
+   the library shows it, its name, what it will really be saved as and the banks to add
+   it to. The card a little smaller than the others */
+body.app-bar-mode #save-pedalboard .mod-sheet {
+    width: calc(420px * var(--touch-zoom, 1));
+}
+body.app-bar-mode #save-pedalboard .board {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 4px;
+    padding: 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+body.app-bar-mode #save-pedalboard .board .thumb {
+    flex: none;
+    width: 112px;
+    height: 64px;
+    border: 1px solid #000;
+    border-radius: 8px;
+    object-fit: contain;
+    background: url(../img/background.jpg) center / auto 100%;
+}
+body.app-bar-mode #save-pedalboard .board .label {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    font-weight: normal;
+}
+body.app-bar-mode #save-pedalboard .board .name,
+body.app-bar-mode #save-pedalboard .board .sub {
+    display: block;
+    font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.app-bar-mode #save-pedalboard .board .sub {
+    color: #999;
+    font-size: 13px;
+}
+body.app-bar-mode #save-pedalboard .badge {
+    margin-left: 6px;
+    padding: 0 6px;
+    border: 1px solid #5a4214;
+    border-radius: 6px;
+    background: #3a2a10;
+    color: #e8b86b;
+    font-size: 11px;
+    font-weight: normal;
+    line-height: 18px;
+    vertical-align: 1px;
+}
+body.app-bar-mode #save-pedalboard .field-label {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 12px 4px 6px;
+    color: #c79bd0;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+body.app-bar-mode #save-pedalboard .field {
+    position: relative;
+}
+body.app-bar-mode #save-pedalboard .field input[type=text] {
+    height: 52px;
+    padding-right: 48px;
+    border-radius: 12px;
+    font-size: 18px;
+}
+body.app-bar-mode #save-pedalboard .field .clear {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 44px;
+    height: 44px;
+    color: #888;
+    font-size: 26px;
+    line-height: 44px;
+    text-align: center;
+    cursor: pointer;
+}
+body.app-bar-mode #save-pedalboard .hint.warn {
+    color: #e8b86b;
+}
+body.app-bar-mode #save-pedalboard .hint b {
+    color: #ddd;
+    font-weight: normal;
+}
+body.app-bar-mode #save-pedalboard .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+body.app-bar-mode #save-pedalboard .chips button {
+    height: 38px;
+    padding: 0 14px;
+    border: 1px solid #3a3a3a;
+    border-radius: 19px;
+    background: #2a2a2a;
+    color: #ccc;
+    font-size: 15px;
+}
+body.app-bar-mode #save-pedalboard .chips button.on {
+    border-color: #883996;
+    background: #883996;
+    color: #fff;
+}
+
 /* The snapshots, see js/snapshot.js: a row each, numbered, the loaded one's number on
    purple, its pencil at the end. Under each row its Delete, which the row uncovers
    swiped to the left */
