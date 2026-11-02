@@ -6783,3 +6783,32 @@ body.app-bar-mode .mod-sheet-popup .mod-sheet .segmented button.on small {
 body.app-bar-mode #midi-ports-window .hint {
     margin-top: 6px;
 }
+
+/* The notifications, see js/notification.js: sized for a finger however wide the page
+   is laid out, see --touch-zoom in js/appbar.js, each on its own, as the dialogs. At
+   the top right, under the board's title rather than over it, and on a narrow screen
+   across the whole of it */
+body.app-bar-mode #notifications {
+    top: calc(64px * var(--touch-zoom, 1));
+    right: calc(8px * var(--touch-zoom, 1));
+    width: calc(340px * var(--touch-zoom, 1));
+    max-width: calc(100% - 16px * var(--touch-zoom, 1));
+}
+
+body.app-bar-mode.narrow-screen #notifications {
+    left: calc(8px * var(--touch-zoom, 1));
+    width: auto;
+    max-width: none;
+}
+
+body.app-bar-mode #notifications > section {
+    zoom: var(--touch-zoom, 1);
+    margin-bottom: 6px !important;
+    border-radius: 10px;
+    font-size: 15px;
+    line-height: 1.35;
+}
+
+body.app-bar-mode #notifications .progressbar {
+    width: calc(100% - 16px);
+}
