@@ -2607,10 +2607,12 @@ body.app-bar-mode #pedalboard-info > h1 {
     line-height: 42px;
 }
 
-/* what would end under the dock ends above it, the board runs under it. The dock is
-   as big as its zoom makes it, see .mod-app-bar */
+/* down to the bottom of the screen, the board not showing under the dock, which
+   floats over it. What it shows ends above the dock, see .remote below, which is as big
+   as its zoom makes it, see .mod-app-bar */
 body.app-bar-mode #performance {
-    bottom: calc(80px * var(--touch-zoom, 1));
+    bottom: 0;
+    background: #111;
 }
 
 /* The performance view's title floats over it like the board's, its actions are in
@@ -2704,8 +2706,18 @@ body.app-bar-mode #performance .mod-performance-face .mod-actions {
     }
 }
 @media screen and (max-width: 1022px) and (orientation: landscape) {
+    /* the list down the side to the bottom of the screen, its last plugins scrolling
+       out from under the dock, what is shown ending above it */
+    body.app-bar-mode #performance .remote {
+        bottom: 0;
+    }
+    body.app-bar-mode #performance .js-performance-plugins {
+        padding-bottom: 80px;
+        box-sizing: border-box;
+    }
     body.app-bar-mode #performance .js-performance-plugin-settings {
         left: calc(200px * var(--touch-zoom, 1));
+        bottom: calc(80px * var(--touch-zoom, 1));
     }
     body.app-bar-mode #performance .js-performance-plugin-settings,
     body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
