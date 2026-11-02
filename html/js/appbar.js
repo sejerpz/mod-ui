@@ -263,9 +263,39 @@ JqueryClass('appBar', {
         // In one of the places the menu leads to, like the plugin store, the board and
         // its tools are not there: the dock folds down to the way back to the board, the
         // menu being only there
+        var back = $('<div class="back">').appendTo(self)
         var elsewhereBack = $('<div>').text('‹ Back').click(function () {
-            edit.click()
-        }).appendTo($('<div class="back">').appendTo(self))
+            if (options.banks.hasClass('adding')) {
+                options.banks.bankBox('showAdding', false)
+            } else {
+                edit.click()
+            }
+        }).appendTo(back)
+        // In the banks, on a narrow screen, the way to the pedalboards to add to the bank
+        // chosen, a sheet over it, see js/banks.js. While it is up, the way back is Done,
+        // back to the bank
+        var addPedalboards = $('<div class="add-pedalboards">').text('Add pedalboards').click(function () {
+            options.banks.bankBox('showAdding', true)
+        }).appendTo(back)
+        var showBanks = function () {
+            var adding = options.banks.hasClass('adding')
+            elsewhereBack.text(adding ? 'Done' : '‹ Back')
+            addPedalboards.toggle(! adding && $('body').hasClass('narrow-screen') &&
+                                  options.banks.is(':visible') &&
+                                  options.banks.find('#bank-pedalboards').css('display') != 'none')
+        }
+        new MutationObserver(showBanks).observe(options.banks[0], {
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        })
+        new MutationObserver(showBanks).observe(options.banks.find('#bank-pedalboards')[0], {
+            attributes: true,
+            attributeFilter: ['style']
+        })
+        new MutationObserver(showBanks).observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        })
         var showMode = function () {
             var elsewhere = options.places.filter(':visible').length > 0
             var performing = ! elsewhere && options.performanceBox.is(':visible')
@@ -275,6 +305,8 @@ JqueryClass('appBar', {
             setState('elsewhere', elsewhere)
         }
         options.performanceBox.add(options.places).on('windowopen windowclose', showMode)
+        options.banks.on('windowopen windowclose', showBanks)
+        showBanks()
         options.performanceBox.on('windowopen', function () {
             fade(options.performanceBox, 0, 1, function () {
                 board.css('opacity', '')

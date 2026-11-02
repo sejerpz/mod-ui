@@ -57,6 +57,23 @@ var TOUCH_SLOP = 10
         return false
     }
 
+    // The ways the browser may scroll under a touch on `target`, as touch-action says
+    // from it up: 'x', 'y', both or none
+    var pans = function (target) {
+        var x = true, y = true
+        for (var el = target; el && el.nodeType === 1; el = el.parentNode) {
+            var action = getComputedStyle(el).touchAction
+            if (action === 'none') {
+                return ''
+            }
+            if (action !== 'auto' && action !== 'manipulation') {
+                x = x && action.indexOf('pan-x') >= 0
+                y = y && action.indexOf('pan-y') >= 0
+            }
+        }
+        return (x ? 'x' : '') + (y ? 'y' : '')
+    }
+
     var dispatch = function (type, target, ev) {
         var mouse = new MouseEvent(type, {
             bubbles: true,
@@ -101,6 +118,7 @@ var TOUCH_SLOP = 10
             start: ev,
             last: ev,
             pressed: false,
+            pans: pans(ev.target),
         }
     }, true)
 
@@ -113,6 +131,12 @@ var TOUCH_SLOP = 10
             var dx = ev.clientX - current.start.clientX
             var dy = ev.clientY - current.start.clientY
             if (dx * dx + dy * dy < TOUCH_SLOP * TOUCH_SLOP) {
+                return
+            }
+            // the way the browser scrolls there, a list under the finger, is the
+            // browser's: it is not a drag, nor a ghost of one going back once it scrolls
+            if (current.pans.indexOf(Math.abs(dy) > Math.abs(dx) ? 'y' : 'x') >= 0) {
+                current = null
                 return
             }
             // pressed where the finger went down, so a dragged jack does not jump by the slop

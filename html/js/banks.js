@@ -59,10 +59,17 @@ JqueryClass('bankBox', {
                     connectToSortable: options.pedalboardCanvas,
                     helper: function () {
                         var helper = rendered.clone().appendTo(self)
+                        // as wide as where it comes from, not as its picture
+                        helper.width(rendered.width())
                         helper.addClass('mod-banks-drag-item')
                         helper.removeClass('js-pedalboard-item')
                         helper.find('.js-remove').hide()
                         return helper
+                    }
+                })
+                rendered.click(function () {
+                    if (self.hasClass('adding')) {
+                        self.bankBox('addPedalboard', rendered)
                     }
                 })
                 if (pedalboard.factory) {
@@ -77,9 +84,36 @@ JqueryClass('bankBox', {
             }
         }, options))
 
+        // On a small screen, a phone either way up, a pedalboard of the bank is moved by
+        // its handle, the rest of it scrolling the bank under the finger. Before the
+        // sortable's own mousedown
+        options.pedalboardCanvas[0].addEventListener('mousedown', function () {
+            options.pedalboardCanvas.sortable('option', 'handle',
+                                              $('body').hasClass('small-screen') ? '.move' : false)
+        }, true)
         options.pedalboardCanvas.sortable({
             cursor: "grabbing !important",
             revert: true,
+            // dropped where the finger or the pointer is, however big what is dragged
+            tolerance: 'pointer',
+            // A pedalboard of the bank's own, moved inside the page's zoom (see
+            // --touch-zoom in js/appbar.js), is placed by the sortable in the screen's
+            // pixels, which the zoom then scales: it is brought back under the finger.
+            // Its slide into place once let go would be scaled the same, falling past
+            // it, so there it just lands. Not one coming from the search, whose helper
+            // is out of the zoom
+            sort: function (e, ui) {
+                var box = self.children('.box')
+                var zoom = parseFloat(box.css('zoom')) || 1
+                var zoomed = zoom != 1 && $.contains(box[0], ui.helper[0])
+                if (zoomed) {
+                    ui.helper.css({
+                        left: ui.position.left / zoom,
+                        top: ui.position.top / zoom,
+                    })
+                }
+                $(this).sortable('option', 'revert', ! zoomed)
+            },
             receive: function (e, ui) {
                 // the next update call will be acting on a cloned item, not this one.
                 // as such, we need to cache these values and set them on the newly cloned object for the update
@@ -113,6 +147,7 @@ JqueryClass('bankBox', {
                                 connectToSortable: options.pedalboardCanvas,
                                 helper: function () {
                                     var helper = clone.clone().appendTo(self)
+                                    helper.width(clone.width())
                                     helper.addClass('mod-banks-drag-item')
                                     helper.removeClass('js-pedalboard-item')
                                     helper.find('.js-remove').hide()
@@ -152,6 +187,11 @@ JqueryClass('bankBox', {
 
                 self.droppedBundle = self.droppedTitle = null
                 self.isFactoryPedalboard = false
+
+                // numbered again in their new order
+                options.pedalboardCanvas.children().each(function (i) {
+                    $(this).find('.js-index').html((i+1) + ".&nbsp;")
+                })
             },
         })
 
@@ -174,6 +214,7 @@ JqueryClass('bankBox', {
     load: function () {
         var self = $(this)
         self.data('loading', true)
+        self.bankBox('showAdding', false)
 
         if (self.data('loaded')) {
             self.data('currentBank', null)
@@ -198,6 +239,10 @@ JqueryClass('bankBox', {
                     if (previousBankTitle == banks[i].title) {
                         self.bankBox('selectBank', bank)
                     }
+                }
+                // the first, when none was
+                if (! self.data('currentBank')) {
+                    self.bankBox('selectBank', self.data('bankCanvas').children().first())
                 }
             }
             self.data('loading', false)
@@ -323,10 +368,6 @@ JqueryClass('bankBox', {
             // addressing is already saved, every time select is changed
         }
 
-        if (pedalboards.children().length == 0) {
-            new Notification('warning', 'This bank is empty - drag pedalboards from the right panel', 5000)
-        }
-
         canvas.append(bank.data('pedalboards').children())
 
         // Hide initial message
@@ -390,6 +431,7 @@ JqueryClass('bankBox', {
         if (count > 1 && !confirm(sprintf('There are %d pedalboards in this bank, are you sure you want to delete it?', count)))
             return
         if (bank.data('selected')) {
+            self.bankBox('showAdding', false)
             self.data('currentBank', null)
             self.data('previousBankTitle', null)
             self.data('pedalboardCanvas').html('').hide()
@@ -403,6 +445,55 @@ JqueryClass('bankBox', {
             height: 0
         }, function () {
             bank.remove();
+            self.bankBox('save')
+        })
+    },
+
+    // On a narrow screen the pedalboards to add come up as a sheet over the bank, where
+    // one is added with a tap rather than dragged, from the dock, see js/appbar.js
+    showAdding: function (adding) {
+        var self = $(this)
+        self.toggleClass('adding', adding)
+        self.data('searchForm').find('.ui-draggable').draggable(adding ? 'disable' : 'enable')
+    },
+
+    // Adds a pedalboard of the search's to the end of the bank, as dropping it there
+    addPedalboard: function (item) {
+        var self = $(this)
+        var canvas = self.data('pedalboardCanvas')
+        var bundle = item.data('pedalboardBundle')
+        var title = item.data('pedalboardTitle')
+        var added = item.clone().removeClass('js-pedalboard-item ui-draggable ui-draggable-handle ui-draggable-disabled')
+        added.addClass('clearfix').appendTo(canvas)
+        added.find('.js-index').html(canvas.children().length + ".&nbsp;")
+        added.data('pedalboardBundle', bundle)
+        added.data('pedalboardTitle', title)
+        added.data('isFactoryPedalboard', false)
+        added.find('.js-remove').show().click(function () {
+            added.animate({
+                opacity: 0,
+                height: 0
+            }, function () {
+                added.remove()
+                self.bankBox('save')
+            })
+        })
+        canvas.scrollTop(canvas[0].scrollHeight)
+
+        new Notification('info', '"' + title + '" added to "' + self.data('currentBank').data('title') + '"', 2000)
+        item.addClass('added')
+        setTimeout(function () {
+            item.removeClass('added')
+        }, 600)
+
+        if (!item.data('isFactoryPedalboard')) {
+            self.bankBox('save')
+            return
+        }
+        self.data('copyFactoryPedalboard')(bundle, title, function (pb) {
+            added.data('pedalboardBundle', pb.bundlepath)
+            added.data('pedalboardTitle', pb.title)
+            added.find('.js-title').text(pb.title)
             self.bankBox('save')
         })
     },
