@@ -10,7 +10,9 @@ import logging
 import time
 
 from tornado.ioloop import IOLoop
-from mod.settings import HTML_DIR, DEV_ENVIRONMENT, DEVICE_KEY, CACHE_DIR, DESKTOP
+# the renderer draws with images of the default UI, not of an installed one: pedalboard thumbnails do
+# not depend on the UI chosen in Settings (see mod/uis.py)
+from mod.settings import DEFAULT_HTML_DIR as HTML_DIR, DEV_ENVIRONMENT, DEVICE_KEY, CACHE_DIR, DESKTOP
 from modtools.utils import get_pedalboard_info, get_plugin_info, get_plugin_gui
 
 INGEN_GRAPH_PROTOTYPE = 'http://drobilla.net/ns/ingen#GraphPrototype'

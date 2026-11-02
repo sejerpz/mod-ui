@@ -72,7 +72,16 @@ MODEL_TYPE = os.environ.get('MOD_MODEL_TYPE', None)
 DEVICE_WEBSERVER_PORT = int(os.environ.get('MOD_DEVICE_WEBSERVER_PORT', 80))
 DEVICE_HOST_PORT = int(os.environ.get('MOD_DEVICE_HOST_PORT', 5555))
 
-HTML_DIR = os.environ.get('MOD_HTML_DIR', join(sys.prefix, 'share/mod/html/'))
+DEFAULT_HTML_DIR = os.environ.get('MOD_HTML_DIR', join(sys.prefix, 'share/mod/html/'))
+
+# User interfaces (experimental): the unit serves the installed UI chosen in Settings, if any.
+# Read once here, so switching restarts mod-ui; see mod/uis.py.
+from mod.uis import read_active as _read_active_ui
+UIS_DIR = join(DATA_DIR, 'uis')
+ACTIVE_UI_FILE = join(DATA_DIR, 'active-ui')
+ACTIVE_UI = _read_active_ui(UIS_DIR, ACTIVE_UI_FILE)
+HTML_DIR = join(UIS_DIR, ACTIVE_UI) if ACTIVE_UI else DEFAULT_HTML_DIR
+
 DEFAULT_PEDALBOARD_COPY = os.environ.pop('MOD_DEFAULT_PEDALBOARD', join(sys.prefix, 'share/mod/default.pedalboard'))
 DEFAULT_PEDALBOARD = join(LV2_PEDALBOARDS_DIR, "default.pedalboard")
 
