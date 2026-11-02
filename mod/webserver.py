@@ -47,7 +47,7 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           DEFAULT_ICON_TEMPLATE, DEFAULT_SETTINGS_TEMPLATE, DEFAULT_ICON_IMAGE,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
-                          DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE, PEDALBOARDS_LABS_HTTP_ADDRESS,
+                          DEV_ENVIRONMENT, DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE, PEDALBOARDS_LABS_HTTP_ADDRESS,
                           FEEDBACK_URL, PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT,
                           API_KEY, API_KEY, TONE3000_CLIENT_ID,
                           ACTIVE_UI, ACTIVE_UI_FILE, UIS_DIR)
@@ -2166,6 +2166,18 @@ CUSTOM_UI_VERSION_SUFFIX = "-%s.%i" % (ACTIVE_UI, os.stat(HTML_DIR).st_mtime_ns)
 # one at a time, as both replace folders by rename
 UIS_EXECUTOR = ThreadPoolExecutor(1)
 
+# the active UI is read once at start, so switching needs a new process
+def restart_ui():
+    if DEV_ENVIRONMENT:
+        # no mod-ui service to restart: run this process again, once the response has gone out
+        def reexec():
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        IOLoop.instance().call_later(0.5, reexec)
+    else:
+        IOLoop.instance().add_callback(restart_services, False, True)
+
 class UIsList(JsonRequestHandler):
     def get(self):
         self.write({
@@ -2199,7 +2211,7 @@ class UIsInstall(UIsChangeHandler):
         restart = name == ACTIVE_UI
         self.write({'ok': True, 'restart': restart})
         if restart:
-            IOLoop.instance().add_callback(restart_services, False, True)
+            restart_ui()
 
 class UIsActivate(UIsChangeHandler):
     def post(self):
@@ -2210,7 +2222,7 @@ class UIsActivate(UIsChangeHandler):
             return
 
         self.write({'ok': True})
-        IOLoop.instance().add_callback(restart_services, False, True)
+        restart_ui()
 
 class UIsRemove(UIsChangeHandler):
     @gen.coroutine
