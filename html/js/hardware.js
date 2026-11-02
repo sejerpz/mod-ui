@@ -1800,7 +1800,7 @@ function HardwareManager(options) {
         })
       })
 
-      form.find('.mod-box > h1').before(header)
+      box.prepend(header)
       form.find('.form-container').append(wizard)
       box.addClass('wizard-open')
       wizard.addClass('wizard-in-next')
@@ -1875,7 +1875,7 @@ function HardwareManager(options) {
         var i = 0
         // initialize tab pages visibility (after the updateView call because the typeInput is set there)
         model.typeSelect.find('option').unwrap().each(function() {
-            var btn = $('<div class="btn js-type" data-value="'+typeOptions[i]+'">'+$(this).text()+'</div>');
+            var btn = $('<div class="btn js-type" data-value="'+typeOptions[i]+'">'+$(this).text()+'</div>').attr('title', $(this).text());
             var jbtn = $(btn);
             if(jbtn.attr('data-value') == model.typeInput.val()) {
               btn.addClass('selected')
@@ -2182,6 +2182,10 @@ function HardwareManager(options) {
 
         if (model.is_overview) {
           model.form.addClass('addressing-overview')
+          // what the bindings are assigned to, in the title bar rather than over the table
+          var titlebar = $('<div class="addressing-titlebar"/>')
+          model.form.find('.mod-box > h1').before(titlebar)
+          titlebar.append(model.form.find('.mod-box > h1'), model.form.find('.main-form-container > .mod'))
           model.form.find('.js-binding-add').click(function () {
             self.openAssignWizard(model)
           })

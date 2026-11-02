@@ -228,7 +228,7 @@ function Desktop(elements) {
             if (port == null) {
                 context = {
                     label: label,
-                    name: 'Overview'
+                    name: 'Bindings'
                 }
                 return Mustache.render(TEMPLATES.addressing, context)
             }

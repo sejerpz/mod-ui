@@ -5000,7 +5000,7 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box > * {
 }
 
 /* the control's name, and under it whose it is */
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1 {
     flex: none;
     display: flex;
     flex-wrap: wrap;
@@ -5018,7 +5018,7 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 {
     color: #999;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 strong {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1 strong {
     order: -1;
     flex-basis: 100%;
     overflow: hidden;
@@ -5029,25 +5029,25 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 strong {
     white-space: nowrap;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .addressing-dash {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1 .addressing-dash {
     display: none;
 }
 
 /* in the overview, what is picked, after the board's name */
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .overview-plugin-name {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1 .overview-plugin-name {
     margin-left: 0.25em;
 }
 
 /* the plugin's thumbnail before it, when it is a plugin's */
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1 {
     position: relative;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1:has(.addressing-thumb[src]) {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1:has(.addressing-thumb[src]) {
     padding-left: 64px;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box > h1 .addressing-thumb {
+body.app-bar-mode .mod-pedal-settings-address .mod-box h1 .addressing-thumb {
     position: absolute;
     top: 50%;
     left: 16px;
@@ -5190,7 +5190,7 @@ body.app-bar-mode .mod-pedal-settings-address .main-form-container > .mod > labe
     left: 0;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .btn.js-type {
+body.app-bar-mode .mod-pedal-settings-address .mod-box .btn.js-type {
     flex: 1 0 auto;
     height: 40px;
     margin: 0;
@@ -5205,8 +5205,79 @@ body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .btn.js-t
     box-shadow: none;
 }
 
-body.app-bar-mode .mod-pedal-settings-address .mod-box .form-container .btn.js-type.selected {
-    background: #883996;
+body.app-bar-mode .mod-pedal-settings-address .mod-box .btn.js-type.selected {
+    background-color: #883996;
+}
+
+/* The overview, the Bindings: what they are assigned to in its title bar, after its
+   title, see _open in js/hardware.js, an icon each before its name. On a narrow
+   screen the icon alone, named by its title */
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding-right: 60px;
+    border-bottom: 1px solid #333;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-right: 0;
+    border-bottom: none;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar > .mod {
+    flex: none;
+    display: flex;
+    gap: 3px;
+    margin: 0;
+    padding: 3px;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar > .mod > label {
+    display: none !important;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar .btn.js-type {
+    flex: none;
+    padding-left: 38px;
+    background-position: 10px center;
+    background-repeat: no-repeat;
+    background-size: 22px;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .addressing-titlebar {
+    gap: 8px;
+}
+
+body.app-bar-mode.narrow-screen .mod-pedal-settings-address .addressing-titlebar .btn.js-type {
+    width: 42px;
+    padding: 0;
+    background-position: center;
+    background-size: 24px;
+    font-size: 0;
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar .btn.js-type[data-value="/hmi"] {
+    background-image: url(../img/icons/36/knob.png);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar .btn.js-type[data-value="/midi-learn"] {
+    background-image: url(../img/icons/36/midi.png);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar .btn.js-type[data-value="/cc"] {
+    background-image: url(../img/icons/36/control-chain.png);
+}
+
+body.app-bar-mode .mod-pedal-settings-address .addressing-titlebar .btn.js-type[data-value="/cv"] {
+    background-image: url(../img/icons/25/cv.png);
 }
 
 /* the musical tempo, over it, when the control has one */
@@ -5628,6 +5699,7 @@ body.app-bar-mode .mod-pedal-settings-address .wizard-header {
 }
 
 body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open > h1,
+body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open > .addressing-titlebar,
 body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open > .close,
 body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open .main-form-container,
 body.app-bar-mode .mod-pedal-settings-address .mod-box.wizard-open .buttons-container,
