@@ -3232,6 +3232,9 @@ def prepare(isModApp = False):
         get_all_plugins()
         print("Done!")
 
+    # the HMI can switch back to the default web interface
+    SESSION.host.restart_ui_callback = restart_ui
+
     if haveSignal and not isModApp:
         signal(SIGUSR1, signal_recv)
         signal(SIGUSR2, signal_recv)

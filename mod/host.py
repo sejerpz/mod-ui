@@ -85,6 +85,7 @@ from mod.mod_protocol import (
     CMD_NEXT_PAGE,
     CMD_SCREENSHOT,
     CMD_AUDIO_FRAME_SIZE,
+    CMD_UI_CONFIG,
     CMD_DUO_FOOT_NAVIG,
     CMD_DUO_CONTROL_NEXT,
     CMD_DUOX_SNAPSHOT_LOAD,
@@ -176,8 +177,9 @@ from mod.settings import (
     TUNER_URI, TUNER_INSTANCE_ID, TUNER_INPUT_PORT, TUNER_MONITOR_PORT, HMI_TIMEOUT, MODEL_TYPE,
     UNTITLED_PEDALBOARD_NAME, DEFAULT_SNAPSHOT_NAME, PEDALBOARD_FORMAT_VERSION,
     MIDI_BEAT_CLOCK_SENDER_URI, MIDI_BEAT_CLOCK_SENDER_INSTANCE_ID, MIDI_BEAT_CLOCK_SENDER_OUTPUT_PORT,
-    IMAGE_VERSION
+    IMAGE_VERSION, ACTIVE_UI, ACTIVE_UI_FILE, UIS_DIR
 )
+from mod.uis import set_active
 from mod.tuner import (
     find_freqnotecents,
 )
@@ -371,6 +373,9 @@ class Host(object):
 
         # set by the session, resets everything like "New pedalboard" in the web-ui does
         self.new_pedalboard_callback = None
+
+        # set by the web server, restarts it with the active web interface
+        self.restart_ui_callback = None
 
         self.addr = ("localhost", DEVICE_HOST_PORT)
         self.readsock = None
@@ -611,6 +616,7 @@ class Host(object):
         Protocol.register_cmd_callback('ALL', CMD_NEXT_PAGE, self.hmi_page_load)
 
         Protocol.register_cmd_callback('ALL', CMD_AUDIO_FRAME_SIZE, self.hmi_audio_frame_size)
+        Protocol.register_cmd_callback('ALL', CMD_UI_CONFIG, self.hmi_ui_config)
 
         Protocol.register_cmd_callback('DUO', CMD_DUO_FOOT_NAVIG, self.hmi_footswitch_navigation)
         Protocol.register_cmd_callback('DUO', CMD_DUO_CONTROL_NEXT, self.hmi_parameter_addressing_next)
@@ -8093,6 +8099,25 @@ _:b%i
             else:
                 callback(False)
                 logging.error("[host] audio frame size setting value for out of range %d ", value)
+
+    def hmi_ui_config(self, value, callback):
+        """Query or reset the web interface.
+
+        value: 0 to get which one is active (1 the default one, 2 another one), 1 to go back to the default one
+        callback: function to call with result (success, [active interface])"""
+
+        if value == 0:
+            callback(True, 2 if ACTIVE_UI else 1)
+        elif value == 1:
+            callback(True)
+            if ACTIVE_UI:
+                logging.info("[host] web interface '%s' reset to the default one from the HMI", ACTIVE_UI)
+                set_active(UIS_DIR, ACTIVE_UI_FILE, '')
+                if self.restart_ui_callback is not None:
+                    self.restart_ui_callback()
+        else:
+            callback(False)
+            logging.error("[host] ui config value out of range %d", value)
 
     def hmi_new_pedalboard(self, callback):
         logging.debug("hmi new pedalboard")
