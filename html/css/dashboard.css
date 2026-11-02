@@ -6993,6 +6993,10 @@ body.app-bar-mode .mod-sheet-popup .mod-sheet input[type=search] {
 body.app-bar-mode .mod-sheet-popup .mod-sheet input:focus {
     outline: none;
     border-color: #883996;
+    /* thickened by a ring, a 1px border alone coming out uneven at a zoom of a
+       fraction, see --touch-zoom in js/appbar.js, thinner on some sides than on the
+       others, and gone but at the corners on a screen shown smaller than it is */
+    box-shadow: 0 0 0 2px #883996;
 }
 
 body.app-bar-mode .mod-sheet-popup .mod-sheet .btn[disabled] {
@@ -7001,8 +7005,10 @@ body.app-bar-mode .mod-sheet-popup .mod-sheet .btn[disabled] {
 
 /* Saving the pedalboard anew, see prepareSaveBox in js/desktop.js: the pedalboard as
    the library shows it, its name, what it will really be saved as and the banks to add
-   it to. The card a little smaller than the others */
-body.app-bar-mode #save-pedalboard .mod-sheet {
+   it to. As it, saving or renaming a snapshot or a preset, see openPresetSaveWindow,
+   with only the name. The card a little smaller than the others */
+body.app-bar-mode #save-pedalboard .mod-sheet,
+body.app-bar-mode #save-preset .mod-sheet {
     width: calc(420px * var(--touch-zoom, 1));
 }
 body.app-bar-mode #save-pedalboard .board {
@@ -7054,7 +7060,8 @@ body.app-bar-mode #save-pedalboard .badge {
     line-height: 18px;
     vertical-align: 1px;
 }
-body.app-bar-mode #save-pedalboard .field-label {
+body.app-bar-mode #save-pedalboard .field-label,
+body.app-bar-mode #save-preset .field-label {
     display: block;
     float: none;
     width: auto;
@@ -7065,16 +7072,19 @@ body.app-bar-mode #save-pedalboard .field-label {
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
-body.app-bar-mode #save-pedalboard .field {
+body.app-bar-mode #save-pedalboard .field,
+body.app-bar-mode #save-preset .field {
     position: relative;
 }
-body.app-bar-mode #save-pedalboard .field input[type=text] {
+body.app-bar-mode #save-pedalboard .field input[type=text],
+body.app-bar-mode #save-preset .field input[type=text] {
     height: 52px;
     padding-right: 48px;
     border-radius: 12px;
     font-size: 18px;
 }
-body.app-bar-mode #save-pedalboard .field .clear {
+body.app-bar-mode #save-pedalboard .field .clear,
+body.app-bar-mode #save-preset .field .clear {
     position: absolute;
     top: 4px;
     right: 4px;
@@ -7086,10 +7096,12 @@ body.app-bar-mode #save-pedalboard .field .clear {
     text-align: center;
     cursor: pointer;
 }
-body.app-bar-mode #save-pedalboard .hint.warn {
+body.app-bar-mode #save-pedalboard .hint.warn,
+body.app-bar-mode #save-preset .hint.warn {
     color: #e8b86b;
 }
-body.app-bar-mode #save-pedalboard .hint b {
+body.app-bar-mode #save-pedalboard .hint b,
+body.app-bar-mode #save-preset .hint b {
     color: #ddd;
     font-weight: normal;
 }

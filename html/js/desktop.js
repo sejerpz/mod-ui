@@ -1121,7 +1121,26 @@ function Desktop(elements) {
             return new Notification("warn", "Cannot change snapshot while addressed to hardware", 3000)
         }
 
-        desktop.openPresetSaveWindow("Saving Snapshot", "", function (newName) {
+        // the snapshots there are, whose names are taken, the new one going after them
+        $.ajax({
+            url: '/snapshot/list',
+            cache: false,
+            dataType: 'json',
+            success: function (snapshots) {
+                var names = Object.keys(snapshots).map(function (id) { return snapshots[id] })
+                saveSnapshot({
+                    names: names,
+                    hint: names.length ? sprintf('Saved as snapshot %d, after "%s".', names.length + 1, names[names.length - 1])
+                                       : '',
+                })
+            },
+            error: function () {
+                saveSnapshot({})
+            },
+        })
+    })
+    var saveSnapshot = function (options) {
+        desktop.openPresetSaveWindow("Save snapshot", "", function (newName) {
             $.ajax({
                 url: '/snapshot/saveas',
                 data: {
@@ -1144,8 +1163,8 @@ function Desktop(elements) {
                 cache: false,
                 dataType: 'json',
             })
-        })
-    })
+        }, options)
+    }
     elements.snapshotManageButton.click(function () {
         var addressed = !!self.hardwareManager.addressingsByPortSymbol['/pedalboard/:presets']
         var feedback = true
@@ -2607,14 +2626,14 @@ Desktop.prototype.saveCurrentPedalboard = function (asNew, callback) {
         }).map(function (pedal) {
             return pedal.title
         })
-        save(asNew && self.title ? uniquePedalboardName(self.title, self.saveBoxNames) : self.title)
+        save(asNew && self.title ? uniqueName(self.title, self.saveBoxNames) : self.title)
         self.saveBox.find('input[type=text]').trigger('input').select()
     })
 }
 
-// The name a pedalboard is saved with when `name` is taken, as get_unique_name in
-// mod/__init__.py: "Name (2)", then "Name (3)" and on
-function uniquePedalboardName (name, names) {
+// The name a pedalboard or a snapshot is saved with when `name` is taken, as
+// get_unique_name in mod/__init__.py: "Name (2)", then "Name (3)" and on
+function uniqueName (name, names) {
     if (names.indexOf(name) < 0) {
         return name
     }
@@ -2659,7 +2678,8 @@ Desktop.prototype.prepareSaveBox = function (asNew) {
     var update = function () {
         var name = input.val().trim()
         box.find('.js-clear').toggle(input.val().length > 0)
-        var saved = uniquePedalboardName(name, self.saveBoxNames)
+        box.find('.js-save').prop('disabled', ! name)
+        var saved = uniqueName(name, self.saveBoxNames)
         if (! name) {
             hint.removeClass('warn').text('Give it a name to save it.')
         } else if (saved != name) {
@@ -2731,11 +2751,39 @@ Desktop.prototype.shareCurrentPedalboard = function (callback) {
     $('#pedalboard-sharing .button').click()
 }
 
-Desktop.prototype.openPresetSaveWindow = function (windowTitle, name, callback) {
-    this.presetSaveBox.saveBox('save', windowTitle, name, true,
+// The box naming a snapshot or a preset, saving or renaming it. `options` may have
+// `okLabel`, the action's, `names`, those taken, which the box tells will be
+// given another, and `hint`, what it says otherwise
+Desktop.prototype.openPresetSaveWindow = function (windowTitle, name, callback, options) {
+    var box = this.presetSaveBox
+    var input = box.find('input[type=text]')
+    var hint = box.find('.js-hint')
+    options = options || {}
+
+    box.find('.js-save').text(options.okLabel || 'Save')
+    var update = function () {
+        var value = input.val().trim()
+        var saved = options.names ? uniqueName(value, options.names) : value
+        box.find('.js-clear').toggle(input.val().length > 0)
+        box.find('.js-save').prop('disabled', ! value)
+        if (value && saved != value) {
+            hint.addClass('warn').html(sprintf('"%s" already exists: it will be saved as <b>"%s"</b>.',
+                                               $('<i>').text(value).html(), $('<i>').text(saved).html()))
+        } else {
+            hint.removeClass('warn').text(options.hint || '')
+        }
+    }
+    input.off('.savebox').on('input.savebox keyup.savebox', update)
+    box.find('.js-clear').off('click').click(function () {
+        input.val('').trigger('keyup').focus()
+    })
+
+    box.saveBox('save', windowTitle, name, true,
         function (ok, ignored, newName) {
             callback(newName)
         })
+    update()
+    input.select()
 }
 
 Desktop.prototype.getDeviceShopToken = function(callback) {

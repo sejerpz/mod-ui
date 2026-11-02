@@ -1628,7 +1628,7 @@ function GUI(effect, options) {
                         if (item) {
                             name = item.find(".mod-preset-label").text() || "Undefined"
                         }
-                        desktop.openPresetSaveWindow("Saving Preset", name, function (newName) {
+                        desktop.openPresetSaveWindow("Save preset", name, function (newName) {
                             options.presetSaveNew(newName, function (resp) {
                                 const newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'" class="mod-preset"><input type="checkbox" id="preset-'+resp.uri+'" class="mod-preset-check" mod-uri="'+resp.uri+'" checked><label class="mod-preset-label">'+newName+'</label></div>')
                                 //var newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'">'+newName+'</div>')
@@ -1674,7 +1674,7 @@ function GUI(effect, options) {
                         if (! path || ! uri) {
                             return
                         }
-                        desktop.openPresetSaveWindow("Renaming Preset", name, function (newName) {
+                        desktop.openPresetSaveWindow("Rename preset", name, function (newName) {
                             options.presetSaveReplace(uri, path, newName, function (resp) {
                                 item.attr('mod-path', resp.bundle)
                                 item.attr('mod-uri', resp.uri)
@@ -1684,7 +1684,7 @@ function GUI(effect, options) {
                                     .attr('mod-uri', resp.uri)
                                     .attr('id', 'preset-' + resp.uri)
                             })
-                        })
+                        }, { okLabel: 'Rename' })
                     })
 
                     presetElem.find('.preset-btn-delete').click(function () {
