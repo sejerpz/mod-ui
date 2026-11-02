@@ -265,3 +265,203 @@
     }
   }
 }
+
+// With the app bar, on a touch screen of any size, see js/appbar.js: what the dock and
+// a finger need of this page, over the rest of it. Their values in calc() kept as they
+// are, see ~"", which this LESS would otherwise work out itself, wrongly
+
+/* down to the bottom of the screen, the board not showing under the dock, which
+   floats over it. What it shows ends above the dock, see .remote below, which is as big
+   as its zoom makes it, see .mod-app-bar */
+body.app-bar-mode #performance {
+    bottom: 0;
+    background: #111;
+}
+
+/* The performance view's title floats over it like the board's, its actions are in
+   the dock. What it shows runs under the title and stops above the dock */
+body.app-bar-mode #performance header {
+    top: 12px;
+    left: auto;
+    right: 12px;
+    max-width: ~"calc(100% - 24px)";
+    height: 44px;
+    line-height: 44px;
+    box-sizing: border-box;
+    padding: 0 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(51, 51, 51, 0.6);
+    background-color: rgba(17, 17, 17, 0.6);
+    background-image: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+
+/* sized for a finger as the board's title, see --touch-zoom in js/appbar.js */
+body.app-bar-mode #performance header {
+    zoom: var(--touch-zoom, 1);
+}
+
+body.app-bar-mode #performance header h1 {
+    margin: 0;
+    line-height: 42px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.app-bar-mode #performance .remote {
+    top: 0;
+    bottom: ~"calc(80px * var(--touch-zoom, 1))";
+}
+
+/* Its plugins, along the bottom or, on a screen lying low, down the left, sized for a
+   finger however wide the page is laid out, see --touch-zoom in js/appbar.js, the
+   plugin shown taking the rest. Their room 200 wide or high, see main.css, zoomed */
+body.app-bar-mode #performance .js-performance-plugins {
+    zoom: var(--touch-zoom, 1);
+}
+
+/* the snapshots start under the title, which floats over them */
+body.app-bar-mode #performance .snapshot-container {
+    padding-top: ~"calc(56px * var(--touch-zoom, 1) + 12px)";
+}
+
+/* A plugin's own face in the performance view, flipped to from its settings, see
+   js/performance.js: in the middle of where they were, under the title, as big as fits
+   there. Without its actions, which are the board's */
+body.app-bar-mode #performance .mod-performance-face {
+    position: absolute;
+    top: ~"calc(56px * var(--touch-zoom, 1))";
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+body.app-bar-mode #performance .mod-performance-face > .mod-pedal {
+    position: relative;
+    left: auto;
+    top: auto;
+    flex: none;
+    transform-origin: center;
+}
+
+body.app-bar-mode #performance .mod-performance-face .mod-actions {
+    display: none;
+}
+
+@media screen and (min-width: 1023px), screen and (orientation: portrait) {
+    body.app-bar-mode #performance .js-performance-plugin-settings {
+            bottom: ~"calc(200px * var(--touch-zoom, 1))";
+        }
+}
+
+@media screen and (min-width: 1023px), screen and (orientation: portrait) {
+    body.app-bar-mode #performance .js-performance-plugin-settings,
+    body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
+    body.app-bar-mode #performance .js-performance-plugin-settings .snapshot-container {
+            touch-action: pan-y;
+        }
+}
+
+@media screen and (min-width: 1023px), screen and (orientation: portrait) {
+    /* the list's own way taken by a swipe, see js/performance.js */
+    body.app-bar-mode #performance .js-performance-plugins,
+    body.app-bar-mode #performance .js-performance-plugins * {
+            touch-action: pan-y;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    /* the list down the side to the bottom of the screen, its last plugins scrolling
+           out from under the dock, what is shown ending above it */
+    body.app-bar-mode #performance .remote {
+            bottom: 0;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    body.app-bar-mode #performance .js-performance-plugins {
+            padding-bottom: 80px;
+            box-sizing: border-box;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    body.app-bar-mode #performance .js-performance-plugin-settings {
+            left: ~"calc(200px * var(--touch-zoom, 1))";
+            bottom: ~"calc(80px * var(--touch-zoom, 1))";
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    body.app-bar-mode #performance .js-performance-plugin-settings,
+    body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
+    body.app-bar-mode #performance .js-performance-plugin-settings .snapshot-container {
+            touch-action: pan-x;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    /* the list's own way taken by a swipe, see js/performance.js */
+    body.app-bar-mode #performance .js-performance-plugins,
+    body.app-bar-mode #performance .js-performance-plugins * {
+            touch-action: pan-x;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    /* a few at a time down the side, rather than each as high as the screen */
+    body.app-bar-mode #performance .js-performance-plugins .plugin {
+            height: 130px;
+            justify-content: flex-end;
+            overflow: hidden;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    /* the picture in what is left of it above the name, whatever its shape */
+    body.app-bar-mode #performance .js-performance-plugins .plugin .thumb {
+            flex: 1 1 0;
+            min-height: 0;
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 24px 6px;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    body.app-bar-mode #performance .js-performance-plugins .plugin .thumb img {
+            min-width: 0;
+            min-height: 0;
+            width: auto;
+            height: auto;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+}
+
+@media screen and (max-width: 1022px) and (orientation: landscape) {
+    /* the one chosen marked, as along the bottom, see main.css */
+    body.app-bar-mode #performance .js-performance-plugins .selected > .label-container {
+            background-color: #883996;
+        }
+}
+
+/* and what it leaves starts under the floating one, the view's title, 12 down and 44
+   high: as zoomed as the settings are, see --touch-zoom in js/appbar.js */
+body.app-bar-mode #performance .mod-settings .mod-pedal-settings {
+    padding-top: 64px;
+}
+
+body.app-bar-mode #performance .mod-settings .mod-pedal-settings .mod-address {
+    display: none !important;
+}

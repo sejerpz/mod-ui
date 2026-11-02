@@ -208,3 +208,120 @@
     }
   }
 }
+
+
+// With the app bar, on a touch screen of any size, see js/appbar.js: what the dock and
+// a finger need of this page, over the rest of it. Their values in calc() kept as they
+// are, see ~"", which this LESS would otherwise work out itself, wrongly
+
+/* its title and pedalboards sized for a finger however wide the page is laid out, see
+   --touch-zoom in js/appbar.js, as the plugins' library */
+body.app-bar-mode #pedalboards-library > .box {
+    zoom: var(--touch-zoom, 1);
+}
+
+/* Down to the bottom of the screen, where the desktop's bottom bar was: the dock floats
+   over what is there, which scrolls out from under it */
+body.app-bar-mode #pedalboards-library,
+body.app-bar-mode #pedalboards-library .pedalboards {
+    bottom: 0;
+}
+
+/* its title, search and view modes on one line, the title giving way, on two on a
+   narrow screen, the pedalboards below them */
+body.app-bar-mode #pedalboards-library header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 12px;
+    height: auto;
+    padding-right: 8px;
+}
+
+body.app-bar-mode #pedalboards-library header h1 {
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+body.app-bar-mode #pedalboards-library header > * {
+    float: none !important;
+    margin: 0 !important;
+}
+
+body.app-bar-mode #pedalboards-library header .view-modes {
+    order: 1;
+    display: flex;
+    gap: 4px;
+}
+
+body.app-bar-mode #pedalboards-library header .view-modes .view-mode {
+    padding: 0 6px;
+}
+
+body.app-bar-mode #pedalboards-library header > a {
+    order: 2;
+}
+
+body.app-bar-mode #pedalboards-library header .form-group {
+    order: 3;
+}
+
+body.app-bar-mode #pedalboards-library .pedalboards {
+    padding-bottom: 96px;
+}
+
+body.app-bar-mode.narrow-screen #pedalboards-library header {
+    padding-bottom: 6px;
+    line-height: 40px;
+    background-position: 3px 2px;
+}
+
+body.app-bar-mode.narrow-screen #pedalboards-library header h1 {
+    flex-basis: 100%;
+}
+
+body.app-bar-mode.narrow-screen #pedalboards-library header > a span {
+    display: none;
+}
+
+body.app-bar-mode.narrow-screen #pedalboards-library header .form-group {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+body.app-bar-mode.narrow-screen #pedalboards-library header .form-group .form-control {
+    width: 100% !important;
+}
+
+body.app-bar-mode.narrow-screen #pedalboards-library .pedalboards {
+    top: 92px;
+}
+
+/* as many pedalboards on a row as fit, each wide enough to be told apart, their
+   pictures as wide as they are */
+body.app-bar-mode #pedalboards-library .js-pedalboards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+    padding: 8px 1%;
+}
+
+body.app-bar-mode #pedalboards-library .js-pedalboards.list-selected {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 6px 10px;
+}
+
+body.app-bar-mode #pedalboards-library .pedalboards .pedalboard {
+    float: none;
+    width: auto;
+    margin: 0;
+}
+
+body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
+    height: auto;
+    aspect-ratio: ~"16 / 10";
+}

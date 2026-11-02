@@ -725,3 +725,151 @@
     padding: 9px 15px;
     text-align: center;
 }
+
+
+// With the app bar, on a touch screen of any size, see js/appbar.js: what the dock and
+// a finger need of this page, over the rest of it. Their values in calc() kept as they
+// are, see ~"", which this LESS would otherwise work out itself, wrongly
+
+/* The plugin store sized for a finger however wide the page is laid out, see
+   --touch-zoom in js/appbar.js, as the plugins' library */
+body.app-bar-mode #cloud-plugins-library > div {
+    zoom: var(--touch-zoom, 1);
+}
+
+/* as many plugins on a row as fit, each wide enough for its picture and description */
+body.app-bar-mode #cloud-plugins-library .cloud-plugins .plugins-wrapper:not(:empty):not([style*="none"]) {
+    /* over the inline-block js/cloudplugin.js shows the category chosen with */
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+body.app-bar-mode #cloud-plugins-library .cloud-plugins .cloud-plugin {
+    width: auto;
+    float: none;
+}
+
+body.app-bar-mode #cloud-plugins-library .cloud-plugins {
+    padding-bottom: 96px;
+}
+
+body.app-bar-mode #cloud-plugins-library .filter {
+    padding-bottom: 96px;
+}
+
+/* Elsewhere its search in the title bar, left of Update All, rather than at the end of
+   the filters */
+body.app-bar-mode:not(.narrow-screen) #cloud-plugins-library .filter {
+    /* over the title bar, which the filters do not otherwise reach */
+    z-index: 6;
+}
+
+body.app-bar-mode:not(.narrow-screen) #cloud-plugins-library .filter > .form-group {
+    position: fixed;
+    top: 6px;
+    right: 150px;
+    width: 260px;
+    margin: 0;
+    z-index: 6;
+}
+
+body.app-bar-mode:not(.narrow-screen) #cloud-plugins-library .filter > .form-group input {
+    height: 33px;
+}
+
+/* On a narrow screen its filters on a row of their own under the title, the search
+   above the choices, which scroll sideways, the plugins below them */
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter {
+    top: 45px;
+    bottom: auto;
+    width: auto;
+    height: 96px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 50px 8px 0;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    touch-action: pan-x;
+    scrollbar-width: none;
+    background: #1a1a1a;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter > h2 {
+    display: none;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter > .form-group {
+    position: fixed;
+    top: 51px;
+    left: 8px;
+    right: 8px;
+    margin: 0;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter > .form-group input {
+    height: 36px;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .control-group:not(.mod-hidden),
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .categories {
+    flex: none;
+    display: flex;
+    gap: 6px;
+    margin: 0;
+    width: auto;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .control-group input[type='checkbox'] + label,
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .categories li {
+    flex: none;
+    height: 34px;
+    line-height: 34px;
+    width: auto;
+    margin: 0;
+    padding: 0 14px;
+    border-radius: 17px;
+    white-space: nowrap;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .categories li span {
+    float: none;
+    margin-left: 6px;
+    opacity: 0.7;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .cloud-plugins {
+    top: 141px;
+    left: 0;
+}
+
+/* the featured plugins, one at a time there, see js/cloudplugin.js, with less room
+   for the arrows */
+body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel {
+    left: 44px;
+    right: 44px;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-arrow {
+    width: 36px;
+    height: 36px;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-arrow:before {
+    font-size: 36px;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-prev {
+    left: -40px !important;
+}
+
+body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-next {
+    right: -40px !important;
+}
+
+body.app-bar-mode #cloud-plugins-library,
+body.app-bar-mode #cloud-plugins-library .filter,
+body.app-bar-mode #cloud-plugins-library .cloud-plugins {
+    bottom: 0;
+}

@@ -420,7 +420,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background-image:url(../img/icn-zoom-in.png);
 }
 
-
 /* Pedalboard Info - Header */
 #pedalboard-info {
     height:100%;
@@ -452,7 +451,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     overflow:hidden;
     position:relative;
 }
-
 
 #pedalboard-info .favorite {
     background:url(../img/icn-favorite-off.png) no-repeat center center;
@@ -603,9 +601,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     text-align:right;
 }
 
-
-
-
 /* = CONNECTORS
 ================================================ */
 
@@ -649,7 +644,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background-image: url(../img/audio-output-connected.png);
 }
 
-
 .mod-audio-input .mod-output-jack {
     width: 128px !important;
     height: 56px;
@@ -683,7 +677,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
 }
 
 /* MIDI */
-
 
 .mod-midi-output .mod-output-jack {
     background-image: url(../img/midi-jack-nconnect.png);
@@ -722,7 +715,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background-image: url(../img/midi-output-connected.png);
 }
 
-
 .mod-midi-input .mod-output-jack {
     width: 78px !important;
     height: 56px;
@@ -755,9 +747,7 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background-image: url(../img/midi-jack.png);
 }
 
-
 /* CV */
-
 
 .mod-cv-output .mod-output-jack {
     background-image: url(../img/cv-jack-nconnect.png);
@@ -797,7 +787,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background-image: url(../img/cv-output-connected.png);
 }
 
-
 .mod-cv-input .mod-output-jack {
     width: 80px !important;
     height: 56px;
@@ -830,7 +819,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background-image: url(../img/cv-jack.png);
 }
 
-
 /* = PEDAL - dragging dummy icon
 ================================================ */
 .pedal.dummy {
@@ -851,7 +839,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     position:absolute;
     top:4px !important;
 }
-
 
 /* = CABLE
 ================================================ */
@@ -903,8 +890,8 @@ svg .light {
    kind's own, but of its light thread and of the bands of a stereo pair's trunk, see
    below. 0 is none. A set for each kind, standing out from it */
 .mod-audio { --cable-decor-1: #F2B33D; --cable-decor-2: #3CC8E0; --cable-decor-3: #FF7BAC; --cable-decor-4: #8FD85C; }
-.mod-midi  { --cable-decor-1: #F2B33D; --cable-decor-2: #FF7BAC; --cable-decor-3: #8FD85C; --cable-decor-4: #C79BFF; }
-.mod-cv    { --cable-decor-1: #3CC8E0; --cable-decor-2: #8FD85C; --cable-decor-3: #C79BFF; --cable-decor-4: #5B8CFF; }
+.mod-midi { --cable-decor-1: #F2B33D; --cable-decor-2: #FF7BAC; --cable-decor-3: #8FD85C; --cable-decor-4: #C79BFF; }
+.mod-cv { --cable-decor-1: #3CC8E0; --cable-decor-2: #8FD85C; --cable-decor-3: #C79BFF; --cable-decor-4: #5B8CFF; }
 [data-cable-color="1"] { --cable-decor: var(--cable-decor-1); }
 [data-cable-color="2"] { --cable-decor: var(--cable-decor-2); }
 [data-cable-color="3"] { --cable-decor: var(--cable-decor-3); }
@@ -1098,7 +1085,6 @@ svg .connecting-shadow { fill: none; stroke: #077; stroke-width: 10; z-index: 10
 svg .connecting-cable { fill: none; stroke: #0AA; stroke-width: 8; z-index: 1000; }
 svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001; -webkit-transform: translateY(2px); transform: translateY(2px); }
 
-
 /* = PEDALBOARD - ADDRESSING
 ================================================ */
 .pedalboard-addressing {
@@ -1281,7 +1267,6 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     text-transform:uppercase;
 }
 
-
 .input-box-popup .actions {
     border-color:#ddd;
     border-style:solid;
@@ -1294,7 +1279,6 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
 .input-box-popup input[type="text"] {
     width:190px;
 }
-
 
 /* SAVE POP-UP */
 .save-popup {
@@ -1325,7 +1309,6 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
     text-transform:uppercase;
 }
 
-
 .save-popup .actions {
     border-color:#ddd;
     border-style:solid;
@@ -1345,7 +1328,6 @@ svg .connecting-light { fill: none; stroke: #6FF; stroke-width: 1; z-index: 1001
 .save-popup input[type="text"] {
     width:190px;
 }
-
 
 #report-window .box {
     width:640px;
@@ -1540,7 +1522,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
     margin-right:3px;
 }
 
-
 #registration-form.mod-box {
     width:329px;
 }
@@ -1609,7 +1590,7 @@ body:not(.app-bar-mode) #midi-ports-window input {
     text-align: left;
     white-space: normal;
 }
-#share-window  .btn-large img{
+#share-window  .btn-large img {
     height: 20px;
     float: right;
 }
@@ -1660,7 +1641,7 @@ body:not(.app-bar-mode) #midi-ports-window input {
 	border-radius: 50px !important;
 }
 
-#share-window .textcenter{
+#share-window .textcenter {
 	width: 100%;
     float: left;
 	margin: auto;
@@ -1717,16 +1698,7 @@ body:not(.app-bar-mode) #midi-ports-window input {
     background-color: #292929;
 }
 
-
-
-
-
-
-
-
-
 /* MOD LIST */
-
 
 .mod-list {
     padding: 0;
@@ -1743,10 +1715,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
 .mod-list-item:nth-child(odd) {
     background: #fff;
 }
-
-
-
-
 
 /* MOD BUTTON */
 
@@ -1815,10 +1783,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
     background: linear-gradient(to bottom, #a90329 0%,#8f0222 44%,#6d0019 100%);
 }
 
-
-
-
-
 /* MOD POPOUT */
 
 .mod-popout {
@@ -1858,7 +1822,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
 
 }
 
-
 .mod-popout.mod-anchor-n .mod-popout-anchor {
     background-position: 50% 0;
     background-image: url(../img/mod-popout-anchor-top.png);
@@ -1893,7 +1856,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
     background-image: url(../img/mod-popout-anchor-left.png);
 }
 
-
 .mod-popout.mod-anchor-n .mod-popout-content {
     border-top-width: 1px;
     margin-top: 10px;
@@ -1927,7 +1889,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
     margin-left: 10px;
 }
 
-
 /* MOD ICON */
 /* icon definitions in img/icons/icons.css */
 
@@ -1942,16 +1903,9 @@ body:not(.app-bar-mode) #midi-ports-window input {
     opacity: 0.8;
 }
 
-
-
-
-
 .mod-confirm .mod-icon {
     background-image: url(../img/icons/36/confirm.png) !important;
 }
-
-
-
 
 .preset-manager {
     position: absolute;
@@ -2055,7 +2009,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
     display: block;
 }
 
-
 .preset-manager .mod-button-bar .mod-button {
     width: 50%;
     text-align: center;
@@ -2105,7 +2058,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
 .preset-manager .mod-list .mod-list-item.editing .preset-manager-preset-entry {
     display: block;
 }
-
 
 .preset-manager .mod-list .preset-manager-preset-bindstate {
     display: inline-block;
@@ -2180,24 +2132,24 @@ body:not(.app-bar-mode) #midi-ports-window input {
     border-radius: 0px 8px 8px 0px;
 }
 
-.js-ab-compare-snapshot-selected  {
+.js-ab-compare-snapshot-selected {
     background-color: rgb(136, 57, 150);
     color: white;
 }
 
-.js-ab-compare-snapshot-selected:hover  {
+.js-ab-compare-snapshot-selected:hover {
     background-color: rgb(182, 84, 199);
     cursor: default;
     color: white;
 }
 
-.js-ab-compare-snapshot-disabled  {
+.js-ab-compare-snapshot-disabled {
     background-color: rgb(51, 51, 51);
     cursor: default;
     color: black;
 }
 
-.js-ab-compare-snapshot-disabled:hover  {
+.js-ab-compare-snapshot-disabled:hover {
     background-color: rgb(71, 71, 71);
     color: black;
 }
@@ -2247,7 +2199,6 @@ body:not(.app-bar-mode) #midi-ports-window input {
 #pedalboard-dashboard > .mod-pedal {
     transition: opacity 0.15s, filter 0.15s;
 }
-
 
 /* grid mode's plugin library, see setGridLibrary in js/effects.js. Slid out of sight
    below the bottom menu until the "Add Plugin" tab opens it up to the title bar */
@@ -2607,159 +2558,9 @@ body.app-bar-mode #pedalboard-info > h1 {
     line-height: 42px;
 }
 
-/* down to the bottom of the screen, the board not showing under the dock, which
-   floats over it. What it shows ends above the dock, see .remote below, which is as big
-   as its zoom makes it, see .mod-app-bar */
-body.app-bar-mode #performance {
-    bottom: 0;
-    background: #111;
-}
-
-/* The performance view's title floats over it like the board's, its actions are in
-   the dock. What it shows runs under the title and stops above the dock */
-body.app-bar-mode #performance header {
-    top: 12px;
-    left: auto;
-    right: 12px;
-    max-width: calc(100% - 24px);
-    height: 44px;
-    line-height: 44px;
-    box-sizing: border-box;
-    padding: 0 16px;
-    border-radius: 16px;
-    border: 1px solid rgba(51, 51, 51, 0.6);
-    background-color: rgba(17, 17, 17, 0.6);
-    background-image: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    pointer-events: none;
-}
-
-/* sized for a finger as the board's title, see --touch-zoom in js/appbar.js */
-body.app-bar-mode #performance header {
-    zoom: var(--touch-zoom, 1);
-}
-
-body.app-bar-mode #performance header h1 {
-    margin: 0;
-    line-height: 42px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-body.app-bar-mode #performance .remote {
-    top: 0;
-    bottom: calc(80px * var(--touch-zoom, 1));
-}
-
-/* Its plugins, along the bottom or, on a screen lying low, down the left, sized for a
-   finger however wide the page is laid out, see --touch-zoom in js/appbar.js, the
-   plugin shown taking the rest. Their room 200 wide or high, see main.css, zoomed */
-body.app-bar-mode #performance .js-performance-plugins {
-    zoom: var(--touch-zoom, 1);
-}
-/* the snapshots start under the title, which floats over them */
-body.app-bar-mode #performance .snapshot-container {
-    padding-top: calc(56px * var(--touch-zoom, 1) + 12px);
-}
-/* A plugin's own face in the performance view, flipped to from its settings, see
-   js/performance.js: in the middle of where they were, under the title, as big as fits
-   there. Without its actions, which are the board's */
-body.app-bar-mode #performance .mod-performance-face {
-    position: absolute;
-    top: calc(56px * var(--touch-zoom, 1));
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-}
-body.app-bar-mode #performance .mod-performance-face > .mod-pedal {
-    position: relative;
-    left: auto;
-    top: auto;
-    flex: none;
-    transform-origin: center;
-}
-body.app-bar-mode #performance .mod-performance-face .mod-actions {
-    display: none;
-}
-
 /* What is shown, a carousel the way the list runs, see js/performance.js: the browser
    scrolls it the other way, the carousel takes that one. The list the same, a swipe
    along it going to the next plugin */
-@media screen and (min-width: 1023px), screen and (orientation: portrait) {
-    body.app-bar-mode #performance .js-performance-plugin-settings {
-        bottom: calc(200px * var(--touch-zoom, 1));
-    }
-    body.app-bar-mode #performance .js-performance-plugin-settings,
-    body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
-    body.app-bar-mode #performance .js-performance-plugin-settings .snapshot-container {
-        touch-action: pan-y;
-    }
-    /* the list's own way taken by a swipe, see js/performance.js */
-    body.app-bar-mode #performance .js-performance-plugins,
-    body.app-bar-mode #performance .js-performance-plugins * {
-        touch-action: pan-y;
-    }
-}
-@media screen and (max-width: 1022px) and (orientation: landscape) {
-    /* the list down the side to the bottom of the screen, its last plugins scrolling
-       out from under the dock, what is shown ending above it */
-    body.app-bar-mode #performance .remote {
-        bottom: 0;
-    }
-    body.app-bar-mode #performance .js-performance-plugins {
-        padding-bottom: 80px;
-        box-sizing: border-box;
-    }
-    body.app-bar-mode #performance .js-performance-plugin-settings {
-        left: calc(200px * var(--touch-zoom, 1));
-        bottom: calc(80px * var(--touch-zoom, 1));
-    }
-    body.app-bar-mode #performance .js-performance-plugin-settings,
-    body.app-bar-mode #performance .js-performance-plugin-settings .mod-controls,
-    body.app-bar-mode #performance .js-performance-plugin-settings .snapshot-container {
-        touch-action: pan-x;
-    }
-    /* the list's own way taken by a swipe, see js/performance.js */
-    body.app-bar-mode #performance .js-performance-plugins,
-    body.app-bar-mode #performance .js-performance-plugins * {
-        touch-action: pan-x;
-    }
-    /* a few at a time down the side, rather than each as high as the screen */
-    body.app-bar-mode #performance .js-performance-plugins .plugin {
-        height: 130px;
-        justify-content: flex-end;
-        overflow: hidden;
-    }
-    /* the picture in what is left of it above the name, whatever its shape */
-    body.app-bar-mode #performance .js-performance-plugins .plugin .thumb {
-        flex: 1 1 0;
-        min-height: 0;
-        width: 100%;
-        box-sizing: border-box;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 10px 24px 6px;
-    }
-    body.app-bar-mode #performance .js-performance-plugins .plugin .thumb img {
-        min-width: 0;
-        min-height: 0;
-        width: auto;
-        height: auto;
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-    }
-    /* the one chosen marked, as along the bottom, see main.css */
-    body.app-bar-mode #performance .js-performance-plugins .selected > .label-container {
-        background-color: #883996;
-    }
-}
 
 body.app-bar-mode #plugins-library.grid-library {
     top: 0;
@@ -2776,522 +2577,6 @@ body.app-bar-mode #plugins-library.grid-library.open {
    is not zoomed, so that it fits the screen's own size */
 body.app-bar-mode #plugins-library.grid-library > * {
     zoom: var(--touch-zoom, 1);
-}
-
-/* its title and pedalboards sized for a finger however wide the page is laid out, see
-   --touch-zoom in js/appbar.js, as the plugins' library */
-body.app-bar-mode #pedalboards-library > .box {
-    zoom: var(--touch-zoom, 1);
-}
-
-/* The plugin store sized for a finger however wide the page is laid out, see
-   --touch-zoom in js/appbar.js, as the plugins' library */
-body.app-bar-mode #cloud-plugins-library > div {
-    zoom: var(--touch-zoom, 1);
-}
-/* as many plugins on a row as fit, each wide enough for its picture and description */
-body.app-bar-mode #cloud-plugins-library .cloud-plugins .plugins-wrapper:not(:empty):not([style*="none"]) {
-    /* over the inline-block js/cloudplugin.js shows the category chosen with */
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-}
-body.app-bar-mode #cloud-plugins-library .cloud-plugins .cloud-plugin {
-    width: auto;
-    float: none;
-}
-body.app-bar-mode #cloud-plugins-library .cloud-plugins {
-    padding-bottom: 96px;
-}
-body.app-bar-mode #cloud-plugins-library .filter {
-    padding-bottom: 96px;
-}
-
-/* Elsewhere its search in the title bar, left of Update All, rather than at the end of
-   the filters */
-body.app-bar-mode:not(.narrow-screen) #cloud-plugins-library .filter {
-    /* over the title bar, which the filters do not otherwise reach */
-    z-index: 6;
-}
-body.app-bar-mode:not(.narrow-screen) #cloud-plugins-library .filter > .form-group {
-    position: fixed;
-    top: 6px;
-    right: 150px;
-    width: 260px;
-    margin: 0;
-    z-index: 6;
-}
-body.app-bar-mode:not(.narrow-screen) #cloud-plugins-library .filter > .form-group input {
-    height: 33px;
-}
-
-/* On a narrow screen its filters on a row of their own under the title, the search
-   above the choices, which scroll sideways, the plugins below them */
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter {
-    top: 45px;
-    bottom: auto;
-    width: auto;
-    height: 96px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 50px 8px 0;
-    box-sizing: border-box;
-    overflow-x: auto;
-    overflow-y: hidden;
-    touch-action: pan-x;
-    scrollbar-width: none;
-    background: #1a1a1a;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter > h2 {
-    display: none;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter > .form-group {
-    position: fixed;
-    top: 51px;
-    left: 8px;
-    right: 8px;
-    margin: 0;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter > .form-group input {
-    height: 36px;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .control-group:not(.mod-hidden),
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .categories {
-    flex: none;
-    display: flex;
-    gap: 6px;
-    margin: 0;
-    width: auto;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .control-group input[type='checkbox'] + label,
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .categories li {
-    flex: none;
-    height: 34px;
-    line-height: 34px;
-    width: auto;
-    margin: 0;
-    padding: 0 14px;
-    border-radius: 17px;
-    white-space: nowrap;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .filter .categories li span {
-    float: none;
-    margin-left: 6px;
-    opacity: 0.7;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .cloud-plugins {
-    top: 141px;
-    left: 0;
-}
-/* the featured plugins, one at a time there, see js/cloudplugin.js, with less room
-   for the arrows */
-body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel {
-    left: 44px;
-    right: 44px;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-arrow {
-    width: 36px;
-    height: 36px;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-arrow:before {
-    font-size: 36px;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-prev {
-    left: -40px !important;
-}
-body.app-bar-mode.narrow-screen #cloud-plugins-library .featured-plugins .carousel .slick-next {
-    right: -40px !important;
-}
-
-/* Down to the bottom of the screen, where the desktop's bottom bar was: the dock floats
-   over what is there, which scrolls out from under it */
-body.app-bar-mode #pedalboards-library,
-body.app-bar-mode #pedalboards-library .pedalboards,
-body.app-bar-mode #bank-library,
-body.app-bar-mode #bank-library #bank-list,
-body.app-bar-mode #bank-library #bank-edit,
-body.app-bar-mode #bank-library #bank-pedalboards,
-body.app-bar-mode #bank-library #bank-pedalboards-search,
-body.app-bar-mode #bank-library #bank-pedalboards-result,
-body.app-bar-mode #cloud-plugins-library,
-body.app-bar-mode #cloud-plugins-library .filter,
-body.app-bar-mode #cloud-plugins-library .cloud-plugins {
-    bottom: 0;
-}
-body.app-bar-mode #bank-library #bank-list {
-    padding-bottom: 96px;
-}
-
-/* its title, search and view modes on one line, the title giving way, on two on a
-   narrow screen, the pedalboards below them */
-body.app-bar-mode #pedalboards-library header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 12px;
-    height: auto;
-    padding-right: 8px;
-}
-body.app-bar-mode #pedalboards-library header h1 {
-    flex: 1 1 0;
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-body.app-bar-mode #pedalboards-library header > * {
-    float: none !important;
-    margin: 0 !important;
-}
-body.app-bar-mode #pedalboards-library header .view-modes {
-    order: 1;
-    display: flex;
-    gap: 4px;
-}
-body.app-bar-mode #pedalboards-library header .view-modes .view-mode {
-    padding: 0 6px;
-}
-body.app-bar-mode #pedalboards-library header > a {
-    order: 2;
-}
-body.app-bar-mode #pedalboards-library header .form-group {
-    order: 3;
-}
-body.app-bar-mode #pedalboards-library .pedalboards {
-    padding-bottom: 96px;
-}
-body.app-bar-mode.narrow-screen #pedalboards-library header {
-    padding-bottom: 6px;
-    line-height: 40px;
-    background-position: 3px 2px;
-}
-body.app-bar-mode.narrow-screen #pedalboards-library header h1 {
-    flex-basis: 100%;
-}
-body.app-bar-mode.narrow-screen #pedalboards-library header > a span {
-    display: none;
-}
-body.app-bar-mode.narrow-screen #pedalboards-library header .form-group {
-    flex: 1 1 0;
-    min-width: 0;
-}
-body.app-bar-mode.narrow-screen #pedalboards-library header .form-group .form-control {
-    width: 100% !important;
-}
-body.app-bar-mode.narrow-screen #pedalboards-library .pedalboards {
-    top: 92px;
-}
-
-/* its banks, theirs pedalboards and the pedalboards to add sized for a finger however
-   wide the page is laid out, see --touch-zoom in js/appbar.js, as the plugins' library */
-body.app-bar-mode #bank-library > .box {
-    zoom: var(--touch-zoom, 1);
-}
-
-/* its banks, the one chosen and the pedalboards to add to it side by side, each as
-   wide as the screen allows rather than as wide as a desktop's */
-body.app-bar-mode #bank-library #bank-list {
-    width: 22%;
-}
-body.app-bar-mode #bank-library #bank-edit,
-body.app-bar-mode #bank-library #bank-title,
-body.app-bar-mode #bank-library #bank-pedalboards {
-    left: 22%;
-}
-body.app-bar-mode #bank-library #bank-title,
-body.app-bar-mode #bank-library #bank-pedalboards {
-    width: 40%;
-}
-body.app-bar-mode #bank-library #bank-pedalboards {
-    top: 137px;
-    padding-bottom: 96px;
-}
-body.app-bar-mode #bank-library #bank-pedalboards-search,
-body.app-bar-mode #bank-library #bank-pedalboards-search #bank-pedalboards-result {
-    width: 38%;
-}
-body.app-bar-mode #bank-library #bank-pedalboards-search #bank-pedalboards-result {
-    padding-bottom: 96px;
-}
-body.app-bar-mode #bank-library #bank-pedalboards-search .form-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    padding: 0 8px 0 10px;
-    position: relative;
-}
-body.app-bar-mode #bank-library #bank-pedalboards-search label {
-    flex: none;
-    padding: 0;
-}
-body.app-bar-mode #bank-library #bank-pedalboards-search input[type="search"] {
-    flex: 1 1 0;
-    min-width: 0;
-    width: auto !important;
-    float: none;
-    margin: 0;
-}
-body.app-bar-mode #bank-library #bank-pedalboards-search .js-canvas .js-pedalboard-item {
-    width: auto;
-    min-width: 0;
-    flex: 1 1 170px;
-    max-width: 260px;
-}
-
-/* A finger on a pedalboard to add drags it moving sideways first, and scrolls the list
-   moving up or down first; one in the bank is moved by its title, the rest of it
-   scrolling the bank. Otherwise the browser takes the touch for a scroll, wherever the
-   list scrolls, and the drag never starts, see js/utils/touch.js */
-body.app-bar-mode #bank-library #bank-pedalboards-result .js-pedalboard-item {
-    touch-action: pan-y;
-}
-body.app-bar-mode #bank-library #bank-pedalboards > div {
-    /* over .ui-draggable's, which those dropped into the bank keep from the search */
-    touch-action: pan-y;
-}
-body.app-bar-mode #bank-library #bank-pedalboards .pedalboard .info {
-    touch-action: none;
-}
-
-/* what is dragged into the bank, its picture as wide as it, not the picture's own size */
-#bank-library .mod-banks-drag-item .img {
-    overflow: hidden;
-}
-#bank-library .mod-banks-drag-item .img img {
-    display: block;
-    width: 100%;
-    height: auto;
-}
-
-/* a pedalboard's handle, see js/banks.js, only in the bank on a small screen */
-#bank-library .pedalboard .info .move {
-    display: none;
-}
-
-/* On a narrow screen the banks are chips on a row of their own, the bank chosen below
-   them as wide as the screen, and the pedalboards to add a sheet over it, opened from
-   a button, see js/banks.js */
-body.app-bar-mode.narrow-screen #bank-library #bank-list {
-    top: 45px;
-    bottom: auto;
-    right: 0;
-    width: auto;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    background: #1a1a1a;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list .js-canvas {
-    display: flex;
-    gap: 6px;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list > div.add-bank,
-body.app-bar-mode.narrow-screen #bank-library #bank-list .bank-item {
-    flex: none;
-    display: flex;
-    align-items: center;
-    height: 34px;
-    line-height: 34px;
-    margin: 0;
-    padding: 0 14px;
-    border-radius: 17px;
-    background: #2c2c2c;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list .bank-item.selected {
-    padding-right: 4px;
-    background: #883996;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list .bank-item .move,
-body.app-bar-mode.narrow-screen #bank-library #bank-list .bank-item .remove {
-    display: none;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list .bank-item.selected .remove {
-    display: block;
-    background-color: transparent;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list .bank-item .title {
-    float: none;
-    height: auto;
-    max-width: 160px;
-    text-overflow: ellipsis;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-list .edit-bank {
-    width: 140px !important;
-    height: 26px;
-    border-radius: 4px;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-edit,
-body.app-bar-mode.narrow-screen #bank-library #bank-title,
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards {
-    left: 0;
-    width: 100%;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-edit,
-body.app-bar-mode.narrow-screen #bank-library #bank-title {
-    top: 93px;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-title {
-    height: 52px;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-title h1 {
-    margin: 0.3em 0.5em 0;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards {
-    top: 145px;
-    padding-bottom: 96px;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards > div {
-    margin: 0 12px 8px;
-}
-/* the bank's pedalboards as rows, a handle, the picture, the name and remove: short
-   enough to be moved past each other on a phone, either way up */
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard {
-    display: grid;
-    grid-template-columns: 44px 104px auto 1fr 40px;
-    align-items: center;
-    height: 66px;
-    background: rgba(255, 255, 255, 0.07);
-    touch-action: pan-y;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .info {
-    display: contents;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .info .move {
-    display: block;
-    grid-column: 1;
-    grid-row: 1;
-    /* the light half of the picture, which has two */
-    width: 24px;
-    height: 66px;
-    padding: 0 10px;
-    box-sizing: content-box;
-    margin: 0;
-    float: none;
-    background-origin: content-box;
-    background-clip: content-box;
-    background-position: right center;
-    touch-action: none;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .img {
-    grid-column: 2;
-    grid-row: 1;
-    float: none;
-    width: 104px;
-    height: 58px;
-    margin: 0;
-    overflow: hidden;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .img img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    position: static;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .js-index {
-    grid-column: 3;
-    grid-row: 1;
-    padding-left: 10px;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .js-title {
-    grid-column: 4;
-    grid-row: 1;
-    min-width: 0;
-    max-width: none;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-body.app-bar-mode.small-screen #bank-library #bank-pedalboards .pedalboard .js-remove {
-    grid-column: 5;
-    grid-row: 1;
-    float: none;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards-search {
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: 78%;
-    z-index: 7;
-    border-radius: 16px 16px 0 0;
-    background: #111;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.7);
-    transform: translateY(100%);
-    transition: transform 0.25s ease;
-}
-body.app-bar-mode.narrow-screen #bank-library.adding #bank-pedalboards-search {
-    transform: none;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards-search #bank-pedalboards-result {
-    position: static;
-    width: 100%;
-    overflow: visible;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards-search .filter {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    padding-top: 6px;
-    background: #111;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards-search .form-group {
-    flex-wrap: wrap;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards-search label {
-    flex: 1 1 0;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards-search input[type="search"] {
-    order: 1;
-    flex-basis: 100%;
-    height: 36px;
-    margin-bottom: 6px;
-}
-/* an empty bank says how to fill it, in place of a notification, see js/banks.js */
-#bank-library #bank-pedalboards:empty::before {
-    content: "This bank is empty: drag pedalboards here from the right";
-    display: block;
-    margin: 40px 20px;
-    padding: 32px 16px;
-    border: 2px dashed #444;
-    border-radius: 12px;
-    color: #888;
-    font-size: 16px;
-    text-align: center;
-}
-body.app-bar-mode.narrow-screen #bank-library #bank-pedalboards:empty::before {
-    content: "This bank is empty: tap Add pedalboards to fill it";
-    margin: 24px 12px;
-}
-#bank-library #bank-pedalboards-search .js-pedalboard-item.added .info {
-    background-color: #883996;
-}
-
-/* as many pedalboards on a row as fit, each wide enough to be told apart, their
-   pictures as wide as they are */
-body.app-bar-mode #pedalboards-library .js-pedalboards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 10px;
-    padding: 8px 1%;
-}
-body.app-bar-mode #pedalboards-library .js-pedalboards.list-selected {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 6px 10px;
-}
-body.app-bar-mode #pedalboards-library .pedalboards .pedalboard {
-    float: none;
-    width: auto;
-    margin: 0;
-}
-body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
-    height: auto;
-    aspect-ratio: 16 / 10;
 }
 
 /* sized for a finger however wide the page is laid out, see --touch-zoom in
@@ -4131,12 +3416,6 @@ body.app-bar-mode .mod-settings .mod-pedal-settings header:not(:has(> :not(.mod-
     display: none !important;
 }
 
-/* and what it leaves starts under the floating one, the view's title, 12 down and 44
-   high: as zoomed as the settings are, see --touch-zoom in js/appbar.js */
-body.app-bar-mode #performance .mod-settings .mod-pedal-settings {
-    padding-top: 64px;
-}
-
 body.app-bar-mode .mod-settings .mod-pedal-settings header .mod-monitors {
     flex: 1 1 280px;
     align-items: center;
@@ -4851,8 +4130,7 @@ body.app-bar-mode .mod-settings .mod-pedal-settings > .mod-controls {
 
 /* no bindings in the performance view, whose template hides them, see settings.html,
    but for its choices', which it misses */
-body.app-bar-mode .mod-settings .mod-pedal-settings .mod-address.mod-hidden,
-body.app-bar-mode #performance .mod-settings .mod-pedal-settings .mod-address {
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-address.mod-hidden {
     display: none !important;
 }
 
@@ -6982,7 +6260,6 @@ body.app-bar-mode .mod-cv-input.input-connecting:not(.input-connected)::before {
     from { transform: scale(2.4); opacity: 0.7; }
     to { transform: scale(3); opacity: 1; }
 }
-
 
 /* A dialog with the app bar, see .mod-sheet-popup in index.html: dark as the plugin
    settings and the connect pane, a card in the middle of the screen, rising from the
