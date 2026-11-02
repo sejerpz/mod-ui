@@ -100,6 +100,10 @@ var PLACEMENT_ICON_SCALE = 0.68
 // How much of a cell grid mode's zoom leaves past the cells in use, to the right and
 // below: room to grow the board into, without a whole empty row and column
 var PLACEMENT_SPARE = 0.3
+// How high a cell is on the screen at least, in the screen's own pixels, whatever the
+// zoom or the screen: the plugins in it stay big enough to tell apart and to take a
+// finger, the rest of the board a pan away, see gridMinScale
+var PLACEMENT_MIN_CELL_HEIGHT = 160
 // How much of a cell grid mode's pan is dragged to go on to the next cell, see snapToCells
 var PLACEMENT_SNAP = 0.2
 // A pan let go within this many ms, this many screen px away, is a swipe, see swipeCell
@@ -3105,14 +3109,24 @@ JqueryClass('pedalboard', {
                            height / ((rows + PLACEMENT_SPARE) * PLACEMENT_CELL.height))
     },
 
+    // The zoom out grid mode goes no further than, see PLACEMENT_MIN_CELL_HEIGHT: the
+    // page is laid out wider than a phone's screen, see --touch-zoom in js/appbar.js,
+    // which takes as much more of the board's zoom
+    gridMinScale: function () {
+        var zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch-zoom')) || 1
+        return Math.min(1, PLACEMENT_MIN_CELL_HEIGHT * zoom / PLACEMENT_CELL.height)
+    },
+
     // Grid mode's zoom to start from, the board's canvas fitted as gridFitScale. On a
     // desktop's wide screen the whole board. On a phone's or a tablet's, where the whole
     // board is too small to use, its rows fill the height, from its first column, the
-    // rest a pan away, and zooming out still shows all of it
+    // rest a pan away, and zooming out still shows all of it. Either way not with cells
+    // smaller than gridMinScale allows
     gridFillScale: function (fit) {
         var self = $(this)
+        var least = self.pedalboard('gridMinScale')
         if ($('body').hasClass('wide-screen')) {
-            return fit
+            return Math.max(fit, least)
         }
         var plugins = self.data('plugins')
         var rows = 1
@@ -3123,14 +3137,16 @@ JqueryClass('pedalboard', {
             }
         }
         var height = self.parent().height() - (self.data('coveredBottom') || 0)
-        return Math.max(fit, Math.min(1, height / ((rows + PLACEMENT_SPARE) * PLACEMENT_CELL.height)))
+        return Math.max(fit, least, Math.min(1, height / ((rows + PLACEMENT_SPARE) * PLACEMENT_CELL.height)))
     },
 
     // The canvas at the whole board's zoom, without going there, then to the fill's,
     // see gridFillScale: one zoom, not two. `canvasX` and `screenX` say what to show
     gridZoomToFill: function (fit, fill, canvasX, screenX, time) {
         var self = $(this)
-        self.data('minScale', fit)
+        // zooming out shows all of it, but for cells too small, see gridMinScale: the
+        // canvas still holds all of it, a pan away
+        self.data('minScale', Math.max(fit, self.pedalboard('gridMinScale')))
         self.width(self.parent().width() / fit)
         self.height(self.parent().height() / fit)
         self.pedalboard('positionHardwarePorts')
