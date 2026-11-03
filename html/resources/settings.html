@@ -67,7 +67,7 @@
                     {{#presets.factory}}
                     <div mod-role="enumeration-option" mod-uri="{{uri}}" mod-path="{{path}}" class="mod-preset">
                         <input type="checkbox" id="preset-{{uri}}" class="mod-preset-check" mod-uri="{{uri}}" checked>
-                        <label class="mod-preset-label">{{label}}</label>
+                        <label class="mod-preset-label" title="{{label}}">{{label}}</label>
                     </div>
                     {{/presets.factory}}
                 </div>
@@ -75,7 +75,7 @@
                     {{#presets.user}}
                     <div mod-role="enumeration-option" mod-uri="{{uri}}" mod-path="{{path}}" class="mod-preset">
                         <input type="checkbox" id="preset-{{uri}}" class="mod-preset-check" mod-uri="{{uri}}" checked>
-                        <label class="mod-preset-label">{{label}}</label>
+                        <label class="mod-preset-label" title="{{label}}">{{label}}</label>
                     </div>
                     {{/presets.user}}
                 </div>

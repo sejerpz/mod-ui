@@ -3894,7 +3894,9 @@ body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group .mod-group-
     body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .mod-enumerated.mod-presets footer {
         left: 12px;
         right: 12px;
-        bottom: 8px;
+        max-width: none;
+        /* as tall as its entries, down to the end of the list at most */
+        max-height: calc(100% - 54px);
         min-width: 0;
         overflow-x: hidden;
         overflow-y: auto;
@@ -3903,8 +3905,12 @@ body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-group .mod-group-
 
     body.app-bar-mode .mod-settings .mod-pedal-settings .mod-touch-main > .mod-presets > .mod-enumerated-list {
         flex: 1;
+        box-sizing: border-box;
+        width: auto;
+        max-width: 100%;
         min-height: 0;
         max-height: none;
+        overflow-x: hidden;
         overflow-y: auto;
         touch-action: pan-y;
     }
@@ -4278,6 +4284,11 @@ body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets 
     position: absolute;
     top: 46px;
     right: 16px;
+    /* as wide as its entries, not as the presets, see pedals.css */
+    left: auto;
+    width: auto;
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
     z-index: 5;
     flex-direction: column;
     gap: 2px;
@@ -4291,6 +4302,14 @@ body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets 
 
 body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets.menu-open footer {
     display: flex;
+}
+
+/* a long name ends in dots rather than widening the list, and its selected row */
+body.app-bar-mode .mod-settings .mod-pedal-settings .mod-presets .mod-preset-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 body.app-bar-mode .mod-settings .mod-pedal-settings .mod-enumerated.mod-presets footer .btn {

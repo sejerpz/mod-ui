@@ -983,6 +983,24 @@ body.pedalboard-share #pedalboards-library header .pedalboard-file-import:hover 
     margin: 0px;
 }
 
+/* a list with no presets says so, as one is saved or the last deleted too */
+.mod-pedal-settings .mod-preset-user:not(:has(.mod-preset))::before,
+.mod-pedal-settings .mod-preset-factory:not(:has(.mod-preset))::before {
+    display: block;
+    padding: 8px 4px;
+    color: #888;
+    font-style: italic;
+    white-space: normal;
+}
+
+.mod-pedal-settings .mod-preset-factory:not(:has(.mod-preset))::before {
+    content: "No factory presets";
+}
+
+.mod-pedal-settings .mod-preset-user:not(:has(.mod-preset))::before {
+    content: "No user presets yet";
+}
+
 /* ADDRESSING POP-UP */
 .mod-pedal-settings-address {
     background:rgba(0,0,0,.75);

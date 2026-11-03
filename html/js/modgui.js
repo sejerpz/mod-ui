@@ -1632,6 +1632,7 @@ function GUI(effect, options) {
                         desktop.openPresetSaveWindow("Save preset", name, function (newName) {
                             options.presetSaveNew(newName, function (resp) {
                                 const newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'" class="mod-preset"><input type="checkbox" id="preset-'+resp.uri+'" class="mod-preset-check" mod-uri="'+resp.uri+'" checked><label class="mod-preset-label">'+newName+'</label></div>')
+                                newItem.find('.mod-preset-label').attr('title', newName)
                                 //var newItem = $('<div mod-role="enumeration-option" mod-uri="'+resp.uri+'" mod-path="'+resp.bundle+'">'+newName+'</div>')
                                 newItem.appendTo(presetElem.find('.mod-preset-user')) // .click((e) => self.presetItemClicked(newItem, presetElem, e))
 
@@ -1681,6 +1682,7 @@ function GUI(effect, options) {
                                 item.attr('mod-uri', resp.uri)
                                 item.find(".mod-preset-label")
                                     .text(newName)
+                                    .attr('title', newName)
                                 item.find('.mod-preset-check')
                                     .attr('mod-uri', resp.uri)
                                     .attr('id', 'preset-' + resp.uri)
