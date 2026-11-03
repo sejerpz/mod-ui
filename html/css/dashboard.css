@@ -3450,6 +3450,16 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
     background: #9e2a26;
 }
 
+/* Reset peaks, for the plugins' CPU usage only, see js/appbar.js */
+.mod-app-bar > .dialog > .cpu-reset {
+    display: none;
+    border: 1px solid #444;
+    background: #2c2c2c;
+}
+.mod-app-bar > .dialog.for-cpu > .cpu-reset {
+    display: block;
+}
+
 /* the way back from the viewed plugin's settings */
 .mod-app-bar > .dialog {
     max-width: 640px;

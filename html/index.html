@@ -828,9 +828,7 @@ $('document').ready(function() {
         <!-- MIDI DEVICE LIST WINDOW -->
         <div id="cpu-load-window" class="save-popup mod-hidden">
             <div class="mod-box" id="cpu-load-box">
-                <h1>Plugin CPU Usage<button type="button" id="cpu-load-info" class="cpu-load-info" title="What do these numbers mean?" aria-expanded="false">i</button></h1>
-                <p id="cpu-load-summary" class="cpu-load-summary"></p>
-                <div id="cpu-load-list"></div>
+                <h1>Plugin CPU Usage<span class="cpu-load-count"></span><button type="button" id="cpu-load-info" class="cpu-load-info" title="What do these numbers mean?" aria-expanded="false">i</button></h1>
                 <div id="cpu-load-help" class="cpu-load-help mod-hidden">
                     <p>
                         <b>cpu</b> is the worst single audio cycle that plugin has been seen
@@ -852,6 +850,8 @@ $('document').ready(function() {
                         meter; and work a plugin hands to a background thread is not counted here.
                     </p>
                 </div>
+                <div id="cpu-load-summary" class="cpu-load-summary"></div>
+                <div id="cpu-load-list"></div>
                 <div class="actions">
                     <button type="button" class="js-reset-peaks">Reset peaks</button>
                     <button class="js-close">Close</button>

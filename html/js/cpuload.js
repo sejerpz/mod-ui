@@ -52,6 +52,7 @@ function CpuLoadPanel(options) {
         self.order = []
         options.list.html('<div class="cpu-load-empty">Waiting for the first cycle...</div>')
         options.summary.text('')
+        options.window.find('.cpu-load-count').text('')
         help.addClass('mod-hidden')
         info.attr('aria-expanded', 'false').removeClass('open')
         options.window.removeClass('mod-hidden')
@@ -165,6 +166,7 @@ function CpuLoadPanel(options) {
 
         var graph = graphSlack(self.peaks, self.edges())
         var total = 0
+        var chain = []
         var i
 
         for (i = 0; i < self.order.length; i++) {
@@ -185,6 +187,9 @@ function CpuLoadPanel(options) {
             row.find('.cpu-load-slack').text(critical ? 'critical path'
                                                       : (slack === undefined ? '' : slack.toFixed(1) + '% spare'))
             row.toggleClass('critical', critical)
+            if (critical) {
+                chain.push(load)
+            }
             row.attr('title', row.data('name') + ' - ' + load.toFixed(1) + '% of a cycle at worst. ' +
                      (critical ? CRITICAL_TIP
                                : 'Runs in parallel with something slower, and finishes early. It could use ' +
@@ -193,10 +198,34 @@ function CpuLoadPanel(options) {
                                  'so making it cheaper buys no headroom.'))
         }
 
-        options.summary.html(
-            escapeHtml(self.order.length + ' plugins. Worst cycle seen so far for each. ' +
-                       'Adding up the longest chain gives ' + graph.critical.toFixed(0) + '% of a cycle, ' +
-                       'a worst case that has to stay under 100%.'))
+        options.window.find('.cpu-load-count').text(self.order.length)
+        options.summary.html(self.cycle(graph.critical, chain))
+    }
+
+    // The audio cycle at a glance: the longest chain of plugins waiting on each other,
+    // its peaks added up, against the whole cycle, how near the limit that is, and the
+    // plugins on it as the pieces of its bar, the heaviest first
+    this.cycle = function (critical, chain) {
+        var state = critical < 70 ? ['ok', 'OK'] : critical < 90 ? ['warn', 'Near the limit'] : ['bad', 'Over: audio drops']
+        var pieces = '', at = 0
+        chain.sort(function (a, b) { return b - a })
+        for (var i = 0; i < chain.length && at < 100; i++) {
+            var width = Math.min(chain[i], 100 - at)
+            pieces += '<i class="cpu-load-piece" style="left:' + at.toFixed(1) + '%;width:' + width.toFixed(1) + '%"></i>'
+            at += chain[i]
+        }
+        return '<div class="cpu-load-cycle">' +
+                   '<div class="cpu-load-cycle-top">' +
+                       '<span class="cpu-load-cycle-value">' + critical.toFixed(0) + '%</span>' +
+                       '<span class="cpu-load-cycle-what">of a cycle, longest chain</span>' +
+                       '<span class="cpu-load-cycle-state ' + state[0] + '">' + state[1] + '</span>' +
+                   '</div>' +
+                   '<div class="cpu-load-track">' + pieces + '</div>' +
+                   '<div class="cpu-load-legend">' +
+                       '<span>' + chain.length + (chain.length == 1 ? ' plugin' : ' plugins') + ' on the critical path, ' +
+                       'worst cycle seen for each</span><span>100%</span>' +
+                   '</div>' +
+               '</div>'
     }
 
     // Rebuild the rows. Only called when the set of plugins changes, so the list does

@@ -389,13 +389,12 @@ JqueryClass('appBar', {
 
         // The snapshot dialogs, and the one saving the pedalboard, take the room the dock
         // would cover: it slides away while one is up. They open and close with show() and hide(), whatever opened them,
-        // and so do the plugins' CPU usage, see below, and the MIDI ports. So do the
+        // and so do the MIDI ports. So do the
         // bindings and the CV ports, which are added to the page while open, and the
         // windows of a plugin the board shows alone, see below. It comes back over them
         // to ask whether to go on with something one of them does, see confirm below
         var dialogs = $()
-        var shown = options.snapshotDialogs.add(options.saveWindow).add(options.cpuLoadWindow)
-                                           .add(options.midiPortsWindow)
+        var shown = options.snapshotDialogs.add(options.saveWindow).add(options.midiPortsWindow)
         var makeRoom = function () {
             self.toggleClass('away', ! self.hasClass('confirming') &&
                                      (shown.filter(':visible').length > 0 ||
@@ -790,9 +789,27 @@ JqueryClass('appBar', {
                 info.window('close')
             } else if (options.transportWindow.is(':visible')) {
                 options.transportButton.click()
+            } else if (options.cpuLoadWindow.is(':visible')) {
+                options.cpuLoadWindow.find('.js-close').click()
             }
         // first, the plugin's tools after it
         }).prependTo(dialog)
+
+        // The plugins' CPU usage, see js/cpuload.js, takes the screen above the dock as a
+        // plugin's settings do: the dock folds down to the way back and Reset peaks. It
+        // shows and hides itself, by its class
+        $('<div class="cpu-reset">').text('Reset peaks').click(function () {
+            options.cpuLoadWindow.find('.js-reset-peaks').click()
+        }).appendTo(dialog)
+        var showCpu = function () {
+            var shown = options.cpuLoadWindow.is(':visible')
+            dialog.toggleClass('for-cpu', shown)
+            setState('dialog', shown || !! settings || !! info || options.transportWindow.is(':visible'))
+        }
+        new MutationObserver(showCpu).observe(options.cpuLoadWindow[0], {
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        })
 
         // The transport, from the menu, folds the dock down to the same way back. It is
         // no window, its button shows and hides it
