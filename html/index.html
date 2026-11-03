@@ -383,7 +383,7 @@ $('document').ready(function() {
             snapshotSaveAsButton: $('#pedalboard-info .js-preset-save-as'),
             snapshotManageButton: $('#pedalboard-info .js-preset-manage'),
             snapshotDialogs: $('#pedal-presets-window, #save-preset'),
-            saveWindow: $('#save-pedalboard, #input-box'),
+            saveWindow: $('#save-pedalboard, #input-box, #cc-device-update-window'),
             saveButton: $('#pedalboard-info .js-save'),
             cpuButton: $('#main-menu #mod-cpu'),
             cpuText: $('#cpu-bar-text'),
@@ -955,31 +955,27 @@ $('document').ready(function() {
         <!-- END PEDALBOARD SNAPSHOTS -->
 
         <!-- CC DEVICE UPDATE WINDOW -->
-        <div id="cc-device-update-window" class="save-popup mod-hidden">
-            <div class="mod-box" style="width: 600px; margin:-150px -280px">
-                <h1 class="pull-left">Control Chain Device Update</h1><span class="js-cancel close">&times;</span>
-                <form class="bottom">
-                    <div class="clearfix"></div>
-                    <div id="cc-device-update-text">
-                        <p>
-                            Your Control Chain (CC) device firmware is ready to be updated.
-                        </p>
-                        <p>
-                            To continue, please follow these steps:
-                        </p>
-                        <ul>
-                            <li>Disconnect the CC device from the Control Chain port</li>
-                            <li>Hold down the first footswitch on the CC device</li>
-                            <li>While the first footswitch is held down, connect the CC device to your MOD device via USB</li>
-                            <li>Wait for the "update completed" message</li>
-                            <li>Disconnect the CC device from the USB port</li>
-                            <li>Connect the CC device to the Control Chain port once again</li>
-                        </ul>
-                        <p>
-                            Note: The update should only take a few seconds.
-                        </p>
-                    </div>
-                </form>
+        <div id="cc-device-update-window" class="save-popup mod-sheet-popup mod-hidden">
+            <div class="mod-box mod-sheet">
+                <header>
+                    <h1>Control Chain device update</h1>
+                    <span class="js-cancel close">&times;</span>
+                </header>
+                <div class="body" id="cc-device-update-text">
+                    <p>Your Control Chain (CC) device firmware is ready to be updated. To continue:</p>
+                    <ol class="cc-update-steps">
+                        <li>Disconnect the CC device from the Control Chain port</li>
+                        <li>Hold down the first footswitch on the CC device</li>
+                        <li>While the first footswitch is held down, connect the CC device to your MOD device via USB</li>
+                        <li>Wait for the "update completed" message</li>
+                        <li>Disconnect the CC device from the USB port</li>
+                        <li>Connect the CC device to the Control Chain port once again</li>
+                    </ol>
+                    <p class="hint">The update should only take a few seconds.</p>
+                </div>
+                <div class="actions">
+                    <button class="js-cancel btn">Cancel update</button>
+                </div>
             </div>
         </div>
         <!-- END CC DEVICE UPDATE WINDOW -->
