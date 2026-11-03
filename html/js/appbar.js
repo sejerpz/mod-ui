@@ -533,10 +533,37 @@ JqueryClass('appBar', {
         })
         showCompared()
 
-        // the header's save marks unsaved changes as 'unmodified-changes'
+        // the header's save marks unsaved changes as 'unmodified-changes'. A long press,
+        // or a long click, saves as a new one instead, as the A/B's long press goes past
+        // its tap
+        var savePress = null, savePressedAt = null, saveLongPressed = false
         var save = $('<div class="save">').text('Save').click(function () {
+            if (saveLongPressed) {
+                saveLongPressed = false
+                return false
+            }
             options.saveButton.click()
         }).appendTo(tools)
+        var saveRelease = function () {
+            clearTimeout(savePress)
+            savePress = null
+        }
+        save.on('pointerdown', function (e) {
+            saveLongPressed = false
+            savePressedAt = { x: e.originalEvent.clientX, y: e.originalEvent.clientY }
+            saveRelease()
+            savePress = setTimeout(function () {
+                savePress = null
+                saveLongPressed = true
+                options.saveAsButton.click()
+            }, AB_LONG_PRESS)
+        }).on('pointermove', function (e) {
+            if (savePress && (Math.abs(e.originalEvent.clientX - savePressedAt.x) > 10 ||
+                              Math.abs(e.originalEvent.clientY - savePressedAt.y) > 10)) {
+                saveRelease()
+            }
+        }).on('pointerup pointercancel', saveRelease)
+        .on('contextmenu', false)
         var showModified = function () {
             save.toggleClass('modified', options.saveButton.hasClass('unmodified-changes'))
         }
