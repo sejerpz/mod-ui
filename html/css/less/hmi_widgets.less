@@ -600,3 +600,165 @@
         display:none;
     }
 }
+
+// With the app bar, see js/appbar.js: a page over the board, above the dock, which has
+// the way back and Save, as a plugin's settings. Dark as the other dialogs, its parts
+// sized for a finger however wide the page is laid out, see --touch-zoom: the page, the
+// pedalboard's page and subpage to set, then the columns of the display side by side,
+// each choosing the knob's addressing or a plugin's widget. Their values in calc() kept
+// as they are, see ~"", which this LESS would otherwise work out itself, wrongly
+
+body.app-bar-mode #hmi-widgets-window {
+    position: fixed;
+    z-index: 1000;
+    overflow-y: auto;
+    background: #111;
+}
+body.app-bar-mode #hmi-widgets-window .mod-box {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: auto;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 16px 16px 100px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: #fff;
+    text-align: left;
+    zoom: var(--touch-zoom, 1);
+}
+body.app-bar-mode #hmi-widgets-window h1 {
+    float: none;
+    margin: 4px 4px 6px;
+    font-size: 22px;
+    font-weight: normal;
+    text-transform: none;
+    color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window form,
+body.app-bar-mode #hmi-widgets-window fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+body.app-bar-mode #hmi-widgets-window p {
+    margin: 0 4px 12px;
+    color: #999;
+    font-size: 14px;
+    line-height: 1.35;
+}
+// the dock has them
+body.app-bar-mode #hmi-widgets-window .actions {
+    display: none;
+}
+
+// which page and subpage: the page a choice, the subpages a segmented switch as the
+// dock's mode
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-where {
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 14px;
+}
+body.app-bar-mode #hmi-widgets-window select {
+    height: 44px;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    background: #1c1c1c;
+    color: #fff;
+    font-size: 16px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpages {
+    flex: 1 1 auto;
+    margin-left: 0;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    overflow: hidden;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage {
+    flex: 1;
+    height: 42px;
+    line-height: 42px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 0;
+    background: #2a2a2a;
+    color: #ccc;
+    font-size: 15px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage + .hmi-widgets-subpage {
+    border-left: 1px solid #3a3a3a;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage.selected {
+    background: #883996;
+    color: #fff;
+}
+
+// the columns side by side, as on the display, a widget as wide as the columns it takes,
+// see js/hmiwidgets.js
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-columns {
+    gap: 8px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    min-height: 0;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column-widget {
+    border-color: #883996;
+    box-shadow: inset 0 3px 0 #883996;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column h5 {
+    margin: 0;
+    color: #c79bd0;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column select {
+    width: 100%;
+    min-width: 0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-note {
+    margin: 0;
+    font-size: 13px;
+}
+
+// on a narrow screen, a phone held upright, a column is a third of it: smaller text in
+// its choice, so that a widget's name fits
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column {
+    padding: 8px 6px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column select {
+    height: 40px;
+    padding: 0 4px;
+    font-size: 13px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column h5 {
+    font-size: 11px;
+}
+
+// a choice's sheet, see js/hmiwidgets.js: as a long press's on a control, see
+// .mod-touch-sheet in dashboard.css, its list scrolling, the current choice marked
+body.app-bar-mode .hmi-widgets-sheet .panel {
+    max-height: 70%;
+    overflow-y: auto;
+}
+body.app-bar-mode .hmi-widgets-sheet .item.selected {
+    color: #fff;
+    background: #3a2a3e;
+    box-shadow: inset 3px 0 0 #c79bd0;
+}

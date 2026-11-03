@@ -370,6 +370,7 @@ $('document').ready(function() {
             performanceActions: $('#performance header .actions'),
             transportButton: $('#main-menu #mod-transport-icon'),
             transportWindow: $('#mod-transport-window'),
+            hmiWidgetsWindow: $('#hmi-widgets-window'),
             midiPortsWindow: $('#midi-ports-window'),
             cvToggle: $('#js-cv-addressing-toggle'),
             places: $('#pedalboards-library, #bank-library, #file-manager-library, #cloud-plugins-library'),
@@ -412,7 +413,8 @@ $('document').ready(function() {
                     ['Transport', $('#main-menu #mod-transport-icon')],
                 ]},
                 { title: 'Routing', items: [
-                    ['Bindings', $('#js-pb-addressing-toggle')],
+                    ['Bindings', $('#pedalboard-info .js-pb-addressing')],
+                    ['Display', $('#pedalboard-info .js-hmi-widgets')],
                     ['CV ports', $('#js-cv-addressing-toggle')],
                     ['MIDI ports', $('#main-menu #mod-show-midi-port')],
                     ['Control Chain', $('#main-menu #mod-devices')],

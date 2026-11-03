@@ -8269,512 +8269,6 @@ body.app-bar-mode #share-window-bottom {
   color: #999;
   font-size: 14px;
 }
-/* Make clicks pass-through */
-#nprogress {
-  pointer-events: none;
-  z-index: 103100;
-}
-#nprogress .bar {
-  background: #883996;
-  position: fixed;
-  z-index: 103100;
-  top: 45px;
-  left: 0;
-  opacity: 0.5;
-  width: 100%;
-  height: 2px;
-}
-/* Fancy blur effect */
-#nprogress .peg {
-  display: none;
-}
-/* Remove these to get rid of the spinner */
-#nprogress .spinner {
-  display: none;
-  position: fixed;
-  z-index: 1031;
-  top: 45px;
-  right: 0;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 6px;
-  box-sizing: border-box;
-  transform: translate(-50% -50%);
-}
-#nprogress .spinner-icon {
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
-  border: solid 3px transparent;
-  border-top-color: #f29446;
-  border-left-color: rgba(242, 148, 70, 0.66);
-  border-bottom-color: rgba(242, 148, 70, 0.33);
-  border-radius: 50%;
-  -webkit-animation: nprogress-spinner 400ms linear infinite;
-  animation: nprogress-spinner 400ms linear infinite;
-}
-.nprogress-custom-parent {
-  overflow: hidden;
-  position: relative;
-}
-.nprogress-custom-parent #nprogress .spinner,
-.nprogress-custom-parent #nprogress .bar {
-  position: absolute;
-}
-@-webkit-keyframes nprogress-spinner {
-  0% {
-    -webkit-transform: rotate(0deg);
-  }
-  100% {
-    -webkit-transform: rotate(360deg);
-  }
-}
-@keyframes nprogress-spinner {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-.mod-pedal-settings .mod-address.addressed,
-.mod-pedal-settings .preset-btn-assign-all.addressed {
-  background-color: #a144b2;
-}
-.mod-pedal-settings-address .mod-box .form-container {
-  display: -webkit-box;
-  display: -webkit-flex;
-  display: -ms-flexbox;
-  display: flex;
-}
-.mod-pedal-settings-address .mod-box .form-container .btn.js-type,
-.mod-pedal-settings-address .mod-box .form-container .btn.advanced-toggle {
-  border: solid #333333 1px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container {
-  width: 691px;
-  padding-right: 3px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container label {
-  text-align: center;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .btn.js-type.selected {
-  background-color: #333333;
-  color: white;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike {
-  display: flex;
-  flex-basis: 100%;
-  align-items: center;
-  color: black;
-  margin: 6px 0px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:before,
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:after {
-  content: "";
-  flex-grow: 1;
-  background: black;
-  height: 3px;
-  font-size: 0;
-  line-height: 0;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:before {
-  margin-right: 8px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:after {
-  margin-left: 8px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table {
-  width: 100%;
-  table-layout: fixed;
-  text-wrap: nowrap;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:first-child {
-  background-color: #ff6666;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(2) {
-  background-color: #ffff66;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(3) {
-  background-color: #66ffff;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(4) {
-  background-color: #bb7cd5;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(5) {
-  background-color: #f5a77e;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(6) {
-  background-color: #66ff66;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(7) {
-  background-color: #ff66ff;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(8) {
-  background-color: #8080ff;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th,
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td {
-  border: solid #333333 1px;
-  text-align: center;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td {
-  padding: 5px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.disabled {
-  cursor: auto;
-  color: #999999;
-  background-color: #d9d9d9;
-  box-shadow: inset 0 0 3px #555555;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.accept-drop {
-  background-color: #f5e6f8;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.binded {
-  background-color: #883996;
-  color: white;
-  opacity: 0.65;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.selected {
-  background-color: #883996;
-  color: white;
-  box-shadow: 3px 3px 3px #999999;
-  opacity: 1;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table .no-selection {
-  text-align: center;
-  font-size: 18px;
-  height: 64px;
-  padding-top: 32px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview {
-  width: 100%;
-  table-layout: fixed;
-  text-wrap: nowrap;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview th {
-  background-color: #f0f0f0;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview th,
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview td {
-  border: solid #333333 1px;
-  text-align: center;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr {
-  height: 32px;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr.odd {
-  background-color: #f0f0f0;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr.selected {
-  background-color: #883996;
-  color: white;
-  box-shadow: 3px 3px 3px #999999;
-  opacity: 1;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview td {
-  padding: 5px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-custom-uri {
-  color: #883996;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table .no-selection {
-  text-align: center;
-  font-size: 18px;
-  height: 64px;
-  padding-top: 32px;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview {
-  width: 100%;
-  table-layout: fixed;
-  text-wrap: nowrap;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview th {
-  background-color: #f0f0f0;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview th,
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview td {
-  border: solid #333333 1px;
-  text-align: center;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview tr {
-  height: 32px;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview tr.odd {
-  background-color: #f0f0f0;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview tr.selected {
-  background-color: #883996;
-  color: white;
-  box-shadow: 3px 3px 3px #999999;
-  opacity: 1;
-}
-.mod-pedal-settings-address .mod-box .form-container .cc-table-overview td {
-  padding: 5px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table .no-selection {
-  text-align: center;
-  font-size: 18px;
-  height: 64px;
-  padding-top: 32px;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview {
-  width: 100%;
-  table-layout: fixed;
-  text-wrap: nowrap;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview th {
-  background-color: #f0f0f0;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview th,
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview td {
-  border: solid #333333 1px;
-  text-align: center;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview tr {
-  height: 32px;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview tr.odd {
-  background-color: #f0f0f0;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview tr.selected {
-  background-color: #883996;
-  color: white;
-  box-shadow: 3px 3px 3px #999999;
-  opacity: 1;
-}
-.mod-pedal-settings-address .mod-box .form-container .cv-table-overview td {
-  padding: 5px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mod-pedal-settings-address .mod-box .form-container .buttons-container {
-  padding-right: 3px;
-  padding-bottom: 18px;
-}
-.mod-pedal-settings-address .mod-box .form-container .advanced-container {
-  border-left: 1px solid #eeeeee;
-  padding-left: 12px;
-  margin-left: 12px;
-  position: relative;
-  width: 100%;
-}
-.mod-pedal-settings-address .mod-box .form-container .advanced-container .cv-op-mode label {
-  width: 100% !important;
-}
-.mod-pedal-settings-address .mod-box .form-container .advanced-container .cv-op-mode .mod-controls {
-  width: 155px !important;
-}
-.mod-pedal-settings-address .mod-box .form-container .advanced-container .advanced-pin-toggle {
-  cursor: pointer;
-  display: block !important;
-  float: right;
-  height: 36px;
-  position: absolute;
-  top: -6px;
-  right: -12px;
-  width: 36px;
-  text-align: center;
-  font-size: 1.5em;
-  border-radius: 50%;
-  color: lightgray;
-}
-.mod-pedal-settings-address .mod-box .form-container .advanced-container .pinned {
-  color: #883996;
-}
-.mod-pedal-settings-address .mod-box .form-container .advanced-container .no-selection {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-}
-.mod-cv-output .output-cv-checkbox {
-  display: flex;
-  position: absolute;
-  top: 45px;
-  left: 15px;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container {
-  position: relative;
-  padding-left: 45px;
-  cursor: pointer;
-  font-size: 22px;
-  height: 35px;
-  width: 35px;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container .checkmark {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 35px;
-  width: 35px;
-  background-color: #eee;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container .checkmark:after {
-  content: "";
-  position: absolute;
-  display: none;
-  left: 13px;
-  top: 7px;
-  width: 10px;
-  height: 17px;
-  border: solid white;
-  border-width: 0 4px 4px 0;
-  -webkit-transform: rotate(45deg);
-  -ms-transform: rotate(45deg);
-  transform: rotate(45deg);
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox] {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
-  z-index: 5;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:disabled {
-  cursor: not-allowed;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:checked ~ .checkmark {
-  background-color: #883996;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:checked ~ .checkmark:after {
-  display: block;
-}
-.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:disabled ~ .checkmark {
-  background-color: #999999;
-}
-.mod-cv-output .output-cv-checkbox input[type=text] {
-  font-size: 20px;
-}
-.mod-cv-output .output-cv-checkbox ::selection {
-  background: #883996 !important;
-  color: white !important;
-}
-/* global vumeter overlay */
-#pedalboard .mod-vumeter-overlay {
-  background: black;
-  width: 64px;
-  top: 45px;
-  bottom: 45px;
-  left: 2px;
-  position: absolute;
-}
-#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container {
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  height: 128px;
-  width: 100%;
-}
-#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container .js-vumeter-label {
-  color: whitesmoke;
-  text-align: center;
-  overflow: clip;
-  height: 42px;
-  display: block;
-}
-#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container .js-vumeter-image {
-  height: 64px;
-  text-align: center;
-  display: flex;
-  padding: 0px 4px;
-  align-items: center;
-  align-content: center;
-  width: 100%;
-  justify-content: center;
-}
-#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container .js-vumeter-image img {
-  max-width: 50px;
-  max-height: 64px;
-  width: auto;
-  height: auto;
-}
-#pedalboard .mod-vumeter-overlay .js-vumeter {
-  width: 100%;
-  height: 100%;
-  padding: 8px 0px 164px 1px;
-}
-/*
-simply utility class to make a toolbar with flexbox, 
-so that the buttons are aligned and spaced nicely.
-*/
-.mod-toolbar {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  justify-content: center;
-  gap: 12px;
-}
-.mod-help-overlay {
-  position: absolute;
-  right: 0px;
-  top: 45px;
-  bottom: auto;
-  width: 380px;
-  background-color: #efece7;
-  opacity: 0.93;
-  display: flex;
-  flex-direction: column;
-  max-height: 85vh;
-}
-.mod-help-overlay h1,
-.mod-help-overlay h2,
-.mod-help-overlay h3 {
-  font-weight: bold;
-  padding: 10px;
-  color: #483e35;
-  text-align: center;
-  border-bottom: 1px solid #483e35;
-}
-.mod-help-overlay h1 {
-  font-size: 24px;
-}
-.mod-help-overlay h2 {
-  font-size: 20px;
-}
-.mod-help-overlay h3 {
-  font-size: 16px;
-}
-.mod-help-overlay img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 10px auto;
-}
-.mod-help-overlay .mod-help-footer {
-  font-size: 12px;
-  font-weight: bold;
-  padding: 10px;
-  margin: 0px 10px;
-  color: #483e35;
-  text-align: center;
-  border-top: 1px solid #483e35;
-}
-.mod-help-overlay .mod-help-content {
-  font-size: 16px;
-  padding: 10px;
-  color: #483e35;
-  height: 100%;
-}
-.t3k-enumerated-option-logo {
-  height: 20px;
-  width: 40px;
-  margin-right: 6px;
-}
 #hmi-widgets-window .mod-box {
   width: 1000px;
   margin: -330px -500px;
@@ -9370,6 +8864,653 @@ so that the buttons are aligned and spaced nicely.
   .hmi-widgets-controls.multi .hmi-widgets-control-group.other {
     display: none;
   }
+}
+body.app-bar-mode #hmi-widgets-window {
+  position: fixed;
+  z-index: 1000;
+  overflow-y: auto;
+  background: #111;
+}
+body.app-bar-mode #hmi-widgets-window .mod-box {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: auto;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px 16px 100px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  text-align: left;
+  zoom: var(--touch-zoom, 1);
+}
+body.app-bar-mode #hmi-widgets-window h1 {
+  float: none;
+  margin: 4px 4px 6px;
+  font-size: 22px;
+  font-weight: normal;
+  text-transform: none;
+  color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window form,
+body.app-bar-mode #hmi-widgets-window fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+body.app-bar-mode #hmi-widgets-window p {
+  margin: 0 4px 12px;
+  color: #999;
+  font-size: 14px;
+  line-height: 1.35;
+}
+body.app-bar-mode #hmi-widgets-window .actions {
+  display: none;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-where {
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+body.app-bar-mode #hmi-widgets-window select {
+  height: 44px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  background: #1c1c1c;
+  color: #fff;
+  font-size: 16px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpages {
+  flex: 1 1 auto;
+  margin-left: 0;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  overflow: hidden;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage {
+  flex: 1;
+  height: 42px;
+  line-height: 42px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 0;
+  background: #2a2a2a;
+  color: #ccc;
+  font-size: 15px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage + .hmi-widgets-subpage {
+  border-left: 1px solid #3a3a3a;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage.selected {
+  background: #883996;
+  color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-columns {
+  gap: 8px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  background: #2a2a2a;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column-widget {
+  border-color: #883996;
+  box-shadow: inset 0 3px 0 #883996;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column h5 {
+  margin: 0;
+  color: #c79bd0;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-column select {
+  width: 100%;
+  min-width: 0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-note {
+  margin: 0;
+  font-size: 13px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column {
+  padding: 8px 6px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column select {
+  height: 40px;
+  padding: 0 4px;
+  font-size: 13px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column h5 {
+  font-size: 11px;
+}
+body.app-bar-mode .hmi-widgets-sheet .panel {
+  max-height: 70%;
+  overflow-y: auto;
+}
+body.app-bar-mode .hmi-widgets-sheet .item.selected {
+  color: #fff;
+  background: #3a2a3e;
+  box-shadow: inset 3px 0 0 #c79bd0;
+}
+/* Make clicks pass-through */
+#nprogress {
+  pointer-events: none;
+  z-index: 103100;
+}
+#nprogress .bar {
+  background: #883996;
+  position: fixed;
+  z-index: 103100;
+  top: 45px;
+  left: 0;
+  opacity: 0.5;
+  width: 100%;
+  height: 2px;
+}
+/* Fancy blur effect */
+#nprogress .peg {
+  display: none;
+}
+/* Remove these to get rid of the spinner */
+#nprogress .spinner {
+  display: none;
+  position: fixed;
+  z-index: 1031;
+  top: 45px;
+  right: 0;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 6px;
+  box-sizing: border-box;
+  transform: translate(-50% -50%);
+}
+#nprogress .spinner-icon {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border: solid 3px transparent;
+  border-top-color: #f29446;
+  border-left-color: rgba(242, 148, 70, 0.66);
+  border-bottom-color: rgba(242, 148, 70, 0.33);
+  border-radius: 50%;
+  -webkit-animation: nprogress-spinner 400ms linear infinite;
+  animation: nprogress-spinner 400ms linear infinite;
+}
+.nprogress-custom-parent {
+  overflow: hidden;
+  position: relative;
+}
+.nprogress-custom-parent #nprogress .spinner,
+.nprogress-custom-parent #nprogress .bar {
+  position: absolute;
+}
+@-webkit-keyframes nprogress-spinner {
+  0% {
+    -webkit-transform: rotate(0deg);
+  }
+  100% {
+    -webkit-transform: rotate(360deg);
+  }
+}
+@keyframes nprogress-spinner {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+.mod-pedal-settings .mod-address.addressed,
+.mod-pedal-settings .preset-btn-assign-all.addressed {
+  background-color: #a144b2;
+}
+.mod-pedal-settings-address .mod-box .form-container {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+}
+.mod-pedal-settings-address .mod-box .form-container .btn.js-type,
+.mod-pedal-settings-address .mod-box .form-container .btn.advanced-toggle {
+  border: solid #333333 1px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container {
+  width: 691px;
+  padding-right: 3px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container label {
+  text-align: center;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .btn.js-type.selected {
+  background-color: #333333;
+  color: white;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  color: black;
+  margin: 6px 0px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:before,
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:after {
+  content: "";
+  flex-grow: 1;
+  background: black;
+  height: 3px;
+  font-size: 0;
+  line-height: 0;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:before {
+  margin-right: 8px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .group-strike:after {
+  margin-left: 8px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table {
+  width: 100%;
+  table-layout: fixed;
+  text-wrap: nowrap;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:first-child {
+  background-color: #ff6666;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(2) {
+  background-color: #ffff66;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(3) {
+  background-color: #66ffff;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(4) {
+  background-color: #bb7cd5;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(5) {
+  background-color: #f5a77e;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(6) {
+  background-color: #66ff66;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(7) {
+  background-color: #ff66ff;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th:nth-child(8) {
+  background-color: #8080ff;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table th,
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td {
+  border: solid #333333 1px;
+  text-align: center;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td {
+  padding: 5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.disabled {
+  cursor: auto;
+  color: #999999;
+  background-color: #d9d9d9;
+  box-shadow: inset 0 0 3px #555555;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.accept-drop {
+  background-color: #f5e6f8;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.binded {
+  background-color: #883996;
+  color: white;
+  opacity: 0.65;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .hmi-table td.selected {
+  background-color: #883996;
+  color: white;
+  box-shadow: 3px 3px 3px #999999;
+  opacity: 1;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table .no-selection {
+  text-align: center;
+  font-size: 18px;
+  height: 64px;
+  padding-top: 32px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview {
+  width: 100%;
+  table-layout: fixed;
+  text-wrap: nowrap;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview th {
+  background-color: #f0f0f0;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview th,
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview td {
+  border: solid #333333 1px;
+  text-align: center;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr {
+  height: 32px;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr.odd {
+  background-color: #f0f0f0;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview tr.selected {
+  background-color: #883996;
+  color: white;
+  box-shadow: 3px 3px 3px #999999;
+  opacity: 1;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-table-overview td {
+  padding: 5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mod-pedal-settings-address .mod-box .form-container .main-form-container .midi-custom-uri {
+  color: #883996;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table .no-selection {
+  text-align: center;
+  font-size: 18px;
+  height: 64px;
+  padding-top: 32px;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview {
+  width: 100%;
+  table-layout: fixed;
+  text-wrap: nowrap;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview th {
+  background-color: #f0f0f0;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview th,
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview td {
+  border: solid #333333 1px;
+  text-align: center;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview tr {
+  height: 32px;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview tr.odd {
+  background-color: #f0f0f0;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview tr.selected {
+  background-color: #883996;
+  color: white;
+  box-shadow: 3px 3px 3px #999999;
+  opacity: 1;
+}
+.mod-pedal-settings-address .mod-box .form-container .cc-table-overview td {
+  padding: 5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table .no-selection {
+  text-align: center;
+  font-size: 18px;
+  height: 64px;
+  padding-top: 32px;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview {
+  width: 100%;
+  table-layout: fixed;
+  text-wrap: nowrap;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview th {
+  background-color: #f0f0f0;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview th,
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview td {
+  border: solid #333333 1px;
+  text-align: center;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview tr {
+  height: 32px;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview tr.odd {
+  background-color: #f0f0f0;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview tr.selected {
+  background-color: #883996;
+  color: white;
+  box-shadow: 3px 3px 3px #999999;
+  opacity: 1;
+}
+.mod-pedal-settings-address .mod-box .form-container .cv-table-overview td {
+  padding: 5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mod-pedal-settings-address .mod-box .form-container .buttons-container {
+  padding-right: 3px;
+  padding-bottom: 18px;
+}
+.mod-pedal-settings-address .mod-box .form-container .advanced-container {
+  border-left: 1px solid #eeeeee;
+  padding-left: 12px;
+  margin-left: 12px;
+  position: relative;
+  width: 100%;
+}
+.mod-pedal-settings-address .mod-box .form-container .advanced-container .cv-op-mode label {
+  width: 100% !important;
+}
+.mod-pedal-settings-address .mod-box .form-container .advanced-container .cv-op-mode .mod-controls {
+  width: 155px !important;
+}
+.mod-pedal-settings-address .mod-box .form-container .advanced-container .advanced-pin-toggle {
+  cursor: pointer;
+  display: block !important;
+  float: right;
+  height: 36px;
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  width: 36px;
+  text-align: center;
+  font-size: 1.5em;
+  border-radius: 50%;
+  color: lightgray;
+}
+.mod-pedal-settings-address .mod-box .form-container .advanced-container .pinned {
+  color: #883996;
+}
+.mod-pedal-settings-address .mod-box .form-container .advanced-container .no-selection {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+.mod-cv-output .output-cv-checkbox {
+  display: flex;
+  position: absolute;
+  top: 45px;
+  left: 15px;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container {
+  position: relative;
+  padding-left: 45px;
+  cursor: pointer;
+  font-size: 22px;
+  height: 35px;
+  width: 35px;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container .checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 35px;
+  width: 35px;
+  background-color: #eee;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container .checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+  left: 13px;
+  top: 7px;
+  width: 10px;
+  height: 17px;
+  border: solid white;
+  border-width: 0 4px 4px 0;
+  -webkit-transform: rotate(45deg);
+  -ms-transform: rotate(45deg);
+  transform: rotate(45deg);
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:disabled {
+  cursor: not-allowed;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:checked ~ .checkmark {
+  background-color: #883996;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:checked ~ .checkmark:after {
+  display: block;
+}
+.mod-cv-output .output-cv-checkbox .checkbox-container input[type=checkbox]:disabled ~ .checkmark {
+  background-color: #999999;
+}
+.mod-cv-output .output-cv-checkbox input[type=text] {
+  font-size: 20px;
+}
+.mod-cv-output .output-cv-checkbox ::selection {
+  background: #883996 !important;
+  color: white !important;
+}
+/* global vumeter overlay */
+#pedalboard .mod-vumeter-overlay {
+  background: black;
+  width: 64px;
+  top: 45px;
+  bottom: 45px;
+  left: 2px;
+  position: absolute;
+}
+#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container {
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 128px;
+  width: 100%;
+}
+#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container .js-vumeter-label {
+  color: whitesmoke;
+  text-align: center;
+  overflow: clip;
+  height: 42px;
+  display: block;
+}
+#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container .js-vumeter-image {
+  height: 64px;
+  text-align: center;
+  display: flex;
+  padding: 0px 4px;
+  align-items: center;
+  align-content: center;
+  width: 100%;
+  justify-content: center;
+}
+#pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container .js-vumeter-image img {
+  max-width: 50px;
+  max-height: 64px;
+  width: auto;
+  height: auto;
+}
+#pedalboard .mod-vumeter-overlay .js-vumeter {
+  width: 100%;
+  height: 100%;
+  padding: 8px 0px 164px 1px;
+}
+/*
+simply utility class to make a toolbar with flexbox, 
+so that the buttons are aligned and spaced nicely.
+*/
+.mod-toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+}
+.mod-help-overlay {
+  position: absolute;
+  right: 0px;
+  top: 45px;
+  bottom: auto;
+  width: 380px;
+  background-color: #efece7;
+  opacity: 0.93;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+.mod-help-overlay h1,
+.mod-help-overlay h2,
+.mod-help-overlay h3 {
+  font-weight: bold;
+  padding: 10px;
+  color: #483e35;
+  text-align: center;
+  border-bottom: 1px solid #483e35;
+}
+.mod-help-overlay h1 {
+  font-size: 24px;
+}
+.mod-help-overlay h2 {
+  font-size: 20px;
+}
+.mod-help-overlay h3 {
+  font-size: 16px;
+}
+.mod-help-overlay img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px auto;
+}
+.mod-help-overlay .mod-help-footer {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 10px;
+  margin: 0px 10px;
+  color: #483e35;
+  text-align: center;
+  border-top: 1px solid #483e35;
+}
+.mod-help-overlay .mod-help-content {
+  font-size: 16px;
+  padding: 10px;
+  color: #483e35;
+  height: 100%;
+}
+.t3k-enumerated-option-logo {
+  height: 20px;
+  width: 40px;
+  margin-right: 6px;
 }
 /**
  * Typography

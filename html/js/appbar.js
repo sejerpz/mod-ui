@@ -387,13 +387,22 @@ JqueryClass('appBar', {
 
         // the wide dock's own buttons for the menu's entries most used, see fitViewport
         var shortcuts = $('<div class="shortcuts">').appendTo(tools)
-        $.each([['New', 'New pedalboard'], ['Pedalboards', 'Pedalboards library'], ['Banks', 'Banks'],
-                ['Bindings', 'Bindings']], function (i, entry) {
+        $.each([['New', 'New pedalboard'], ['Pedalboards', 'Pedalboards library'], ['Banks', 'Banks']],
+               function (i, entry) {
             var element = menuItem(entry[1], true)
             $('<div>').text(entry[0]).click(function () {
                 element.click()
             }).appendTo(shortcuts)
         })
+        // and what the device does with the board, its bindings and its display, a menu of
+        // their own as the desktop's Device. Their entries in the main menu stay theirs,
+        // ticked or not, see the CV ports below
+        var bindings = menuItem('Bindings', true), display = menuItem('Display', true)
+        var entries = [bindings.data('appBarItem'), display.data('appBarItem')]
+        popup('device', 'Device', [{ items: [['Bindings', bindings], ['Display', display]] }])
+            .appendTo(shortcuts)
+        bindings.data('appBarItem', entries[0])
+        display.data('appBarItem', entries[1])
 
         // the header's snapshots menu
         popup('snapshots', 'Snapshots', [{ items: [
@@ -843,9 +852,27 @@ JqueryClass('appBar', {
                 $('#report-window .js-cancel').first().click()
             } else if (options.shareWindow.is(':visible')) {
                 options.shareWindow.find('#record-cancel').click()
+            } else if (options.hmiWidgetsWindow.is(':visible')) {
+                options.hmiWidgetsWindow.find('.js-cancel').click()
             }
         // first, the plugin's tools after it
         }).prependTo(dialog)
+
+        // The device display's layout, see js/hmiwidgets.js, takes the screen above the
+        // dock as a plugin's settings do: the dock folds down to the way back, which
+        // leaves it as it was, and Save. It shows and hides itself
+        $('<div class="display-save">').text('Save').click(function () {
+            options.hmiWidgetsWindow.find('.js-submit').click()
+        }).appendTo(dialog)
+        var showDisplay = function () {
+            var shown = options.hmiWidgetsWindow.is(':visible')
+            dialog.toggleClass('for-display', shown)
+            setState('dialog', shown || !! settings || !! info || options.transportWindow.is(':visible'))
+        }
+        new MutationObserver(showDisplay).observe(options.hmiWidgetsWindow[0], {
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        })
 
         // The plugins' CPU usage, see js/cpuload.js, takes the screen above the dock as a
         // plugin's settings do: the dock folds down to the way back and Reset peaks. It

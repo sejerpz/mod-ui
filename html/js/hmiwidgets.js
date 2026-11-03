@@ -741,6 +741,50 @@ function HMIWidgetsWindow(options) {
         }
     }
 
+    // With the app bar, a choice opens a sheet from the bottom of the screen, as a long
+    // press on a control does, see touchControlSheet in js/modgui.js, rather than the
+    // browser's own list, which is drawn as zoomed as the page, see --touch-zoom in
+    // js/appbar.js. The select stays what holds the choice
+    win.on('mousedown touchstart', 'select', function (e) {
+        if (! $('body').hasClass('app-bar-mode')) {
+            return
+        }
+        e.preventDefault()
+        var select = $(this)
+        $('.mod-touch-sheet').remove()
+        var sheet = $('<div class="mod-touch-sheet hmi-widgets-sheet">')
+        var panel = $('<div class="panel">').appendTo(sheet)
+        var title = select.closest('.hmi-widgets-column').children('h5').text() || 'Page'
+        $('<div class="title">').text(title).appendTo(panel)
+        var add = function (option) {
+            $('<div class="item">').toggleClass('selected', option.value === select.val())
+                .append($('<span>').text(option.text))
+                .click(function () {
+                    sheet.remove()
+                    if (select.val() !== option.value) {
+                        select.val(option.value).change()
+                    }
+                    return false
+                }).appendTo(panel)
+        }
+        select.children().each(function () {
+            if (this.tagName === 'OPTGROUP') {
+                $('<div class="title">').text(this.label).appendTo(panel)
+                $(this).children().each(function () {
+                    add(this)
+                })
+            } else {
+                add(this)
+            }
+        })
+        sheet.click(function (e) {
+            if (e.target === sheet[0]) {
+                sheet.remove()
+            }
+        }).appendTo('body')
+        return false
+    })
+
     function setWhere(page, subpage) {
         view.page = page
         view.subpage = subpage

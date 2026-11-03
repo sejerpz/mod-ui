@@ -2961,6 +2961,14 @@ body.app-bar-mode #plugins-library.grid-library > * {
     display: block;
 }
 
+/* Save, for the device display's layout only, see js/appbar.js */
+.mod-app-bar > .dialog > .display-save {
+    display: none;
+}
+.mod-app-bar > .dialog.for-display > .display-save {
+    display: block;
+}
+
 /* the way back from the viewed plugin's settings */
 .mod-app-bar > .dialog {
     max-width: 640px;
@@ -4509,6 +4517,24 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 
 .mod-app-bar .shortcuts > div:active {
     background: #333;
+}
+
+/* Device, the bindings' and the display's menu, see js/appbar.js: a button as the
+   others, its own toggle being the button */
+.mod-app-bar .shortcuts > .popup {
+    height: auto;
+    line-height: normal;
+    padding: 0;
+    border: none;
+}
+
+.mod-app-bar .shortcuts > .popup:active {
+    background: none;
+}
+
+.mod-app-bar .shortcuts > .popup .toggle {
+    min-width: 0;
+    white-space: nowrap;
 }
 
 /* the plugin store, the third mode. Once there, the dock folds down to Back */
