@@ -2958,11 +2958,16 @@ JqueryClass('inputBox', {
             return false
         })
 
-        self.find('input').keyup(function () {
+        self.find('input').on('keyup input', function () {
             var value = self.find('input').val()
             const isValid = self.inputBox('_validate', value)
 
             self.find('.js-done').prop('disabled', isValid ? false : true);
+            self.find('.js-clear').toggle(value.length > 0)
+        })
+        // the field emptied, to type anew, where it has the way to, see index.html
+        self.find('.js-clear').click(function () {
+            self.find('input').val('').trigger('input').focus()
         })
 
         self.keydown(function (e) {
@@ -3005,6 +3010,8 @@ JqueryClass('inputBox', {
         if (windowTitle) {
             self.find('h1').text(windowTitle)
         }
+        self.find('.js-clear').toggle(!! value)
+        self.find('.js-done').prop('disabled', ! self.inputBox('_validate', value || ''))
         self.show()
         self.focus()
         const input = self.find('input')
