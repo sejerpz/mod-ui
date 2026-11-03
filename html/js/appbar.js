@@ -1206,6 +1206,8 @@ JqueryClass('appBar', {
                 cancelButton.click()
             } else if (self.hasClass('dialog')) {
                 dialogBack.click()
+            } else if ($('body').hasClass('live-fullscreen')) {
+                options.performanceBox.find('#performance-fullscreen').click()
             } else if (self.hasClass('viewing')) {
                 options.pedalboard.pedalboard('leavePluginView')
             } else if (self.hasClass('elsewhere')) {

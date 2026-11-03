@@ -11,6 +11,9 @@
  * Properties:
  */
 
+// Where it is remembered the full screen hint has been seen, see showHint
+var FULLSCREEN_HINT_SEEN = 'performance-fullscreen-hint-seen'
+
 JqueryClass('performanceBox', {
     init: function (options) {
         var self = $(this)
@@ -111,6 +114,7 @@ JqueryClass('performanceBox', {
                 const settingsContainer = self.data('resultCanvasPluginSettings')
                 const settingsDiv = settingsContainer[0];
 
+                self.data('showCurrent')(selectedIndex)
                 if (settingsDiv) {
                     $(settingsDiv).fadeOut(200, function() {
                         settingsDiv.innerHTML = ""
@@ -126,6 +130,19 @@ JqueryClass('performanceBox', {
                             callback([])
                     })
                 }
+            },
+
+            // What is shown, for full screen, the list that says so being gone, see below:
+            // its picture, its name, and where it is among them all, the snapshots first
+            showCurrent: function(index) {
+                const element = $("#mod-performance-plugin-" + index.toString())
+                const current = self.find('.current-plugin')
+
+                current.find('img').attr('src', element.find('img').attr('src'))
+                current.find('.name').text(element.find('.title').text())
+                current.find('.position').text((index + 1) + '/' + (self.data('plugins').length + 1))
+                current.find('.previous').toggleClass('disabled', index == 0)
+                current.find('.next').toggleClass('disabled', index == self.data('plugins').length)
             },
 
             /*
@@ -242,6 +259,10 @@ JqueryClass('performanceBox', {
                 self.data('showVisibleFilter')()
             }
 
+            // it starts as it is played: full screen, the plugins' own faces
+            self.data('face', true)
+            setFullscreen(true)
+
             self.data('updatePlugins')()
             self.data("selectElement")(":presets")
 
@@ -354,11 +375,12 @@ JqueryClass('performanceBox', {
             icon.css({ width: width, height: height, transform: 'scale(' + scale + ')' })
         }
         self.data('faceOf', faceOf)
-        $(window).on('resize', function () {
+        const fitFaces = function () {
             settingsCanvas.find('.mod-performance-face').each(function () {
                 fitFace($(this))
             })
-        })
+        }
+        $(window).on('resize', fitFaces)
         const FLIP = 350
         const flip = function () {
             const element = self.data("selectedElement")
@@ -428,7 +450,9 @@ JqueryClass('performanceBox', {
         // shown follows the finger, and let go a quarter of the way on, or flicked, the
         // next plugin comes, or the one before, and it goes back otherwise. Not starting
         // on the controls, which take the finger themselves, as a slider anywhere along
-        // it, see touchSlider in js/modgui.js, nor the other way, which scrolls
+        // it, see touchSlider in js/modgui.js, nor the other way, which scrolls. A plugin's
+        // face, which does not scroll, goes across whichever way the list runs, and also
+        // the way it runs
         let swipe = null
         const slide = function (el, along, down, animated) {
             el.style.transition = animated ? 'transform 0.2s ease, opacity 0.2s ease' : ''
@@ -441,11 +465,15 @@ JqueryClass('performanceBox', {
                 return
             }
             swipe = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: Date.now(),
-                      down: sideways.matches, along: 0, going: false }
+                      down: sideways.matches && ! self.data("face"), free: sideways.matches && !! self.data("face"),
+                      along: 0, going: false }
         }).on('pointermove', function (e) {
             const ev = e.originalEvent
             if (! swipe || ev.pointerId != swipe.id) {
                 return
+            }
+            if (swipe.free && ! swipe.going) {
+                swipe.down = Math.abs(ev.clientY - swipe.y) > Math.abs(ev.clientX - swipe.x)
             }
             const along = swipe.down ? ev.clientY - swipe.y : ev.clientX - swipe.x
             const across = swipe.down ? ev.clientX - swipe.x : ev.clientY - swipe.y
@@ -488,6 +516,102 @@ JqueryClass('performanceBox', {
                 }, 200)
             } else {
                 slide(el, 0, s.down, true)
+            }
+        })
+
+        // Full screen, from the button by the title, which stays: no dock and no list, what
+        // is shown has it all, going from one to the next by the swipes above, and it says
+        // which it is by itself, see showCurrent. It ends with the view
+        const fullscreenButton = self.find('#performance-fullscreen')
+        const current = self.find('.current-plugin')
+        const hint = self.find('.fullscreen-hint')
+        let hintOver = null
+        // The first time only, in this browser: the arrows nudge and it says what they
+        // and a swipe do. Where nothing can be remembered, the first time each time
+        const showHint = function () {
+            try {
+                if (localStorage.getItem(FULLSCREEN_HINT_SEEN)) {
+                    return
+                }
+                localStorage.setItem(FULLSCREEN_HINT_SEEN, '1')
+            } catch (err) {}
+            current.add(hint).addClass('hinting')
+            hintOver = setTimeout(hideHint, 4000)
+        }
+        const hideHint = function () {
+            clearTimeout(hintOver)
+            current.add(hint).removeClass('hinting')
+        }
+        const setFullscreen = function (on) {
+            $('body').toggleClass('live-fullscreen', on)
+            fullscreenButton.attr('title', on ? 'Back to the dock and the list' : 'Controls full screen')
+            fitFaces()
+            if (on) {
+                showHint()
+            } else {
+                hideHint()
+            }
+        }
+        fullscreenButton.click(function () {
+            setFullscreen(! $('body').hasClass('live-fullscreen'))
+        })
+        self.on('windowclose', function () {
+            setFullscreen(false)
+        })
+
+        // There, a swipe across the plugin's name or the title, a mouse's too, or lying
+        // low anywhere along the strip they are on, goes to the next plugin or the one
+        // before, whichever way what is shown goes, one a swipe. A double tap there flips
+        // it, as on what is shown
+        let stripSwipe = null, swiped = false, stripTapped = 0
+        self.find('header, .current-plugin, .fullscreen-strip').attr('data-touch-native', '').on('pointerdown', function (e) {
+            const ev = e.originalEvent
+            stripSwipe = null
+            swiped = false
+            if (! $('body').hasClass('live-fullscreen') || ! ev.isPrimary || $(ev.target).closest('.fullscreen-toggle').length) {
+                return
+            }
+            const arrow = $(ev.target).closest('.go').length > 0
+            stripSwipe = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, arrow: arrow }
+            // captured, an arrow would not get its click
+            if (arrow) {
+                return
+            }
+            try {
+                this.setPointerCapture(ev.pointerId)
+            } catch (err) {}
+        }).on('pointermove', function (e) {
+            const ev = e.originalEvent
+            if (! stripSwipe || ev.pointerId != stripSwipe.id) {
+                return
+            }
+            const along = ev.clientX - stripSwipe.x
+            if (Math.abs(along) < 30 || Math.abs(along) < Math.abs(ev.clientY - stripSwipe.y)) {
+                return
+            }
+            stripSwipe = null
+            swiped = true
+            hideHint()
+            step(along < 0 ? 1 : -1)
+        }).on('pointerup pointercancel', function (e) {
+            const ev = e.originalEvent
+            const tap = e.type == 'pointerup' && stripSwipe && ! stripSwipe.arrow &&
+                        Math.abs(ev.clientX - stripSwipe.x) < 12 && Math.abs(ev.clientY - stripSwipe.y) < 12
+            stripSwipe = null
+            if (! tap) {
+                return
+            }
+            if (Date.now() - stripTapped < 350) {
+                stripTapped = 0
+                flip()
+            } else {
+                stripTapped = Date.now()
+            }
+        })
+        current.find('.go').click(function () {
+            if (! swiped) {
+                hideHint()
+                step($(this).hasClass('next') ? 1 : -1)
             }
         })
 

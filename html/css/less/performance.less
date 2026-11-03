@@ -278,6 +278,21 @@ body.app-bar-mode #performance {
     background: #111;
 }
 
+/* played with the fingers, on stage: a long press on a label selects nothing, nor brings
+   up the system's markers. What is typed in stays selectable */
+body.app-bar-mode #performance,
+body.app-bar-mode #performance * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+body.app-bar-mode #performance input,
+body.app-bar-mode #performance textarea {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 /* The performance view's title floats over it like the board's, its actions are in
    the dock. What it shows runs under the title and stops above the dock */
 body.app-bar-mode #performance header {
@@ -299,7 +314,229 @@ body.app-bar-mode #performance header {
 
 /* sized for a finger as the board's title, see --touch-zoom in js/appbar.js */
 body.app-bar-mode #performance header {
+    display: flex;
+    align-items: center;
     zoom: var(--touch-zoom, 1);
+}
+
+/* Full screen, see js/performance.js: the button by the title, past a line as the
+   board's tools are, see .mod-title-tools */
+#performance .fullscreen-toggle,
+#performance .current-plugin,
+#performance .fullscreen-strip,
+#performance .fullscreen-hint {
+    display: none;
+}
+
+body.app-bar-mode #performance .fullscreen-toggle {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 32px;
+    margin-left: 10px;
+    padding-left: 8px;
+    box-sizing: border-box;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+    opacity: 0.66;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+body.app-bar-mode #performance .fullscreen-toggle:hover {
+    opacity: 1;
+}
+
+body.app-bar-mode #performance .fullscreen-toggle svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+body.app-bar-mode #performance .fullscreen-toggle .leave,
+body.app-bar-mode.live-fullscreen #performance .fullscreen-toggle .enter {
+    display: none;
+}
+
+body.app-bar-mode.live-fullscreen #performance .fullscreen-toggle .leave {
+    display: inline;
+}
+
+/* no dock, unless it has something to ask, and no list, what is shown having it all */
+body.live-fullscreen .mod-app-bar:not(.task):not(.dialog) {
+    transform: translate(-50%, calc(100% + 24px));
+    pointer-events: none;
+}
+
+body.app-bar-mode.live-fullscreen #performance .js-performance-plugins {
+    display: none;
+}
+
+body.app-bar-mode.live-fullscreen #performance .remote {
+    bottom: 0;
+}
+
+body.app-bar-mode.live-fullscreen #performance .js-performance-plugin-settings {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* the title leaves room for what is shown, at the other end of the same strip */
+body.app-bar-mode.live-fullscreen #performance header {
+    max-width: 46%;
+    /* a swipe along them goes to another plugin, see js/performance.js */
+    cursor: ew-resize;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+body.app-bar-mode.live-fullscreen #performance .current-plugin {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    max-width: ~"calc(54% - 36px)";
+    height: 44px;
+    padding: 0 2px;
+    border-radius: 16px;
+    background: rgba(17, 17, 17, 0.6);
+    color: #fff;
+    opacity: 0.8;
+    cursor: ew-resize;
+    touch-action: none;
+    zoom: var(--touch-zoom, 1);
+}
+
+/* across a phone upright the two do not fit on a strip: what is shown a row under the
+   title, wide enough for its name, its arrows at the ends, the page starting below it */
+body.app-bar-mode.narrow-screen.live-fullscreen #performance header {
+    max-width: ~"calc(100% - 24px)";
+}
+
+body.app-bar-mode.narrow-screen.live-fullscreen #performance .current-plugin {
+    top: 64px;
+    right: 12px;
+    max-width: none;
+}
+
+body.app-bar-mode.narrow-screen.live-fullscreen #performance .current-plugin .what {
+    flex: 1;
+}
+
+body.app-bar-mode.narrow-screen.live-fullscreen #performance .fullscreen-hint.hinting {
+    top: 116px;
+}
+
+body.app-bar-mode.narrow-screen.live-fullscreen #performance .mod-settings .mod-pedal-settings {
+    padding-top: 116px;
+}
+
+body.app-bar-mode.narrow-screen.live-fullscreen #performance .snapshot-container {
+    padding-top: ~"calc(108px * var(--touch-zoom, 1) + 12px)";
+}
+
+body.app-bar-mode.narrow-screen.live-fullscreen #performance .mod-performance-face {
+    top: ~"calc(108px * var(--touch-zoom, 1))";
+}
+
+/* the arrows, which go there too, faint where there is nothing that way */
+#performance .current-plugin .go {
+    flex: none;
+    width: 26px;
+    height: 44px;
+    color: #fff;
+    font-size: 24px;
+    line-height: 40px;
+    text-align: center;
+    cursor: pointer;
+}
+
+#performance .current-plugin .go.disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+/* the first time, see showHint in js/performance.js: it moves the way a swipe takes it */
+@keyframes current-plugin-nudge {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-12px); }
+    75% { transform: translateX(12px); }
+}
+
+body.app-bar-mode.live-fullscreen #performance .current-plugin.hinting {
+    opacity: 1;
+    animation: current-plugin-nudge 0.7s ease-in-out 3;
+}
+
+body.app-bar-mode.live-fullscreen #performance .fullscreen-hint.hinting {
+    position: fixed;
+    top: 64px;
+    left: 12px;
+    z-index: 3;
+    display: block;
+    max-width: ~"calc(100% - 24px)";
+    box-sizing: border-box;
+    padding: 8px 14px;
+    border-radius: 12px;
+    background: #883996;
+    color: #fff;
+    font-size: 14px;
+    pointer-events: none;
+    zoom: var(--touch-zoom, 1);
+}
+
+/* lying low nothing scrolls under them, so all of their strip takes that swipe */
+@media (orientation: landscape) {
+    body.app-bar-mode.live-fullscreen #performance .fullscreen-strip {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
+        display: block;
+        height: 64px;
+        cursor: ew-resize;
+        touch-action: none;
+        zoom: var(--touch-zoom, 1);
+    }
+}
+
+#performance .current-plugin img {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+}
+
+#performance .current-plugin .what {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 17px;
+}
+
+#performance .current-plugin .name {
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#performance .current-plugin .position {
+    color: #aaa;
+    font-size: 12px;
 }
 
 body.app-bar-mode #performance header h1 {
@@ -340,6 +577,12 @@ body.app-bar-mode #performance .mod-performance-face {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+}
+
+/* its swipes are all ours, see js/performance.js, the browser scrolling it no way */
+body.app-bar-mode #performance .mod-performance-face,
+body.app-bar-mode #performance .mod-performance-face * {
+    touch-action: none;
 }
 
 body.app-bar-mode #performance .mod-performance-face > .mod-pedal {
