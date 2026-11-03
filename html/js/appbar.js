@@ -791,6 +791,8 @@ JqueryClass('appBar', {
                 options.transportButton.click()
             } else if (options.cpuLoadWindow.is(':visible')) {
                 options.cpuLoadWindow.find('.js-close').click()
+            } else if ($('#report-window').is(':visible')) {
+                $('#report-window .js-cancel').first().click()
             }
         // first, the plugin's tools after it
         }).prependTo(dialog)
@@ -810,6 +812,30 @@ JqueryClass('appBar', {
             attributes: true,
             attributeFilter: ['style', 'class']
         })
+
+        // "Report a problem" the same, see js/report.js, with Copy: what it is about, to
+        // paste in the forum. Its window is made the first time it is asked for
+        $('<div class="report-copy">').text('Copy').click(function () {
+            $('#report-window #report-copy').click()
+        }).appendTo(dialog)
+        var report = null
+        var showReport = function () {
+            var shown = report.is(':visible')
+            dialog.toggleClass('for-report', shown)
+            setState('dialog', shown || !! settings || !! info || options.transportWindow.is(':visible'))
+        }
+        var reportMade = new MutationObserver(function () {
+            report = $('body > #report-window')
+            if (report.length) {
+                reportMade.disconnect()
+                new MutationObserver(showReport).observe(report[0], {
+                    attributes: true,
+                    attributeFilter: ['style', 'class']
+                })
+                showReport()
+            }
+        })
+        reportMade.observe(document.body, { childList: true })
 
         // The transport, from the menu, folds the dock down to the same way back. It is
         // no window, its button shows and hides it

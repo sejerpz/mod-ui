@@ -3450,6 +3450,14 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
     background: #9e2a26;
 }
 
+/* Copy, for "Report a problem" only, see js/appbar.js */
+.mod-app-bar > .dialog > .report-copy {
+    display: none;
+}
+.mod-app-bar > .dialog.for-report > .report-copy {
+    display: block;
+}
+
 /* Reset peaks, for the plugins' CPU usage only, see js/appbar.js */
 .mod-app-bar > .dialog > .cpu-reset {
     display: none;
