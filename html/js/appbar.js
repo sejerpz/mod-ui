@@ -102,6 +102,59 @@ JqueryClass('appBar', {
         // pairs, the element being clicked when its label is, each list under its title
         // if it has one. Any other tap closes the menu. Each element keeps its entry,
         // as data('appBarItem')
+        // The menu's entries, and the dock's modes, have an icon each: thin lines in the
+        // color of the text, 24x24, see dashboard.css. Those that had one keep it, see
+        // ICON_FILES
+        var ICONS = {
+            // the constructor: two pedals, three knobs and the footswitch each, the first
+            // going mono into the second in stereo
+            'Edit': '<rect x="1" y="5.5" width="6.5" height="13" rx="1"/><rect x="16.5" y="5.5" width="6.5" height="13" rx="1"/>' +
+                    '<g fill="currentColor" stroke="none"><circle cx="2.65" cy="8" r=".7"/><circle cx="4.25" cy="8" r=".7"/>' +
+                    '<circle cx="5.85" cy="8" r=".7"/><circle cx="18.15" cy="8" r=".7"/><circle cx="19.75" cy="8" r=".7"/>' +
+                    '<circle cx="21.35" cy="8" r=".7"/></g><circle cx="4.25" cy="15" r="1.3"/><circle cx="19.75" cy="15" r="1.3"/>' +
+                    '<path d="M7.5 12H10M10 12c1.5 0 1.8-2.5 3.5-2.5h3M10 12c1.5 0 1.8 2.5 3.5 2.5h3"/>',
+            // on air
+            'Live': '<circle cx="12" cy="12" r="2"/><path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7' +
+                    'M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+            // a bag with a plugin's plug
+            'Store': '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>' +
+                     '<path d="M10.5 12v2M13.5 12v2M9.5 14h5v1.5a2.5 2.5 0 0 1-5 0zM12 18v1.5"/>',
+            'Pedalboards library': '<rect x="3" y="6" width="18" height="12" rx="1.5"/><rect x="5.5" y="9" width="3" height="6" rx=".5"/>' +
+                                   '<rect x="10.5" y="9" width="3" height="6" rx=".5"/><rect x="15.5" y="9" width="3" height="6" rx=".5"/>',
+            'Banks': '<rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M5 6h14M7 3.5h10"/>',
+            'New pedalboard': '<rect x="3" y="6" width="18" height="12" rx="1.5"/><path d="M12 9v6M9 12h6"/>',
+            'Save as': '<path d="M14 18H4.5A1.5 1.5 0 0 1 3 16.5v-9A1.5 1.5 0 0 1 4.5 6h15A1.5 1.5 0 0 1 21 7.5V11"/>' +
+                       '<path d="M17 14v7M14 18l3 3 3-3"/>',
+            'File manager': '<path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 11h18"/>',
+            // a metronome
+            'Transport': '<path d="M9.5 4h5l3.5 16H6z"/><path d="M8 15h8"/><path d="M12 15l5-8"/>',
+            // an effect's parameter, a knob, assigned to an actuator, a footswitch
+            'Bindings': '<circle cx="5.5" cy="12" r="3.5"/><path d="M5.5 12l1.8-1.8"/><rect x="16" y="8" width="6" height="8" rx="1"/>' +
+                        '<circle cx="19" cy="12" r="1.3"/><path d="M9 12h7" stroke-dasharray="1.6 1.8"/><path d="M13.5 10l2 2-2 2"/>',
+            // the device's face, its display above the three knobs
+            'Display': '<rect x="3" y="3" width="18" height="18" rx="2"/><rect x="5.5" y="5.5" width="13" height="6.5" rx=".6"/>' +
+                       '<circle cx="7" cy="16.5" r="1.5"/><circle cx="12" cy="16.5" r="1.5"/><circle cx="17" cy="16.5" r="1.5"/>',
+            'Help': '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7"/><path d="M12 17h.01"/>',
+            // a chip
+            'CPU and RAM': '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5"/>' +
+                           '<path d="M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3"/>',
+        }
+        ICONS['Plugin store'] = ICONS['Store']
+        var ICON_FILES = {
+            'Settings': 'img/icons/36/settings.png',
+            'CV ports': 'img/icons/25/cv.png',
+            'MIDI ports': 'img/icons/36/midi.png',
+        }
+        var icon = function (label) {
+            if (ICON_FILES[label]) {
+                return $('<img class="mod-icon" alt="">').attr('src', ICON_FILES[label])
+            }
+            if (! ICONS[label]) {
+                return $()
+            }
+            return $('<svg class="mod-icon" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[label] + '</svg>')
+        }
+
         var popups = $()
         var popup = function (name, label, sections) {
             var holder = $('<div class="popup">').addClass(name)
@@ -176,6 +229,9 @@ JqueryClass('appBar', {
         // dashboard.css, which has their icons
         var main = popup('main', 'Menu', options.menu).appendTo(self)
         main.children('.toggle').empty().append($('<span class="name">').text('Menu'))
+        main.find('li').each(function () {
+            $(this).prepend(icon($(this).text()))
+        })
 
         // CV ports is a mode rather than a place: it shows a box on every plugin's CV
         // output, which offers it to the bindings. Its entry is ticked while it is on,
@@ -226,7 +282,7 @@ JqueryClass('appBar', {
         }
         var switching = false
         var mode = $('<div class="mode">').appendTo(self)
-        var edit = $('<div class="segment">').text('Edit').click(function () {
+        var edit = $('<div class="segment">').text('Edit').prepend(icon('Edit')).click(function () {
             var view = options.performanceBox
             if (switching) {
                 return
@@ -249,7 +305,7 @@ JqueryClass('appBar', {
                 boardIn()
             })
         }).appendTo(mode)
-        var live = $('<div class="segment">').text('Live').click(function () {
+        var live = $('<div class="segment">').text('Live').prepend(icon('Live')).click(function () {
             var view = options.performanceBox
             if (switching || view.is(':visible')) {
                 return
@@ -271,7 +327,7 @@ JqueryClass('appBar', {
         // The plugin store, the wide dock's third mode, see fitViewport. Like the other
         // places the menu leads to, it folds the dock down to the way back
         var storeTrigger = menuItem('Plugin store', true)
-        var store = $('<div class="segment store">').text('Store').click(function () {
+        var store = $('<div class="segment store">').text('Store').prepend(icon('Store')).click(function () {
             if (! options.store.is(':visible')) {
                 storeTrigger.click()
             }
@@ -596,7 +652,7 @@ JqueryClass('appBar', {
         var ramFigure = $('<span>').appendTo(readout)
         // the compact dock has them in the menu instead, the last section's last entry,
         // see dashboard.css
-        var meterEntry = $('<li class="meter-entry">').text('CPU and RAM').click(function () {
+        var meterEntry = $('<li class="meter-entry">').text('CPU and RAM').prepend(icon('CPU and RAM')).click(function () {
             main.removeClass('open')
             options.cpuButton.click()
             return false

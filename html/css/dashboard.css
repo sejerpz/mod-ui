@@ -4898,7 +4898,7 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 .mod-app-bar.compact .popup li.meter-entry {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
 }
 
 .mod-app-bar.compact .popup li.meter-entry.xrun {
@@ -4967,6 +4967,49 @@ body.app-bar-mode.plugin-view header#pedalboard-actions {
 
 .mod-app-bar .popup li:active {
     background: rgba(136, 57, 150, 0.45);
+}
+
+/* The menu's and the modes' icons, see ICONS in js/appbar.js: thin lines in the color
+   of the text, the ones that had a picture of their own a little dimmed to match */
+.mod-app-bar .mod-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: middle;
+}
+
+img.mod-icon {
+    object-fit: contain;
+    opacity: 0.8;
+}
+
+.mod-app-bar .popup li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mod-app-bar .popup li > .mod-icon {
+    color: #aaa;
+}
+
+.mod-app-bar .popup li:active > .mod-icon {
+    color: #fff;
+}
+
+/* in the dock, only the mode it is in has its icon */
+.mod-app-bar .mode .segment > .mod-icon {
+    display: none;
+    margin: -2px 8px 0 0;
+}
+
+.mod-app-bar .mode .segment.selected > .mod-icon {
+    display: inline-block;
 }
 
 /* unsaved changes */
