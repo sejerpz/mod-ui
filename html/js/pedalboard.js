@@ -6757,7 +6757,7 @@ JqueryClass('pedalboard', {
         }
         var choices = $.map(outputs, function (output) {
             var cables = $.map(Object.keys(origIndex[output] || {}), function (to) {
-                return { from: output, to: to, label: self.pedalboard('cableEnd', to) }
+                return { from: output, to: to }
             })
             return { port: output, connected: cables.length > 0, cables: cables }
         })
@@ -6784,7 +6784,7 @@ JqueryClass('pedalboard', {
         var any = false
         var choices = $.map(inputs, function (input) {
             var cables = $.map(Object.keys(destIndex[input] || {}), function (from) {
-                return { from: from, to: input, label: self.pedalboard('cableEnd', from) }
+                return { from: from, to: input }
             })
             any = any || cables.length > 0
             return { port: input, connected: cables.length > 0, cables: cables }
@@ -6799,32 +6799,19 @@ JqueryClass('pedalboard', {
     },
 
     // The `cables` between the viewed plugin `instance` and one in the plugin view's
-    // `side` column in pickPort, under the ports of `instance` they plug into, to be
-    // unplugged one by one
+    // `side` column in pickPort, to be unplugged one by one, under the two plugins'
+    // names in the direction the sound goes
     pickCables: function (instance, side, cables) {
         var self = $(this)
-        var mine = side == 'inputs' ? 1 : 0
-        var ports = [], byPort = {}
-        $.each(cables, function (i, cable) {
-            var port = cable[mine]
-            if (! byPort[port]) {
-                byPort[port] = []
-                ports.push(port)
-            }
-            byPort[port].push({ from: cable[0], to: cable[1], label: self.pedalboard('cableEnd', cable[1 - mine]) })
-        })
-        var choices = $.map(ports, function (port) {
-            return { port: port, connected: true, cables: byPort[port] }
-        })
+        var name = function (port) {
+            return self.pedalboard('connectionSource', self.find('[mod-port="' + port + '"]')).label
+        }
+        var choices = [{ port: cables[0][side == 'inputs' ? 1 : 0], cables: $.map(cables, function (cable) {
+            return { from: cable[0], to: cable[1] }
+        }) }]
         self.pedalboard('pickPort', instance, side == 'inputs' ? 'input' : 'output', choices, null, function (from, to) {
             self.data('portDisconnect')(from, to, function () {})
-        })
-    },
-
-    // The other end of a cable listed in pickPort, the plugin and the name of `port`
-    cableEnd: function (port) {
-        var end = $(this).pedalboard('connectionSource', $(this).find('[mod-port="' + port + '"]'))
-        return end.port ? end.label + ' · ' + end.port : end.label
+        }, name(cables[0][0]) + ' → ' + name(cables[0][1]))
     },
 
     // Ends the cable being made from `jack` in `instance`: in its only input of the
@@ -6873,11 +6860,12 @@ JqueryClass('pedalboard', {
     // Lets a tap pick one of the `ports` of `instance`, its outputs or inputs as `dir`
     // says, for `done`: an overlay by the plugin with their jacks spread out, each with
     // its name. Each choice is { port, connected, disabled, cables }; one that is
-    // disabled is shown but cannot be picked. With no `done` none can, the overlay
-    // being for the `cables` listed under each, { from, to, label }, which a tap on
-    // their x hands to `unplug`; with `done` they are folded under their count until
-    // it is tapped. A tap anywhere else closes it, picking nothing.
-    pickPort: function (instance, dir, ports, done, unplug) {
+    // disabled is shown but cannot be picked. The `cables` of them all, { from, to },
+    // are listed below by the plugin at their other end, and a tap on their x hands
+    // them to `unplug`: folded under their count with `done`, by themselves without,
+    // the overlay being for them then. A tap anywhere else closes it, picking nothing.
+    // `title` is the panel's, the plugin's own otherwise.
+    pickPort: function (instance, dir, ports, done, unplug, title) {
         var self = $(this)
         var plugin = self.data('plugins')[instance]
         var all = plugin.data('ports')
@@ -6899,8 +6887,8 @@ JqueryClass('pedalboard', {
         var overlay = $('<div class="mod-port-picker">').attr('data-touch-native', '').appendTo('body')
         var panel = $('<div class="mod-port-picker-panel">').addClass(dir).appendTo(overlay)
         $('<div class="mod-port-picker-title">')
-            .text((gui ? (gui.label || gui.effect.label || gui.effect.name) : instance) +
-                  (dir == 'output' ? ' outputs' : ' inputs'))
+            .text(title || (gui ? (gui.label || gui.effect.label || gui.effect.name) : instance) +
+                           (dir == 'output' ? ' outputs' : ' inputs'))
             .appendTo(panel)
         // what a tap on a port does, said once for all of them
         if (done) {
@@ -6908,16 +6896,19 @@ JqueryClass('pedalboard', {
                 .text(dir == 'output' ? 'Tap an output to start a cable' : 'Tap an input to plug the cable in')
                 .appendTo(panel)
         }
-        $.each(ports, function (i, choice) {
+        // the ports to pick, with no `done` none
+        var rows = {}
+        $.each(done ? ports : [], function (i, choice) {
             var port = describe(choice.port)
             var row = $('<div class="mod-port-picker-port">')
                 .addClass(port.type)
                 .toggleClass('connected', !! choice.connected)
                 .toggleClass('disabled', !! choice.disabled)
                 .appendTo(panel)
+            rows[choice.port] = row
             $('<div class="mod-port-picker-jack">').appendTo(row)
             $('<div class="mod-port-picker-name">').text(port.name).appendTo(row)
-            if (done && ! choice.disabled) {
+            if (! choice.disabled) {
                 // a button, and the + on it says it starts or ends a cable
                 $('<div class="mod-port-picker-go">').appendTo(row)
                 row.on('click', function () {
@@ -6925,49 +6916,91 @@ JqueryClass('pedalboard', {
                     done(choice.port)
                     return false
                 })
-            } else if (! done) {
-                row.addClass('static')
             }
-            var cables = choice.cables || []
-            if (! cables.length) {
-                return
-            }
-            // The cables already in the port, under how many they are: folded while the
-            // ports are there to be picked, open when unplugging them is all there is to do
-            var count = $('<div class="mod-port-picker-count">').appendTo(panel)
-            var list = $('<div class="mod-port-picker-cables">').appendTo(panel)
-            var plugged = cables.length
-            var counted = function () {
-                count.text(plugged + (plugged == 1 ? ' cable' : ' cables'))
-            }
-            counted()
-            count.toggleClass('open', ! done).on('click', function () {
+        })
+
+        // The cables already in them, by the plugin at their other end: a group for each,
+        // its thumbnail on the side that plugin is on, as tall as a stereo pair or as
+        // small as a single cable, in a column as wide either way so the ports line up.
+        // In each row the two ports the cable joins, the way the sound goes
+        var cables = []
+        $.each(ports, function (i, choice) {
+            cables = cables.concat(choice.cables || [])
+        })
+        var plugged = cables.length
+        var count = null
+        var list = $('<div class="mod-port-picker-cables">')
+        if (plugged && done) {
+            // folded while the ports are there to be picked
+            count = $('<div class="mod-port-picker-count">').appendTo(panel).on('click', function () {
                 count.toggleClass('open')
                 place()
                 return false
             })
-            $.each(cables, function (j, cable) {
-                var line = $('<div class="mod-port-picker-cable">').appendTo(list)
-                $('<div class="mod-port-picker-from">').text(cable.label).appendTo(line)
-                $('<div class="mod-port-picker-unplug">').on('click', function () {
-                    unplug(cable.from, cable.to)
-                    line.remove()
-                    plugged -= 1
-                    counted()
-                    row.toggleClass('connected', plugged > 0)
-                    if (! plugged) {
-                        count.remove()
-                        list.remove()
-                    }
-                    // with nothing left to unplug, nor a port to pick, it has done its job
-                    if (! done && ! panel.find('.mod-port-picker-cable').length) {
-                        overlay.remove()
-                        return false
-                    }
-                    place()
+            count.text(plugged + (plugged == 1 ? ' cable' : ' cables'))
+        } else {
+            list.addClass('open')
+        }
+        if (plugged) {
+            list.appendTo(panel)
+        }
+        var groups = {}
+        $.each(cables, function (i, cable) {
+            var mine = dir == 'output' ? cable.from : cable.to
+            var theirs = dir == 'output' ? cable.to : cable.from
+            var end = self.pedalboard('connectionSource', self.find('[mod-port="' + theirs + '"]'))
+            var key = end.thumbnail ? theirs.substring(0, theirs.lastIndexOf('/')) : end.label
+            var group = groups[key]
+            if (! group) {
+                group = groups[key] = $('<div class="mod-port-picker-group">').appendTo(list)
+                var thumb = $('<div class="mod-port-picker-thumb">').appendTo(group)
+                if (end.thumbnail) {
+                    thumb.css('background-image', 'url("' + end.thumbnail + '")')
+                }
+                var lines = $('<div class="mod-port-picker-lines">').appendTo(group)
+                $('<div class="mod-port-picker-plugin">').text(end.label).appendTo(lines)
+            }
+            var line = $('<div class="mod-port-picker-cable">').data('mine', mine)
+                .appendTo(group.find('.mod-port-picker-lines'))
+            var ends = $('<div class="mod-port-picker-ends">').appendTo(line)
+            var own = $('<span class="mine">').text(describe(mine).name)
+            var other = $('<span>').text(end.port || end.label)
+            var arrow = $('<span class="arrow">').text('→')
+            if (dir == 'output') {
+                ends.append(own, arrow, other)
+            } else {
+                ends.append(other, arrow, own)
+            }
+            group.toggleClass('stereo', group.find('.mod-port-picker-cable').length > 1)
+            $('<div class="mod-port-picker-unplug">').on('click', function () {
+                unplug(cable.from, cable.to)
+                line.remove()
+                plugged -= 1
+                var left = group.find('.mod-port-picker-cable').length
+                group.toggleClass('stereo', left > 1)
+                if (! left) {
+                    group.remove()
+                }
+                if (rows[mine]) {
+                    rows[mine].toggleClass('connected', list.find('.mod-port-picker-cable').filter(function () {
+                        return $(this).data('mine') == mine
+                    }).length > 0)
+                }
+                if (count) {
+                    count.text(plugged + (plugged == 1 ? ' cable' : ' cables'))
+                }
+                if (! plugged) {
+                    count && count.remove()
+                    list.remove()
+                }
+                // with nothing left to unplug, nor a port to pick, it has done its job
+                if (! done && ! plugged) {
+                    overlay.remove()
                     return false
-                }).appendTo(line)
-            })
+                }
+                place()
+                return false
+            }).appendTo(line)
         })
         overlay.on('click', function (event) {
             if (! $(event.target).closest('.mod-port-picker-panel').length) {

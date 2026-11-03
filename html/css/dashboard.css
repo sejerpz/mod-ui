@@ -276,17 +276,6 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background: #2a2a2a;
 }
 
-/* a port listed for the cables under it, see showInputCables, not to be picked */
-.mod-port-picker-port.static {
-    border-color: transparent;
-    background: none;
-    cursor: default;
-}
-
-.mod-port-picker-port.static:active {
-    background: none;
-}
-
 /* how many cables the port above has, which a tap shows or hides */
 .mod-port-picker-count {
     display: inline-block;
@@ -313,27 +302,75 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     transform: translateY(-4px) rotate(45deg);
 }
 
+/* the cables, folded under their count while there are ports to pick */
 .mod-port-picker-cables {
     display: none;
-    margin: -4px 0 8px 18px;
-    padding-left: 10px;
-    border-left: 2px solid #444;
+    margin: 0 0 6px;
 }
 
-.mod-port-picker-count.open + .mod-port-picker-cables {
+.mod-port-picker-count.open + .mod-port-picker-cables,
+.mod-port-picker-cables.open {
     display: block;
 }
 
-/* a cable into the port above it, or out of it, with the x that unplugs it */
+/* the cables to one plugin, its thumbnail on their left */
+.mod-port-picker-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border-top: 1px solid #2a2a2a;
+}
+
+.mod-port-picker-group:first-child {
+    border-top: 0;
+}
+
+/* as wide for one cable as for a pair, so the ports line up: small and in the middle
+   of its room for one, the height of both rows for a stereo pair */
+.mod-port-picker-thumb {
+    flex: none;
+    width: 43px;
+    height: 38px;
+    background: center / contain no-repeat;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+
+.mod-port-picker-group.stereo .mod-port-picker-thumb {
+    height: 76px;
+}
+
+.mod-port-picker-lines {
+    flex: 1;
+    min-width: 0;
+}
+
+.mod-port-picker-plugin {
+    color: #ddd;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+/* a cable, the two ports it joins the way the sound goes, with the x that unplugs it */
 .mod-port-picker-cable {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 40px;
+    min-height: 38px;
     color: #aaa;
     font-size: 13px;
     white-space: nowrap;
+}
+
+.mod-port-picker-ends .mine {
+    color: #fff;
+}
+
+.mod-port-picker-ends .arrow {
+    margin: 0 5px;
+    color: #666;
 }
 
 .mod-port-picker-unplug {
