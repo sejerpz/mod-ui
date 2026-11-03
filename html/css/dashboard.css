@@ -4994,6 +4994,11 @@ img.mod-icon {
     gap: 12px;
 }
 
+/* an entry for what is not there now, as Share or Control Chain */
+.mod-app-bar .popup li.mod-hidden {
+    display: none;
+}
+
 .mod-app-bar .popup li > .mod-icon {
     color: #aaa;
 }

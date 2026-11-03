@@ -134,6 +134,16 @@ JqueryClass('appBar', {
             // the device's face, its display above the three knobs
             'Display': '<rect x="3" y="3" width="18" height="18" rx="2"/><rect x="5.5" y="5.5" width="13" height="6.5" rx=".6"/>' +
                        '<circle cx="7" cy="16.5" r="1.5"/><circle cx="12" cy="16.5" r="1.5"/><circle cx="17" cy="16.5" r="1.5"/>',
+            // the same as Share by the title, see shareToggle
+            'Share': '<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/>' +
+                     '<path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1"/>',
+            // devices one after the other on the same cable
+            'Control Chain': '<rect x="1.5" y="8.5" width="5" height="7" rx="1"/><rect x="9.5" y="8.5" width="5" height="7" rx="1"/>' +
+                             '<rect x="17.5" y="8.5" width="5" height="7" rx="1"/><path d="M6.5 12h3M14.5 12h3"/>' +
+                             '<circle cx="4" cy="12" r=".9"/><circle cx="12" cy="12" r=".9"/><circle cx="20" cy="12" r=".9"/>',
+            // something to say about what went wrong
+            'Report a problem': '<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4 4v-4h-.5A1.5 1.5 0 0 1 4 14.5z"/>' +
+                                '<path d="M12 7.5v4M12 13.5h.01"/>',
             'Help': '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7"/><path d="M12 17h.01"/>',
             // a chip
             'CPU and RAM': '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5"/>' +
@@ -1134,7 +1144,7 @@ JqueryClass('appBar', {
                                                          : ! options.shareButton.hasClass('mod-hidden'))
             shareToggle.toggle(can)
             var entry = options.shareButton.data('appBarItem')
-            entry && entry.toggle(can)
+            entry && entry.toggleClass('mod-hidden', ! can)
         }
         if (options.shareButton.length) {
             new MutationObserver(showShare).observe(options.shareButton[0], {
@@ -1147,7 +1157,7 @@ JqueryClass('appBar', {
         // see js/cc-manager.js, which lists them, a name each, or says there is none
         var showDevices = function () {
             var entry = $('#main-menu #mod-devices').data('appBarItem')
-            entry && entry.toggle(options.devicesWindow.find('li b').length > 0)
+            entry && entry.toggleClass('mod-hidden', ! options.devicesWindow.find('li b').length)
         }
         if (options.devicesWindow.length) {
             new MutationObserver(showDevices).observe(options.devicesWindow.find('ul')[0], { childList: true })
