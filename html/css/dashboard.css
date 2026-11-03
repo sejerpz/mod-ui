@@ -7149,6 +7149,34 @@ body.app-bar-mode #save-pedalboard .chips button.on {
     color: #fff;
 }
 
+/* The online services' terms, before the first online use: the text to read, with the
+   links to the documents, over all else, see pedals.css */
+/* placed as the other sheets, over pedals.css's own, see .mod-sheet-popup above */
+body.app-bar-mode #mod-cloud-terms .mod-sheet {
+    left: 50%;
+    right: auto;
+    width: calc(480px * var(--touch-zoom, 1));
+    max-width: calc(100% - 32px);
+    margin: 0;
+}
+body.app-bar-mode.narrow-screen #mod-cloud-terms .mod-sheet {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+}
+body.app-bar-mode #mod-cloud-terms .body p {
+    margin: 4px 4px 12px;
+    color: #ccc;
+    line-height: 1.45;
+}
+body.app-bar-mode #mod-cloud-terms .body a {
+    color: #c79bd0;
+}
+body.app-bar-mode #mod-cloud-terms .actions {
+    text-align: left;
+}
+
 /* Updating a Control Chain device, see js/cc-manager.js: what to do, step by step */
 body.app-bar-mode #cc-device-update-window .body p {
     margin: 4px 4px 10px;

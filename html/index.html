@@ -542,11 +542,13 @@ $('document').ready(function() {
 
 {% if using_desktop == 'true' or using_mod == 'true' %}
 <!-- CLOUD-TERMS-WINDOW -->
-<div id="mod-cloud-terms" class="save-popup mod-hidden">
-    <div class="mod-box">
+<div id="mod-cloud-terms" class="save-popup mod-sheet-popup mod-hidden">
+    <div class="mod-box mod-sheet">
         {% if using_desktop == 'true' %}
-        <h1>Welcome to MOD Desktop!</h1>
-        <div>
+        <header>
+            <h1>Welcome to MOD Desktop!</h1>
+        </header>
+        <div class="body">
             <p>
                 We're thrilled to have you on board and can't wait for you to explore all the amazing features we've built for you.
                 Before you dive in, there's just a little bit of housekeeping to take care of.<br/>
@@ -561,10 +563,11 @@ $('document').ready(function() {
             </p>
         </div>
         {% else %}
-        <h1 class="pull-left">Terms of Use for MOD online components</h1>
-        <span class="js-reject close">&times;</span>
-        <div class="bottom">
-            <div class="clearfix"></div>
+        <header>
+            <h1>Terms of Use for MOD online components</h1>
+            <span class="js-reject close">&times;</span>
+        </header>
+        <div class="body">
             <p>
                 (NOTE: THIS AN EXAMPLE TEXT YET TO BE REVIEWED)<br/>
                 Your MOD unit can receive firmware updates over the internet, and also download new plugins and pedalboards.<br/>
@@ -579,12 +582,12 @@ $('document').ready(function() {
             </p>
         </div>
         {% end %}
-        <div class="controls actions">
+        <div class="actions">
             {% if using_desktop == 'true' %}
-            <button class="js-accept btn btn-success">Agree and Continue</button>
+            <button class="js-accept btn btn-primary">Agree and Continue</button>
             {% else %}
-            <button class="js-reject btn btn-danger">Disagree</button>
-            <button class="js-accept btn btn-success">Agree</button>
+            <button class="js-reject btn">Disagree</button>
+            <button class="js-accept btn btn-primary">Agree</button>
             {% end %}
         </div>
     </div>
