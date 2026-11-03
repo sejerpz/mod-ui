@@ -259,9 +259,8 @@ JqueryClass('performanceBox', {
                 self.data('showVisibleFilter')()
             }
 
-            // it starts as it is played: full screen, the plugins' own faces
+            // it starts on the plugins' own faces
             self.data('face', true)
-            setFullscreen(true)
 
             self.data('updatePlugins')()
             self.data("selectElement")(":presets")
