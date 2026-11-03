@@ -12,6 +12,22 @@
 // How long a press on the A/B button lasts before it brings up the whole comparer, in ms
 var AB_LONG_PRESS = 500
 
+// Asks whether to go on, before something that cannot be undone: in the dock, see its
+// confirm, rather than the browser's own question, which is not sized for a finger and
+// stops the page. `what` as for the dock's tasks: a title, the question, a label and a
+// port, what it is about, either of them empty, and `go`, the way on. Without the dock,
+// the browser's question all the same. `onCancel`, if any, when it is not gone on with
+function askFirst(what, onGo, onCancel) {
+    var bar = $('.mod-app-bar')
+    if (bar.length) {
+        bar.appBar('confirm', what, onGo, onCancel)
+    } else if (window.confirm([what.title, what.label, what.port].filter(Boolean).join('\n'))) {
+        onGo()
+    } else if (onCancel) {
+        onCancel()
+    }
+}
+
 JqueryClass('appBar', {
     init: function (options) {
         var self = $(this)
@@ -661,10 +677,13 @@ JqueryClass('appBar', {
         }
         // Asked by what is in a dialog, the dock away under it: it comes back over the
         // dialog for the answer, and goes away again with it
-        self.data('confirm', function (what, onGo) {
+        self.data('confirm', function (what, onGo, onCancel) {
             self.addClass('confirming')
             makeRoom()
-            startTask(what, endTask, onGo)
+            startTask(what, function () {
+                endTask()
+                onCancel && onCancel()
+            }, onGo)
         })
         options.pedalboard.on('connectionstart', function (e, from) {
             startTask({ title: 'Connect', thumbnail: from.thumbnail, label: from.label, port: from.port }, function () {
@@ -717,8 +736,10 @@ JqueryClass('appBar', {
             var icon = options.pedalboard.data('plugins')[viewed]
             var gui = icon && icon.data('gui')
             var name = gui && gui.effect ? (gui.effect.label || gui.effect.name) : 'this plugin'
-            if (icon && confirm('Remove ' + name + ' from the pedalboard?')) {
-                icon.find('.mod-remove').click()
+            if (icon) {
+                askFirst({ title: 'Remove plugin?', port: name, go: 'Remove' }, function () {
+                    icon.find('.mod-remove').click()
+                })
             }
         })
         options.pedalboard.on('pluginview', function (e, instance) {
@@ -1097,7 +1118,7 @@ JqueryClass('appBar', {
 
     // Asks whether to go on with something, see confirm in init: `what` as for a task,
     // with `what.go` saying what going on does, `onGo` called if it is chosen
-    confirm: function (what, onGo) {
-        $(this).data('confirm')(what, onGo)
+    confirm: function (what, onGo, onCancel) {
+        $(this).data('confirm')(what, onGo, onCancel)
     },
 })

@@ -2365,9 +2365,7 @@ function HardwareManager(options) {
             }
 
             const bindingLabel = self.getTitleText(model)
-            if (!confirm(`Delete '${bindingLabel}' binding?`))
-              return
-
+            askFirst({ title: 'Delete binding?', port: bindingLabel, go: 'Delete' }, function () {
             const currentInputVal = model.typeInput.val()
             model.typeInput.val(kNullAddressURI)
             self.saveCurrentAddressing()
@@ -2410,6 +2408,7 @@ function HardwareManager(options) {
             model.typeInput.val(currentInputVal)
             self.updateView(model)
             new Notification('warn', `${bindingLabel} binding deleted`, 8000)
+            })
           })
           // form.find('.btn.js-binding-add').click(function() {
           //   if ($(this).hasClass('disabled')) {
@@ -2777,7 +2776,7 @@ function HardwareManager(options) {
             maxv = port.ranges.maximum
 
         if (parseFloat(minv) >= parseFloat(maxv)) {
-            alert("The minimum value is equal or higher than the maximum. We cannot address a control like this!")
+            new Notification('error', "The minimum must be lower than the maximum to bind this control", 5000)
             return
         }
 

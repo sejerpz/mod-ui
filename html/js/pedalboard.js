@@ -2369,8 +2369,12 @@ JqueryClass('pedalboard', {
         if (! instances.length) {
             return
         }
-        if (instances.length > 1 &&
-            ! confirm('Remove ' + instances.length + ' plugins from the pedalboard?')) {
+        if (instances.length > 1 && ! self.data('removeAsked')) {
+            askFirst({ title: 'Remove ' + instances.length + ' plugins?', label: 'All those selected', go: 'Remove' }, function () {
+                self.data('removeAsked', true)
+                self.pedalboard('removeSelected')
+                self.data('removeAsked', false)
+            })
             return
         }
 

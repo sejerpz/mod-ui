@@ -23,14 +23,7 @@ function SnapshotsManager(options) {
         renamedCallback: function (name) {},
         saveAsCallback: function () {},
         // asks whether to go on, `what` as for the dock's tasks, see confirm in appbar.js
-        confirm: function (what, onGo) {
-            var bar = $('.mod-app-bar')
-            if (bar.length) {
-                bar.appBar('confirm', what, onGo)
-            } else if (window.confirm(what.title)) {
-                onGo()
-            }
-        },
+        confirm: askFirst,
         hardwareManager: null,
     }, options)
 

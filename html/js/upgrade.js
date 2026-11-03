@@ -219,11 +219,14 @@ JqueryClass('upgradeWindow', {
             self.find('.download-complete').show()
 
             if (self.data('updatesystem')) {
-                if (confirm("The MOD will now be updated. Any unsaved work will be lost. "+
-                            "The upgrade can take several minutes, "+
-                            "in which you may not be able to play or do anything else. Continue?")) {
+                askFirst({
+                    title: 'Update the MOD now?',
+                    label: 'Unsaved work is lost',
+                    port: 'Takes several minutes',
+                    go: 'Update',
+                }, function () {
                     self.upgradeWindow('startUpgrade')
-                }
+                })
             } else {
                 self.upgradeWindow('startDeviceUpgrade')
             }

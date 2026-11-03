@@ -3263,7 +3263,8 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
     transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
 }
 
-/* while it is moving, and for good once folded */
+/* while it is moving, and for good once folded. Something asked, the task, shows over
+   whatever state the dock is in, which leaves it alone, see confirm in js/appbar.js */
 .mod-app-bar.folded > *,
 .mod-app-bar.adding > .popup,
 .mod-app-bar.adding > .mode,
@@ -3273,11 +3274,11 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
 .mod-app-bar.arranging > .mode,
 .mod-app-bar.arranging > .tools,
 .mod-app-bar:not(.performing) > .perf,
-.mod-app-bar.elsewhere:not(.dialog) > :not(.back),
+.mod-app-bar.elsewhere:not(.dialog) > :not(.back):not(.task),
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
-.mod-app-bar.viewing > :not(.plugin):not(.dialog),
-.mod-app-bar.dialog > :not(.dialog),
+.mod-app-bar.viewing > :not(.plugin):not(.dialog):not(.task),
+.mod-app-bar.dialog > :not(.dialog):not(.task),
 .mod-app-bar:not(.dialog) > .dialog,
 .mod-app-bar.task > :not(.task),
 .mod-app-bar:not(.task) > .task {
@@ -3292,11 +3293,11 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
 .mod-app-bar.arranging > .mode,
 .mod-app-bar.arranging > .tools,
 .mod-app-bar:not(.performing) > .perf,
-.mod-app-bar.elsewhere:not(.dialog) > :not(.back),
+.mod-app-bar.elsewhere:not(.dialog) > :not(.back):not(.task),
 .mod-app-bar:not(.elsewhere) > .back,
 .mod-app-bar:not(.viewing) > .plugin,
-.mod-app-bar.viewing > :not(.plugin):not(.dialog),
-.mod-app-bar.dialog > :not(.dialog),
+.mod-app-bar.viewing > :not(.plugin):not(.dialog):not(.task),
+.mod-app-bar.dialog > :not(.dialog):not(.task),
 .mod-app-bar:not(.dialog) > .dialog,
 .mod-app-bar.task > :not(.task),
 .mod-app-bar:not(.task) > .task {
@@ -3468,6 +3469,26 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
 
 .mod-app-bar .task .go:active {
     background: #9e2a26;
+}
+
+/* in the compact dock, a phone's, what it is about takes what room is left: its label
+   on a line, its name wrapping on two at most */
+.mod-app-bar.compact .task {
+    gap: 16px;
+}
+.mod-app-bar.compact .task .names {
+    max-width: 150px;
+    line-height: 15px;
+}
+.mod-app-bar.compact .task .label {
+    white-space: nowrap;
+}
+.mod-app-bar.compact .task .port {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    font-size: 14px;
 }
 
 /* Share, for sharing the pedalboard only, as the window's own, see js/appbar.js */

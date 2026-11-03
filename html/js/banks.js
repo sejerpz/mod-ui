@@ -422,14 +422,20 @@ JqueryClass('bankBox', {
     },
 
     removeBank: function (bank) {
-        var msg = "Deleting bank \""+bank.find('.js-bank-title').html()+"\". Confirm?"
-        if (confirm(msg) != true) {
-            return;
-        }
         var self = $(this)
-        var count = bank.data('pedalboards').children().length
-        if (count > 1 && !confirm(sprintf('There are %d pedalboards in this bank, are you sure you want to delete it?', count)))
-            return
+        var count = (bank.data('selected') ? self.data('pedalboardCanvas') : bank.data('pedalboards')).children().length
+        askFirst({
+            title: 'Delete bank?',
+            label: count ? sprintf(count == 1 ? '%d pedalboard in it' : '%d pedalboards in it', count) : '',
+            port: bank.find('.js-bank-title').text(),
+            go: 'Delete',
+        }, function () {
+            self.bankBox('removeBankNow', bank)
+        })
+    },
+
+    removeBankNow: function (bank) {
+        var self = $(this)
         if (bank.data('selected')) {
             self.bankBox('showAdding', false)
             self.data('currentBank', null)

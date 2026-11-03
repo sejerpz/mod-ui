@@ -866,11 +866,21 @@ function Desktop(elements) {
 
         var finalCallback = function () {
             self.previousPedalboardList = null
-            if (error && !confirm("Failed to install some required plugins, do you want to load the pedalboard anyway?")) {
-                callback(false)
+            if (! error) {
+                callback(true)
                 return
             }
-            callback(true)
+            // not loaded unless asked to
+            askFirst({
+                title: 'Load it anyway?',
+                label: 'Some plugins failed to install',
+                go: 'Load',
+                cancel: 'Don\'t load',
+            }, function () {
+                callback(true)
+            }, function () {
+                callback(false)
+            })
         }
 
         var installPlugin = function (uri, data) {
@@ -1269,9 +1279,9 @@ function Desktop(elements) {
         }
 
         if (self.pedalboardModified || ! (self.pedalboardEmpty || self.pedalboardBundle)) {
-            if (confirm('There are unsaved modifications, pedalboard must first be saved. Save it?')) {
+            askFirst({ title: 'Save it first?', label: 'Only saved ones can be shared', go: 'Save' }, function () {
                 self.saveCurrentPedalboard(false, share)
-            }
+            })
         } else {
             share()
         }
@@ -2166,8 +2176,7 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
             self.importPedalboardFile(file, callback)
         },
         remove: function (pedalboard, callback) {
-            if (!confirm(sprintf('The pedalboard "%s" will be permanently removed! Confirm?', pedalboard.title)))
-                return
+            askFirst({ title: 'Delete pedalboard?', label: 'Cannot be undone', port: pedalboard.title, go: 'Delete' }, function () {
             $.ajax({
                 url: '/pedalboard/remove/',
                 data: {
@@ -2182,6 +2191,7 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
                     new Bug("Couldn't remove pedalboard")
                 },
                 cache: false
+            })
             })
         },
         load: function (bundlepath, broken, callback) {
@@ -2262,8 +2272,12 @@ Desktop.prototype.makeCloudPluginBox = function (el, trigger) {
         windowManager: this.windowManager,
         list: self.cloudPluginListFunction,
         removePluginBundles: function (bundles, callback) {
-            if (!confirm('You are about to remove this plugin and any other in the same bundle. This may break pedalboards that depend on them.'))
-                return
+            askFirst({
+                title: 'Uninstall plugin?',
+                label: 'Its whole bundle',
+                port: 'Pedalboards may break',
+                go: 'Uninstall',
+            }, function () {
             self.previousPedalboardList = null
             $.ajax({
                 url: '/package/uninstall',
@@ -2281,6 +2295,7 @@ Desktop.prototype.makeCloudPluginBox = function (el, trigger) {
                 },
                 cache: false,
                 dataType: 'json'
+            })
             })
         },
         upgradePluginURI: function (uri, callback) {
@@ -2358,12 +2373,16 @@ Desktop.prototype.makeFileManagerBox = function (el, trigger) {
 }
 
 Desktop.prototype.reset = function (callback, skipConfirmDialog) {
-    if (this.pedalboardModified && !skipConfirmDialog && !confirm("There are unsaved modifications that will be lost. Are you sure?")) {
+    var self = this
+    var reset = function () {
+        self.pedalboard.data('wait').start('Loading pedalboard...')
+        self.pedalboard.pedalboard('reset', callback)
+    }
+    if (this.pedalboardModified && !skipConfirmDialog) {
+        askFirst({ title: 'Discard the changes?', label: 'Unsaved changes', go: 'Discard' }, reset)
         return
     }
-
-    this.pedalboard.data('wait').start('Loading pedalboard...')
-    this.pedalboard.pedalboard('reset', callback)
+    reset()
 }
 
 Desktop.prototype.updateAllPlugins = function () {
