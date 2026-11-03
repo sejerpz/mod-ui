@@ -394,12 +394,15 @@ $('document').ready(function() {
             gridModeLocked: desktop.gridModeLocked,
             setGridMode: desktop.setGridMode,
             zoomControls: $('#zoom-controllers'),
+            shareButton: $('#pedalboard-info .js-cloud'),
+            shareWindow: $('#share-window'),
             menu: [
                 { title: 'Pedalboard', items: [
                     ['Pedalboards library', $('#main-menu #mod-pedalboard')],
                     ['Banks', $('#main-menu #mod-bank')],
                     ['New pedalboard', $('#pedalboard-info .js-reset')],
                     ['Save as', $('#pedalboard-info .js-save-as')],
+                    ['Share', $('#pedalboard-info .js-cloud')],
                 ]},
                 { title: 'Routing', items: [
                     ['Bindings', $('#js-pb-addressing-toggle')],
@@ -669,7 +672,7 @@ $('document').ready(function() {
         <!-- PEDALBOARD SHARE WINDOW -->
         <div id="share-window" class="save-popup mod-hidden">
             <div class="box">
-                <h1 class="pull-left">SHARE</h1><span class="js-cancel close">&times;</span>
+                <h1 class="pull-left">Share pedalboard</h1><span class="js-cancel close">&times;</span>
                 <div class="unstable-warning mod-hidden">
                   <b>Warning:</b> This pedalboard contains beta plugins and won't be available to most users
                 </div>

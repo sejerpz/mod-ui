@@ -7434,6 +7434,162 @@ body.app-bar-mode #report-window #report-copied {
   color: #c79bd0;
   font-size: 14px;
 }
+body.app-bar-mode #share-window {
+  position: fixed;
+  z-index: 1000;
+  overflow-y: auto;
+  background: #111;
+}
+body.app-bar-mode #share-window .box {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: auto;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px 16px 100px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  text-align: left;
+  zoom: var(--touch-zoom, 1);
+}
+body.app-bar-mode #share-window h1 {
+  float: none;
+  margin: 4px 4px 12px;
+  font-size: 22px;
+  font-weight: normal;
+  text-transform: none;
+  color: #fff;
+}
+body.app-bar-mode #share-window .close,
+body.app-bar-mode #share-window-bottom .textright {
+  display: none;
+}
+body.app-bar-mode #share-window .unstable-warning {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #5a4214;
+  border-radius: 12px;
+  background: #3a2a10;
+  color: #e8b86b;
+}
+body.app-bar-mode #share-window-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  margin: 0;
+}
+body.app-bar-mode #share-window-form > div {
+  flex: 1 1 200px;
+  width: auto;
+  padding: 0;
+}
+body.app-bar-mode .save-popup#share-window label {
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  color: #c79bd0;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+}
+body.app-bar-mode #share-window .form-control {
+  width: 100%;
+  height: 44px;
+  margin-top: 6px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  background: #1c1c1c;
+  color: #fff;
+  font-size: 16px;
+  font-weight: normal;
+  letter-spacing: normal;
+  box-shadow: none;
+}
+body.app-bar-mode #share-window textarea.form-control {
+  height: auto;
+  padding: 10px 12px;
+}
+body.app-bar-mode #share-window .form-control:focus {
+  border-color: #883996;
+  outline: none;
+}
+body.app-bar-mode .save-popup#share-window label[for=pedalboard-share-hidden] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ddd;
+  font-size: 15px;
+  font-weight: normal;
+  letter-spacing: normal;
+}
+body.app-bar-mode #share-window #pedalboard-share-hidden {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #883996;
+}
+body.app-bar-mode #share-window-wrapper {
+  height: auto;
+  min-height: 200px;
+  margin: 4px 0 0;
+  padding: 12px;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  background: #2a2a2a;
+}
+body.app-bar-mode #share-window .textcenter {
+  float: none;
+  text-align: center;
+}
+body.app-bar-mode #share-window h2,
+body.app-bar-mode #share-window h3 {
+  margin: 4px 0 8px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: normal;
+}
+body.app-bar-mode #share-window p {
+  color: #999;
+}
+body.app-bar-mode #share-window .btn-large {
+  width: 100%;
+  height: 44px;
+  margin: 8px 0 0;
+  padding: 0 16px;
+  box-sizing: border-box;
+  border: 1px solid #444;
+  border-radius: 12px;
+  background: #2c2c2c;
+  color: #fff;
+  line-height: 42px;
+  text-shadow: none;
+  box-shadow: none;
+}
+body.app-bar-mode #share-window input.share-url {
+  height: 44px;
+  margin: 8px 0;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  background: #1c1c1c !important;
+  color: #fff;
+}
+body.app-bar-mode #share-window-bottom {
+  float: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border: none;
+  color: #999;
+  font-size: 14px;
+}
 /* Make clicks pass-through */
 #nprogress {
   pointer-events: none;

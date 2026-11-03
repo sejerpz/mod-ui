@@ -793,6 +793,8 @@ JqueryClass('appBar', {
                 options.cpuLoadWindow.find('.js-close').click()
             } else if ($('#report-window').is(':visible')) {
                 $('#report-window .js-cancel').first().click()
+            } else if (options.shareWindow.is(':visible')) {
+                options.shareWindow.find('#record-cancel').click()
             }
         // first, the plugin's tools after it
         }).prependTo(dialog)
@@ -812,6 +814,38 @@ JqueryClass('appBar', {
             attributes: true,
             attributeFilter: ['style', 'class']
         })
+
+        // Sharing the pedalboard the same, see js/share.js, with Share: the window's own,
+        // as it reads, can be pressed or is there at all, step by step
+        var shareOwn = options.shareWindow.find('#record-share')
+        var shareNow = $('<div class="share-now">').click(function () {
+            if (! shareOwn.prop('disabled')) {
+                shareOwn.click()
+            }
+        }).appendTo(dialog)
+        var showShareNow = function () {
+            shareNow.text(shareOwn.text())
+                .toggleClass('disabled', !! shareOwn.prop('disabled'))
+                .toggleClass('gone', shareOwn.css('display') == 'none')
+        }
+        var showShareWindow = function () {
+            var shown = options.shareWindow.is(':visible')
+            dialog.toggleClass('for-share', shown)
+            showShareNow()
+            setState('dialog', shown || !! settings || !! info || options.transportWindow.is(':visible'))
+        }
+        if (options.shareWindow.length) {
+            new MutationObserver(showShareWindow).observe(options.shareWindow[0], {
+                attributes: true,
+                attributeFilter: ['style', 'class']
+            })
+            new MutationObserver(showShareNow).observe(shareOwn[0], {
+                attributes: true,
+                childList: true,
+                characterData: true,
+                subtree: true,
+            })
+        }
 
         // "Report a problem" the same, see js/report.js, with Copy: what it is about, to
         // paste in the forum. Its window is made the first time it is asked for
@@ -953,6 +987,31 @@ JqueryClass('appBar', {
         showZoom()
         mouseFirst.addListener(showZoom)
         self.on('fitviewport', showZoom)
+        // Sharing the pedalboard, see js/share.js, first: there and in the menu only where
+        // it can be, as the bar's own Share, which index.html shows once the online
+        // services' terms are agreed to, on a MOD device
+        var shareToggle = $('<span class="share-toggle" title="Share this pedalboard">')
+            .append('<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5.5" r="2.5"/>' +
+                    '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/>' +
+                    '<path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1"/></svg>')
+            .click(function () {
+                options.shareButton.click()
+            }).appendTo(titleTools)
+        var showShare = function () {
+            var button = options.shareButton[0]
+            var can = !! button && (button.style.display ? button.style.display != 'none'
+                                                         : ! options.shareButton.hasClass('mod-hidden'))
+            shareToggle.toggle(can)
+            var entry = options.shareButton.data('appBarItem')
+            entry && entry.toggle(can)
+        }
+        if (options.shareButton.length) {
+            new MutationObserver(showShare).observe(options.shareButton[0], {
+                attributes: true,
+                attributeFilter: ['style', 'class']
+            })
+        }
+        showShare()
         var gridToggle = $('<span class="grid-toggle">')
             .append('<i class="icon-th-large">')
             .toggleClass('locked', gridLocked)

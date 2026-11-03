@@ -2539,6 +2539,7 @@ body.app-bar-mode .mod-title-tools.touch #zoom-controllers {
 }
 
 .mod-title-tools .grid-toggle,
+.mod-title-tools .share-toggle,
 body.app-bar-mode .mod-title-tools #zoom-controllers > span {
     width: 32px;
     height: 32px;
@@ -2560,9 +2561,28 @@ body.app-bar-mode .mod-title-tools #zoom-controllers > span {
 }
 
 .mod-title-tools .grid-toggle:hover,
+.mod-title-tools .share-toggle:hover,
 body.app-bar-mode .mod-title-tools #zoom-controllers > span:hover {
     background-color: rgba(255, 255, 255, 0.1);
     opacity: 1;
+}
+
+/* sharing the pedalboard, see js/appbar.js: a thin line drawing, in the text's color */
+.mod-title-tools .share-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.mod-title-tools .share-toggle svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 /* while the board is in cells */
@@ -3448,6 +3468,18 @@ body.app-bar-mode #pedalboards-library .pedalboards .pedalboard .img {
 
 .mod-app-bar .task .go:active {
     background: #9e2a26;
+}
+
+/* Share, for sharing the pedalboard only, as the window's own, see js/appbar.js */
+.mod-app-bar > .dialog > .share-now {
+    display: none;
+}
+.mod-app-bar > .dialog.for-share > .share-now:not(.gone) {
+    display: block;
+}
+.mod-app-bar > .dialog > .share-now.disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 /* Copy, for "Report a problem" only, see js/appbar.js */
