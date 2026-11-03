@@ -383,7 +383,7 @@ $('document').ready(function() {
             snapshotSaveAsButton: $('#pedalboard-info .js-preset-save-as'),
             snapshotManageButton: $('#pedalboard-info .js-preset-manage'),
             snapshotDialogs: $('#pedal-presets-window, #save-preset'),
-            saveWindow: $('#save-pedalboard, #input-box, #cc-device-update-window'),
+            saveWindow: $('#save-pedalboard, #input-box, #cc-device-update-window, #mod-devices-window'),
             saveButton: $('#pedalboard-info .js-save'),
             cpuButton: $('#main-menu #mod-cpu'),
             cpuText: $('#cpu-bar-text'),
@@ -396,6 +396,7 @@ $('document').ready(function() {
             zoomControls: $('#zoom-controllers'),
             shareButton: $('#pedalboard-info .js-cloud'),
             shareWindow: $('#share-window'),
+            devicesWindow: $('#mod-devices-window'),
             menu: [
                 { title: 'Pedalboard', items: [
                     ['Pedalboards library', $('#main-menu #mod-pedalboard')],
@@ -408,6 +409,7 @@ $('document').ready(function() {
                     ['Bindings', $('#js-pb-addressing-toggle')],
                     ['CV ports', $('#js-cv-addressing-toggle')],
                     ['MIDI ports', $('#main-menu #mod-show-midi-port')],
+                    ['Control Chain', $('#main-menu #mod-devices')],
                 ]},
                 { title: 'Tools', items: [
                     ['File manager', $('#main-menu #mod-file-manager')],
@@ -1377,11 +1379,17 @@ $('document').ready(function() {
     <!-- END MOD UPDATE/UPGRADE BOX -->
 
     <!-- CONTROL CHAIN DEVICES BOX -->
-    <div id="mod-devices-window" class="mod-hidden">
-        <div class="box">
-            <div class="mod-devices-window-list">
-                <header><h4>Control Chain Devices</h4></header>
+    <div id="mod-devices-window" class="mod-sheet-popup mod-hidden">
+        <div class="box mod-sheet">
+            <header>
+                <h1>Control Chain devices</h1>
+                <span class="js-close close">&times;</span>
+            </header>
+            <div class="body mod-devices-window-list">
                 <ul></ul>
+            </div>
+            <div class="actions">
+                <button class="js-close btn btn-primary">Close</button>
             </div>
         </div>
     </div>

@@ -7181,6 +7181,52 @@ body.app-bar-mode #save-pedalboard .chips button.on {
     color: #fff;
 }
 
+/* The Control Chain devices connected, see js/cc-manager.js: a row each, its name over
+   its version and URI. Over main.less's own, a floating box by the bottom bar's icon */
+body.app-bar-mode #mod-devices-window {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1001;
+    max-width: none;
+    min-width: 0;
+    max-height: none;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 16px;
+}
+/* placed as the other sheets, which are mod-boxes, see .mod-sheet-popup above */
+body.app-bar-mode #mod-devices-window .mod-sheet {
+    position: absolute;
+}
+body.app-bar-mode #mod-devices-window ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #2a2a2a;
+    overflow: hidden;
+}
+body.app-bar-mode #mod-devices-window li {
+    padding: 10px 14px;
+    color: #999;
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-all;
+}
+body.app-bar-mode #mod-devices-window li + li {
+    border-top: 1px solid #353535;
+}
+body.app-bar-mode #mod-devices-window li b {
+    color: #fff;
+    font-size: 16px;
+    font-weight: normal;
+}
+
 /* The online services' terms, before the first online use: the text to read, with the
    links to the documents, over all else, see pedals.css */
 /* placed as the other sheets, over pedals.css's own, see .mod-sheet-popup above */

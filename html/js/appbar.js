@@ -1012,6 +1012,16 @@ JqueryClass('appBar', {
             })
         }
         showShare()
+        // The Control Chain devices' entry, in the menu only while there is one connected,
+        // see js/cc-manager.js, which lists them, a name each, or says there is none
+        var showDevices = function () {
+            var entry = $('#main-menu #mod-devices').data('appBarItem')
+            entry && entry.toggle(options.devicesWindow.find('li b').length > 0)
+        }
+        if (options.devicesWindow.length) {
+            new MutationObserver(showDevices).observe(options.devicesWindow.find('ul')[0], { childList: true })
+        }
+        showDevices()
         var gridToggle = $('<span class="grid-toggle">')
             .append('<i class="icon-th-large">')
             .toggleClass('locked', gridLocked)

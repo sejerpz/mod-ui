@@ -27,6 +27,12 @@ function ControlChainDeviceManager(options) {
         }
     })
 
+    // closed from its own ×, or Close, as well as from the icon that opened it
+    options.devicesWindow.find('.js-close').click(function () {
+        options.devicesWindow.hide()
+        return false
+    })
+
     options.updateInfoWindow.find('.js-cancel').click(function () {
         options.cancelDownload(function () {
             options.updateInfoWindow.hide()
