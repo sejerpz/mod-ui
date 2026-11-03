@@ -2890,13 +2890,30 @@ JqueryClass('pedalboard', {
             }
             $.each(neighbours[side], function (j, other) {
                 // above each, the way to unplug it: every cable between the two goes,
-                // and it leaves the column as the host confirms them gone
-                $('<div class="disconnect">').text('Disconnect').click(function () {
+                // and it leaves the column as the host confirms them gone. A long press
+                // lists them, by the ports they plug into, to unplug one by one
+                var held = false, timer = null
+                var button = $('<div class="disconnect">').text('Disconnect').click(function () {
+                    if (held) {
+                        held = false
+                        return false
+                    }
                     $.each(other.cables, function (k, cable) {
                         self.data('portDisconnect')(cable[0], cable[1], function () {})
                     })
                     return false
                 }).appendTo(column)
+                button.on('pointerdown', function () {
+                    held = false
+                    timer = setTimeout(function () {
+                        held = true
+                        self.pedalboard('pickCables', view.instance, side, other.cables)
+                    }, 500)
+                }).on('pointerup pointerleave pointercancel', function () {
+                    clearTimeout(timer)
+                }).on('contextmenu', function () {
+                    return false
+                })
                 var entry = $('<div class="entry">').appendTo(column)
                 if (other.instance) {
                     $('<img>').attr('src', other.thumbnail).appendTo(entry)
@@ -4745,6 +4762,10 @@ JqueryClass('pedalboard', {
         })
 
         element.click(function () {
+            // the plugin view's side columns unplug cables, plugin by plugin
+            if (self.data('pluginView')) {
+                return
+            }
             var connection = self.data('ongoingConnection')
             // in grid mode a jack is too small a target to tell one port from another: a
             // tap on it is a tap on its plugin, see connectToPlugin
@@ -5013,6 +5034,11 @@ JqueryClass('pedalboard', {
         self.pedalboard('spawnJack', element)
 
         element.click(function (e) {
+            // in the plugin view the inputs a cable could go to are behind the backdrop,
+            // and its side columns unplug the cables there are
+            if (self.data('pluginView')) {
+                return
+            }
             // Do not start connection if cv addressing checkbox or text input clicked
             if (!$(e.target).is('input') && !$(e.target).hasClass('checkmark') && !$(e.target).hasClass('checkbox-container')) {
               // POC: shift pressed toggle audio level monitoring
@@ -5207,6 +5233,12 @@ JqueryClass('pedalboard', {
             revert: 'invalid',
             revertDuration: 0,
             start: function () {
+                // in the plugin view a cable can be pulled out, not started: the inputs
+                // it could go to are behind the backdrop
+                if (self.data('pluginView') && ! jack.data('connected')) {
+                    return false
+                }
+
                 // Prevents dragging of whole pedalboard while jack is being dragged
                 self.pedalboard('preventDrag', true)
 
@@ -6766,6 +6798,29 @@ JqueryClass('pedalboard', {
         return true
     },
 
+    // The `cables` between the viewed plugin `instance` and one in the plugin view's
+    // `side` column in pickPort, under the ports of `instance` they plug into, to be
+    // unplugged one by one
+    pickCables: function (instance, side, cables) {
+        var self = $(this)
+        var mine = side == 'inputs' ? 1 : 0
+        var ports = [], byPort = {}
+        $.each(cables, function (i, cable) {
+            var port = cable[mine]
+            if (! byPort[port]) {
+                byPort[port] = []
+                ports.push(port)
+            }
+            byPort[port].push({ from: cable[0], to: cable[1], label: self.pedalboard('cableEnd', cable[1 - mine]) })
+        })
+        var choices = $.map(ports, function (port) {
+            return { port: port, connected: true, cables: byPort[port] }
+        })
+        self.pedalboard('pickPort', instance, side == 'inputs' ? 'input' : 'output', choices, null, function (from, to) {
+            self.data('portDisconnect')(from, to, function () {})
+        })
+    },
+
     // The other end of a cable listed in pickPort, the plugin and the name of `port`
     cableEnd: function (port) {
         var end = $(this).pedalboard('connectionSource', $(this).find('[mod-port="' + port + '"]'))
@@ -6923,18 +6978,22 @@ JqueryClass('pedalboard', {
 
         // by the plugin: its outputs on its right, its inputs on its left, in the window.
         // Again as cables are shown, hidden or unplugged, and it grows or shrinks
+        // the panel is zoomed for a finger, see --touch-zoom: measured on the screen,
+        // and placed in its own zoomed px
+        var zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch-zoom')) || 1
         var place = function () {
             var rect = plugin[0].getBoundingClientRect()
-            var width = panel.outerWidth(), height = panel.outerHeight()
+            var box = panel[0].getBoundingClientRect()
+            var width = box.width, height = box.height
             var gap = 12
             var left = dir == 'output' ? rect.right + gap : rect.left - gap - width
             if (left + width > window.innerWidth - gap || left < gap) {
                 left = dir == 'output' ? rect.left - gap - width : rect.right + gap
             }
             panel.css({
-                left: Math.max(gap, Math.min(left, window.innerWidth - width - gap)),
+                left: Math.max(gap, Math.min(left, window.innerWidth - width - gap)) / zoom,
                 top: Math.max(gap, Math.min(rect.top + rect.height / 2 - height / 2,
-                                            window.innerHeight - height - gap))
+                                            window.innerHeight - height - gap)) / zoom
             })
         }
         place()

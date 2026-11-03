@@ -214,6 +214,8 @@ body.app-bar-mode.grid-mode:not(.plugin-view) #pedalboard-dashboard .mod-pedal .
     background: rgba(17, 17, 17, 0.92);
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
     color: #fff;
+    /* sized for a finger, as the dock, see --touch-zoom */
+    zoom: var(--touch-zoom, 1);
 }
 
 .mod-port-picker-title {
@@ -3271,7 +3273,7 @@ body.narrow-screen .mod-plugin-view-side .entry .label {
     color: #888;
 }
 
-/* unplugs the entry under it */
+/* unplugs the entry under it, held down one cable at a time */
 .mod-plugin-view-side .disconnect {
     display: inline-block;
     margin-bottom: 4px;
