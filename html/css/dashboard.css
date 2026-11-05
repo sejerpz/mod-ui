@@ -682,13 +682,19 @@ svg .light {
     font-weight: bold;
     cursor: default;
 }
-/* a control waiting for "Learn from Dwarf": pulses until a knob or footswitch is used */
+/* the ring over a control waiting for "Learn from Dwarf": pulses until a knob or footswitch is used */
 .mod-hmi-learning {
-    animation: mod-hmi-learning 1s ease-in-out infinite alternate;
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    border: 3px solid #b44fc6;
+    border-radius: 8px;
+    box-shadow: 0 0 10px #b44fc6;
+    animation: mod-hmi-learning 0.8s ease-in-out infinite alternate;
 }
 @keyframes mod-hmi-learning {
-    from { outline: 2px solid rgba(136, 57, 150, 0.3); outline-offset: 2px; }
-    to   { outline: 2px solid rgba(136, 57, 150, 1);   outline-offset: 4px; }
+    from { opacity: 0.25; }
+    to   { opacity: 1; }
 }
 .mod-contextmenu-key {
     float: right;

@@ -3584,18 +3584,26 @@ JqueryClass('pedalboard', {
                     return
                 }
                 var icon = self.data('plugins')[instance]
-                var controls = symbol == ':bypass'
+                var control = symbol == ':bypass'
                     ? icon.find('[mod-role=bypass]')
-                    : icon.find('[mod-role=input-control-port], [mod-role=input-control-value]')
-                          .filter('[mod-port-symbol="' + symbol + '"]')
+                    : icon.find('[mod-role=input-control-port][mod-port-symbol="' + symbol + '"]')
+                // A ring over the control, in screen pixels. On the control itself it would
+                // shrink with the board's zoom (a fifth of a pixel zoomed out) and be clipped
+                // by the knob's box. Nothing moves under it: a click or a wheel ends the learn.
+                var ring = $()
+                if (control.length) {
+                    var r = control[0].getBoundingClientRect()
+                    ring = $('<div class="mod-hmi-learning">').appendTo('body')
+                        .css({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 })
+                }
                 hmiLearning = {
                     instance: instance,
                     symbol: symbol,
-                    controls: controls.addClass('mod-hmi-learning'),
+                    ring: ring,
                     notification: new Notification('info', 'Turn a knob or press a footswitch on the ' +
                                                    'device to assign it. Esc cancels.'),
                 }
-                $(document).on('mousedown.hmilearn', function () { hmiLearnEnd(true) })
+                $(document).on('mousedown.hmilearn wheel.hmilearn', function () { hmiLearnEnd(true) })
                            .on('keydown.hmilearn', function (e) {
                                if (e.key === 'Escape') {
                                    hmiLearnEnd(true)
@@ -4979,16 +4987,16 @@ function onPedalBackground(target, pedal) {
     return true
 }
 
-// The control waiting for "Learn from Dwarf", while it waits: { instance, symbol, controls,
+// The control waiting for "Learn from Dwarf", while it waits: { instance, symbol, ring,
 // notification }. One at a time, as on the host.
 var hmiLearning = null
 
-// Takes the waiting look off the control; cancel also tells mod-ui to stop waiting.
+// Takes the ring off the control; cancel also tells mod-ui to stop waiting.
 function hmiLearnEnd(cancel) {
     if (! hmiLearning) {
         return
     }
-    hmiLearning.controls.removeClass('mod-hmi-learning')
+    hmiLearning.ring.remove()
     hmiLearning.notification.close()
     hmiLearning = null
     $(document).off('.hmilearn')
