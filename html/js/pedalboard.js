@@ -323,10 +323,6 @@ JqueryClass('pedalboard', {
         // not serialised.
         self.data('teleportNamesRemembered', {})
 
-        // Items plugins add to every plugin's right-click menu (add_plugin_menu_items in
-        // modgui.js), by the instance that added them, so they go when that plugin does.
-        self.data('pluginMenuProviders', {})
-
         // teleported cables named by a map that arrived before their connection existed
         // (applyTeleports, during a bundle load), keyed "from -> to" same as the saved
         // form -- consumed by connect() once the cable actually shows up
@@ -1964,10 +1960,6 @@ JqueryClass('pedalboard', {
                     })
             },
             compareSnapshotSwitch: self.data('compareSnapshotSwitch'),
-            addPluginMenuProvider: function (provider) {
-                var providers = self.data('pluginMenuProviders')
-                ;(providers[instance] = providers[instance] || []).push(provider)
-            },
             compareSnapshotTake: self.data('compareSnapshotTake'),
             changePortMonitoring: self.data('changePortMonitoring'),
             isPortMonitored: self.data('isPortMonitored'),
@@ -2629,7 +2621,6 @@ JqueryClass('pedalboard', {
             }
 
             delete plugins[instance]
-            delete self.data('pluginMenuProviders')[instance]
             delete self.data('selected')[instance]
 
             // nothing else asks the canvas to reconsider its size after a removal, and
@@ -2791,7 +2782,6 @@ JqueryClass('pedalboard', {
                 }
             }
             self.data('plugins', {})
-            self.data('pluginMenuProviders', {})
 
             self.pedalboard('resetSize')
         } finally {
@@ -3513,9 +3503,8 @@ JqueryClass('pedalboard', {
     // How far a teleport's stub runs before it meets its box.
     // (TELEPORT_STUB is defined at the bottom of this file, beside cableDeltaX)
 
-    // A plugin's right-click menu: its everyday actions, whatever plugins on the board
-    // add for it (add_plugin_menu_items), its cables, and removal last. Empty when the
-    // instance is not a plugin that has finished loading.
+    // A plugin's right-click menu: its everyday actions, its cables, and removal last.
+    // Empty when the instance is not a plugin that has finished loading.
     pluginMenuItems: function (instance) {
         var self = $(this)
         var icon = self.data('plugins')[instance]
@@ -3525,10 +3514,6 @@ JqueryClass('pedalboard', {
         }
         var gui = icon.data('gui')
         var ports = icon.data('ports') || {}
-        var audio = ports.audio || {}
-        var portIds = function (list) {
-            return (list || []).map(function (port) { return instance + '/' + port.symbol })
-        }
 
         var everyday = [
             { label: 'Settings', action: function () { icon.data('settings').window('open') } },
@@ -3540,22 +3525,6 @@ JqueryClass('pedalboard', {
             // host, the lights and an addressing lock all behave as they do for a click
             everyday.push({ label: gui && gui.bypassed ? 'Enable' : 'Bypass',
                             action: function () { footswitch.trigger('click') } })
-        }
-
-        var target = {
-            instance: instance,
-            uri: icon.data('uri'),
-            label: gui ? (gui.label || (gui.effect ? gui.effect.label : '')) : '',
-            audioInputs: portIds(audio.input),
-            audioOutputs: portIds(audio.output),
-        }
-        var added = []
-        var providers = self.data('pluginMenuProviders')
-        for (var owner in providers) {
-            target.isSelf = owner === instance
-            for (var i = 0; i < providers[owner].length; i++) {
-                added = added.concat(pluginMenuCollect(providers[owner][i], $.extend({}, target)))
-            }
         }
 
         var cables = []
@@ -3594,7 +3563,15 @@ JqueryClass('pedalboard', {
 
         var removal = [{ label: 'Remove', action: function () { self.pedalboard('removePlugin', instance, ports) } }]
 
-        return pluginMenuAssemble([everyday, added, cables, removal])
+        // groups in order, a separator between the ones that are not empty
+        var items = []
+        ;[everyday, cables, removal].forEach(function (group) {
+            if (group.length && items.length) {
+                items.push({ separator: true })
+            }
+            items = items.concat(group)
+        })
+        return items
     },
 
     // The name of the point an output feeds, or null if it has none.

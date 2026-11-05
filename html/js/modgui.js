@@ -2571,17 +2571,6 @@ function GUI(effect, options) {
     this.jsStarted = false
 
     this.jsFuncs = {
-        // added in v4: let plugin js add items to the right-click menu of every plugin on
-        // the pedalboard, its own included. provider(target) is called each time a menu
-        // opens and returns [{ label, action, key }] (or nothing) for that plugin; target
-        // is { instance, uri, label, audioInputs, audioOutputs, isSelf }, the port lists
-        // as full port ids ("/graph/<instance>/<symbol>"). The items go when this plugin
-        // is removed. A no-op wherever mod-ui offers no plugin menu (feature-test it).
-        add_plugin_menu_items: function (provider) {
-            if (typeof provider === 'function' && options.addPluginMenuProvider) {
-                options.addPluginMenuProvider(provider)
-            }
-        },
         // added in v1: allow plugin js code to change plugin controls
         set_port_value: function (symbol, value) {
             self.setPortValue(symbol, value, "from-js")
@@ -2636,7 +2625,7 @@ function GUI(effect, options) {
             return
 
         // bump this everytime the data structure or functions change
-        event.api_version = 4
+        event.api_version = 3
 
         // normal data
         event.data     = self.jsData
