@@ -323,6 +323,10 @@ JqueryClass('pedalboard', {
         // not serialised.
         self.data('teleportNamesRemembered', {})
 
+        // Items plugins add to every plugin's right-click menu (add_plugin_menu_items in
+        // modgui.js), by the instance that added them, so they go when that plugin does.
+        self.data('pluginMenuProviders', {})
+
         // teleported cables named by a map that arrived before their connection existed
         // (applyTeleports, during a bundle load), keyed "from -> to" same as the saved
         // form -- consumed by connect() once the cable actually shows up
@@ -551,41 +555,36 @@ JqueryClass('pedalboard', {
                     break
                 }
             }
-            $('.mod-port-contextmenu').remove()
             var plural = targets.length > 1 ? 's' : ''
-            var menu = $('<div class="mod-port-contextmenu">')
-                .css({ left: e.clientX, top: e.clientY })
-                .appendTo('body')
-            var close = function () {
-                menu.remove()
-                $(document).off('.portcontextmenu')
+            showContextMenu(e.clientX, e.clientY, [
+                { label: (joining ? 'Join cable' : 'Split cable') + plural, key: TELEPORT_KEY,
+                  action: function () { self.pedalboard('toggleTeleport', targets) } },
+                { label: 'Toggle VU Meter' + plural, key: VUMETER_KEY,
+                  action: function () { self.pedalboard('togglePortsMonitoring', targets) } },
+                // same cables as the split: one jack of an expanded input, else all on the port
+                { label: 'Disconnect' + (targets.length > 1 ? ' all' : ''),
+                  action: function () {
+                      for (const target of targets) {
+                          self.pedalboard('disconnect', target)
+                      }
+                  } },
+            ])
+        })
+
+        // Right-clicking a plugin's body, or one of its ports with no cables, opens the
+        // plugin's menu. A port with cables never gets here: the port menu above runs
+        // first, being deeper in the pedal, and stops the event.
+        self.on('contextmenu', '[mod-instance]', function (e) {
+            if (self.pedalboard('connecting')) {
+                return
             }
-            var item = function (label, action, key) {
-                var row = $('<div>').text(label).appendTo(menu).on('click', function () {
-                    close()
-                    action()
-                })
-                // the shortcut, so the menu teaches it
-                if (key) {
-                    $('<span class="mod-contextmenu-key">').text(key).appendTo(row)
-                }
+            var items = self.pedalboard('pluginMenuItems', $(this).attr('mod-instance'))
+            if (! items.length) {
+                return
             }
-            item((joining ? 'Join cable' : 'Split cable') + plural, function () {
-                self.pedalboard('toggleTeleport', targets)
-            }, TELEPORT_KEY)
-             item(('Toggle VU Meter' + plural), function () {
-                self.pedalboard('togglePortsMonitoring', targets)
-            }, VUMETER_KEY)
-            // same cables as the split: one jack of an expanded input, else all on the port
-            item('Disconnect' + (targets.length > 1 ? ' all' : ''), function () {
-                for (const target of targets) {
-                    self.pedalboard('disconnect', target)
-                }
-            })
-            menu.on('mousedown', function (ev) {
-                ev.stopPropagation()
-            })
-            $(document).on('mousedown.portcontextmenu keydown.portcontextmenu wheel.portcontextmenu', close)
+            e.preventDefault()
+            e.stopPropagation()
+            showContextMenu(e.clientX, e.clientY, items)
         })
 
         // The mouse wheel is used to zoom in and out.
@@ -1965,6 +1964,10 @@ JqueryClass('pedalboard', {
                     })
             },
             compareSnapshotSwitch: self.data('compareSnapshotSwitch'),
+            addPluginMenuProvider: function (provider) {
+                var providers = self.data('pluginMenuProviders')
+                ;(providers[instance] = providers[instance] || []).push(provider)
+            },
             compareSnapshotTake: self.data('compareSnapshotTake'),
             changePortMonitoring: self.data('changePortMonitoring'),
             isPortMonitored: self.data('isPortMonitored'),
@@ -2626,6 +2629,7 @@ JqueryClass('pedalboard', {
             }
 
             delete plugins[instance]
+            delete self.data('pluginMenuProviders')[instance]
             delete self.data('selected')[instance]
 
             // nothing else asks the canvas to reconsider its size after a removal, and
@@ -2787,6 +2791,7 @@ JqueryClass('pedalboard', {
                 }
             }
             self.data('plugins', {})
+            self.data('pluginMenuProviders', {})
 
             self.pedalboard('resetSize')
         } finally {
@@ -3507,6 +3512,90 @@ JqueryClass('pedalboard', {
 
     // How far a teleport's stub runs before it meets its box.
     // (TELEPORT_STUB is defined at the bottom of this file, beside cableDeltaX)
+
+    // A plugin's right-click menu: its everyday actions, whatever plugins on the board
+    // add for it (add_plugin_menu_items), its cables, and removal last. Empty when the
+    // instance is not a plugin that has finished loading.
+    pluginMenuItems: function (instance) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        // host.js leaves a bare {} placeholder while /effect/get is in flight
+        if (! icon || ! icon.data) {
+            return []
+        }
+        var gui = icon.data('gui')
+        var ports = icon.data('ports') || {}
+        var audio = ports.audio || {}
+        var portIds = function (list) {
+            return (list || []).map(function (port) { return instance + '/' + port.symbol })
+        }
+
+        var everyday = [
+            { label: 'Settings', action: function () { icon.data('settings').window('open') } },
+            { label: 'Info', action: function () { self.data('showPluginInfo')(gui.effect) } },
+        ]
+        var footswitch = icon.find('[mod-role=bypass]').first()
+        if (footswitch.length) {
+            // clicked rather than set: the same path as the pedal's own footswitch, so the
+            // host, the lights and an addressing lock all behave as they do for a click
+            everyday.push({ label: gui && gui.bypassed ? 'Enable' : 'Bypass',
+                            action: function () { footswitch.trigger('click') } })
+        }
+
+        var target = {
+            instance: instance,
+            uri: icon.data('uri'),
+            label: gui ? (gui.label || (gui.effect ? gui.effect.label : '')) : '',
+            audioInputs: portIds(audio.input),
+            audioOutputs: portIds(audio.output),
+        }
+        var added = []
+        var providers = self.data('pluginMenuProviders')
+        for (var owner in providers) {
+            target.isSelf = owner === instance
+            for (var i = 0; i < providers[owner].length; i++) {
+                added = added.concat(pluginMenuCollect(providers[owner][i], $.extend({}, target)))
+            }
+        }
+
+        var cables = []
+        var jacks = []
+        self.data('connectionManager').iterateInstance(instance, function (jack) {
+            if (jack.data('connected')) {
+                jacks.push(jack)
+            }
+        })
+        if (jacks.length) {
+            var joining = jacks.every(function (j) { return j.data('teleported') })
+            cables.push({ label: (joining ? 'Join' : 'Split') + ' all cables',
+                          action: function () { self.pedalboard('toggleTeleport', jacks) } })
+        }
+        // every audio output, cabled or not: its spare jack carries it as origin
+        var outputJacks = []
+        icon.find('[mod-role=output-audio-port]').each(function () {
+            var spare = $(this).find('[mod-role=output-jack]').first()
+            if (spare.length) {
+                outputJacks.push(spare)
+            }
+        })
+        if (outputJacks.length) {
+            // no shortcut shown: VUMETER_KEY acts on the hovered port, not on a whole plugin
+            cables.push({ label: 'Toggle VU Meters',
+                          action: function () { self.pedalboard('togglePortsMonitoring', outputJacks) } })
+        }
+        if (jacks.length) {
+            cables.push({ label: 'Disconnect all',
+                          action: function () {
+                              for (var j = 0; j < jacks.length; j++) {
+                                  self.pedalboard('disconnect', jacks[j])
+                              }
+                          } })
+        }
+
+        var removal = [{ label: 'Remove', action: function () { self.pedalboard('removePlugin', instance, ports) } }]
+
+        return pluginMenuAssemble([everyday, added, cables, removal])
+    },
 
     // The name of the point an output feeds, or null if it has none.
     teleportName: function (port) {
@@ -4783,6 +4872,37 @@ var TELEPORT_KEY = 's'
 // matched case-insensitively with no modifier held. Named so a preference, if one
 // is ever added, has one place to write to.
 var VUMETER_KEY = 'v'
+
+// A small right-click menu at x, y (viewport coordinates). Items are { label, action,
+// key } -- key is a shortcut shown on the right, so the menu teaches it -- or
+// { separator: true }. Closes on the next click, key or wheel anywhere else.
+function showContextMenu(x, y, items) {
+    $('.mod-port-contextmenu').remove()
+    var menu = $('<div class="mod-port-contextmenu">')
+        .css({ left: x, top: y })
+        .appendTo('body')
+    var close = function () {
+        menu.remove()
+        $(document).off('.portcontextmenu')
+    }
+    items.forEach(function (it) {
+        if (it.separator) {
+            $('<hr class="mod-contextmenu-separator">').appendTo(menu)
+            return
+        }
+        var row = $('<div>').text(it.label).appendTo(menu).on('click', function () {
+            close()
+            it.action()
+        })
+        if (it.key) {
+            $('<span class="mod-contextmenu-key">').text(it.key).appendTo(row)
+        }
+    })
+    menu.on('mousedown', function (ev) {
+        ev.stopPropagation()
+    })
+    $(document).on('mousedown.portcontextmenu keydown.portcontextmenu wheel.portcontextmenu', close)
+}
 
 // Horizontal pull on a cable's bezier control points. The numbers below were
 // empirically obtained by trying several things. It gives us a pretty good result
