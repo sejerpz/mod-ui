@@ -567,11 +567,12 @@ JqueryClass('pedalboard', {
             ])
         })
 
-        // Right-clicking a plugin's body, or one of its ports with no cables, opens the
-        // plugin's menu. A port with cables never gets here: the port menu above runs
-        // first, being deeper in the pedal, and stops the event.
+        // Right-clicking a plugin's background opens the plugin's menu. A right-click on
+        // one of its controls is left alone, free for something about that control (an
+        // "assign to footswitch" on a knob, say); a port with cables never gets here at
+        // all, since the port menu above runs first and stops the event.
         self.on('contextmenu', '[mod-instance]', function (e) {
-            if (self.pedalboard('connecting')) {
+            if (self.pedalboard('connecting') || ! onPedalBackground(e.target, this)) {
                 return
             }
             var items = self.pedalboard('pluginMenuItems', $(this).attr('mod-instance'))
@@ -4849,6 +4850,25 @@ var TELEPORT_KEY = 's'
 // matched case-insensitively with no modifier held. Named so a preference, if one
 // is ever added, has one place to write to.
 var VUMETER_KEY = 'v'
+
+// Whether a right-click at target landed on a pedal's background rather than on one of
+// its controls: a knob or its value, the footswitch, presets, a port or jack, a form
+// element, or anything a modgui script made clickable -- there is no marker for those,
+// so a hand cursor counts as one. pedal is the plugin's icon element.
+var PEDAL_CONTROLS = '[mod-role=input-control-port], [mod-role=input-control-value], ' +
+                     '[mod-role=bypass], [mod-role=presets], [mod-port], [mod-role=output-jack], ' +
+                     'input, select, textarea, button, a, [contenteditable]'
+function onPedalBackground(target, pedal) {
+    if ($(target).closest(PEDAL_CONTROLS, pedal).length) {
+        return false
+    }
+    for (var node = target; node && node !== pedal; node = node.parentNode) {
+        if (node.nodeType === 1 && window.getComputedStyle(node).cursor === 'pointer') {
+            return false
+        }
+    }
+    return true
+}
 
 // A small right-click menu at x, y (viewport coordinates). Items are { label, action,
 // key } -- key is a shortcut shown on the right, so the menu teaches it -- or
