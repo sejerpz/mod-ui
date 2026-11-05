@@ -569,22 +569,10 @@ JqueryClass('pedalboard', {
 
         // Right-clicking one of a plugin's controls -- a knob or its value, a toggle, a list,
         // the footswitch -- opens that control's menu: what it is assigned to, and learning
-        // it from the device's knobs and footswitches or from MIDI.
-        self.on('contextmenu', '[mod-instance] [mod-role=input-control-port], ' +
-                               '[mod-instance] [mod-role=input-control-value], ' +
-                               '[mod-instance] [mod-role=bypass]', function (e) {
-            if (self.pedalboard('connecting')) {
-                return
-            }
-            var control = $(this)
-            var symbol = control.attr('mod-role') == 'bypass' ? ':bypass' : control.attr('mod-port-symbol')
-            var items = self.pedalboard('controlMenuItems', control.closest('[mod-instance]').attr('mod-instance'), symbol)
-            if (! items.length) {
-                return
-            }
-            e.preventDefault()
-            e.stopPropagation()
-            showContextMenu(e.clientX, e.clientY, items)
+        // it from the device's knobs and footswitches or from MIDI. The plugin's settings
+        // window, which lives outside the board, gets the same when it is made.
+        self.on('contextmenu', PLUGIN_CONTROLS, function (e) {
+            self.pedalboard('controlContextMenu', e, $(this).closest('[mod-instance]').attr('mod-instance'), this)
         })
 
         // Right-clicking a plugin's background opens the plugin's menu. A right-click on
@@ -2060,6 +2048,9 @@ JqueryClass('pedalboard', {
                 }
                 address.click(addressFactory(port))
             }
+            settings.on('contextmenu', PLUGIN_CONTROLS, function (e) {
+                self.pedalboard('controlContextMenu', e, instance, this)
+            })
 
             // Find elements with mod-role of audio/midi input/output ports and assign functionality to them
             var types = ['audio', 'midi', 'cv']
@@ -3527,7 +3518,8 @@ JqueryClass('pedalboard', {
     // Empty when the instance is not a plugin that has finished loading.
     // The menu of one of a plugin's controls: what it is assigned to (click that for the
     // addressing dialog), learning it from the device or from MIDI, and unassigning it.
-    controlMenuItems: function (instance, symbol) {
+    // control is the element right-clicked, on the board or in the settings window.
+    controlMenuItems: function (instance, symbol, control) {
         var self = $(this)
         var icon = self.data('plugins')[instance]
         // host.js leaves a bare {} placeholder while /effect/get is in flight
@@ -3556,7 +3548,7 @@ JqueryClass('pedalboard', {
         var actuators = hardware.hmiLearnActuators(instance, port)
         if (actuators.length) {
             items.push({ label: 'Learn from ' + (PLATFORM == 'dwarf' ? 'Dwarf' : 'device') + '...',
-                         action: function () { self.pedalboard('hmiLearn', instance, symbol, actuators) } })
+                         action: function () { self.pedalboard('hmiLearn', instance, symbol, actuators, control) } })
         }
         if (hardware.availableActuators(instance, port)[kMidiLearnURI]) {
             items.push({ label: 'MIDI Learn...', action: function () { hardware.midiLearn(instance, port) } })
@@ -3568,9 +3560,27 @@ JqueryClass('pedalboard', {
         return items[items.length - 1].separator ? [] : items
     },
 
+    // A right-click e on control, one of instance's PLUGIN_CONTROLS: opens its menu
+    controlContextMenu: function (e, instance, control) {
+        var self = $(this)
+        if (self.pedalboard('connecting')) {
+            return
+        }
+        var role = $(control).attr('mod-role')
+        var symbol = role == 'bypass' || role == 'bypass-address' ? ':bypass' : $(control).attr('mod-port-symbol')
+        var items = self.pedalboard('controlMenuItems', instance, symbol, control)
+        if (! items.length) {
+            return
+        }
+        e.preventDefault()
+        e.stopPropagation()
+        showContextMenu(e.clientX, e.clientY, items)
+    },
+
     // Waits for the next of these actuators to be turned or pressed on the device, and puts
     // the control on it (mod-ui does that, and says so with hw_map). Esc or a click cancels.
-    hmiLearn: function (instance, symbol, actuators) {
+    // control is the element the learn was asked from, which the ring goes round.
+    hmiLearn: function (instance, symbol, actuators, control) {
         var self = $(this)
         hmiLearnEnd(false) // the host cancels the previous learn itself
         $.ajax({
@@ -3583,19 +3593,12 @@ JqueryClass('pedalboard', {
                     new Notification('warn', "The device is not ready to learn yet, try again in a moment", 5000)
                     return
                 }
-                var icon = self.data('plugins')[instance]
-                var control = symbol == ':bypass'
-                    ? icon.find('[mod-role=bypass]')
-                    : icon.find('[mod-role=input-control-port][mod-port-symbol="' + symbol + '"]')
                 // A ring over the control, in screen pixels. On the control itself it would
                 // shrink with the board's zoom (a fifth of a pixel zoomed out) and be clipped
                 // by the knob's box. Nothing moves under it: a click or a wheel ends the learn.
-                var ring = $()
-                if (control.length) {
-                    var r = control[0].getBoundingClientRect()
-                    ring = $('<div class="mod-hmi-learning">').appendTo('body')
-                        .css({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 })
-                }
+                var r = control.getBoundingClientRect()
+                var ring = $('<div class="mod-hmi-learning">').appendTo('body')
+                    .css({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 })
                 hmiLearning = {
                     instance: instance,
                     symbol: symbol,
@@ -4975,6 +4978,12 @@ var VUMETER_KEY = 'v'
 var PEDAL_CONTROLS = '[mod-role=input-control-port], [mod-role=input-control-value], ' +
                      '[mod-role=bypass], [mod-role=presets], [mod-port], [mod-role=output-jack], ' +
                      'input, select, textarea, button, a, [contenteditable]'
+// A plugin's controls that have a menu of their own (controlMenuItems), on its pedal and in
+// its settings window: a knob, list or toggle, its value, the footswitch, and the buttons
+// that open the addressing dialog.
+var PLUGIN_CONTROLS = '[mod-role=input-control-port], [mod-role=input-control-value], ' +
+                      '[mod-role=input-control-address], [mod-role=bypass], [mod-role=bypass-address]'
+
 function onPedalBackground(target, pedal) {
     if ($(target).closest(PEDAL_CONTROLS, pedal).length) {
         return false
