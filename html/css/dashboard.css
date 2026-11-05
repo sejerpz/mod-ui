@@ -675,6 +675,21 @@ svg .light {
     background: #883996;
     color: #fff;
 }
+.mod-port-contextmenu > div.mod-contextmenu-title,
+.mod-port-contextmenu > div.mod-contextmenu-title:hover {
+    background: none;
+    color: #999;
+    font-weight: bold;
+    cursor: default;
+}
+/* a control waiting for "Learn from Dwarf": pulses until a knob or footswitch is used */
+.mod-hmi-learning {
+    animation: mod-hmi-learning 1s ease-in-out infinite alternate;
+}
+@keyframes mod-hmi-learning {
+    from { outline: 2px solid rgba(136, 57, 150, 0.3); outline-offset: 2px; }
+    to   { outline: 2px solid rgba(136, 57, 150, 1);   outline-offset: 4px; }
+}
 .mod-contextmenu-key {
     float: right;
     margin-left: 24px;

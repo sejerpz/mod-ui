@@ -567,10 +567,29 @@ JqueryClass('pedalboard', {
             ])
         })
 
+        // Right-clicking one of a plugin's controls -- a knob or its value, a toggle, a list,
+        // the footswitch -- opens that control's menu: what it is assigned to, and learning
+        // it from the device's knobs and footswitches or from MIDI.
+        self.on('contextmenu', '[mod-instance] [mod-role=input-control-port], ' +
+                               '[mod-instance] [mod-role=input-control-value], ' +
+                               '[mod-instance] [mod-role=bypass]', function (e) {
+            if (self.pedalboard('connecting')) {
+                return
+            }
+            var control = $(this)
+            var symbol = control.attr('mod-role') == 'bypass' ? ':bypass' : control.attr('mod-port-symbol')
+            var items = self.pedalboard('controlMenuItems', control.closest('[mod-instance]').attr('mod-instance'), symbol)
+            if (! items.length) {
+                return
+            }
+            e.preventDefault()
+            e.stopPropagation()
+            showContextMenu(e.clientX, e.clientY, items)
+        })
+
         // Right-clicking a plugin's background opens the plugin's menu. A right-click on
-        // one of its controls is left alone, free for something about that control (an
-        // "assign to footswitch" on a knob, say); a port with cables never gets here at
-        // all, since the port menu above runs first and stops the event.
+        // one of its controls opens that control's menu instead (above); a port with cables
+        // never gets here at all, since the port menu above runs first and stops the event.
         self.on('contextmenu', '[mod-instance]', function (e) {
             if (self.pedalboard('connecting') || ! onPedalBackground(e.target, this)) {
                 return
@@ -3506,6 +3525,96 @@ JqueryClass('pedalboard', {
 
     // A plugin's right-click menu: its everyday actions, its cables, and removal last.
     // Empty when the instance is not a plugin that has finished loading.
+    // The menu of one of a plugin's controls: what it is assigned to (click that for the
+    // addressing dialog), learning it from the device or from MIDI, and unassigning it.
+    controlMenuItems: function (instance, symbol) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        // host.js leaves a bare {} placeholder while /effect/get is in flight
+        var gui = icon && icon.data && icon.data('gui')
+        var port = gui && gui.controls[symbol]
+        if (! port) {
+            return []
+        }
+        var hardware = self.data('hardwareManager')
+        var current = hardware.addressingsData[instance + '/' + symbol]
+        var unassign = function () { hardware.unaddress(instance, port) }
+        // which control this is, so it is clear what gets assigned: "TubeWarmth · Drive"
+        var items = [{ title: (gui.label || gui.effect.label || gui.effect.name) + ' · ' + port.name }]
+
+        // a MIDI learn still waiting for a controller ends before anything else goes on the port
+        if (current && current.uri == kMidiLearnURI) {
+            return items.concat({ separator: true }, { label: 'Cancel MIDI Learn', action: unassign })
+        }
+
+        var assigned = hardware.addressingName(instance, symbol)
+        if (assigned) {
+            items.push({ label: 'Assigned to ' + assigned,
+                         action: function () { hardware.open(instance, port, gui.effect.label) } })
+        }
+        items.push({ separator: true })
+        var actuators = hardware.hmiLearnActuators(instance, port)
+        if (actuators.length) {
+            items.push({ label: 'Learn from ' + (PLATFORM == 'dwarf' ? 'Dwarf' : 'device') + '...',
+                         action: function () { self.pedalboard('hmiLearn', instance, symbol, actuators) } })
+        }
+        if (hardware.availableActuators(instance, port)[kMidiLearnURI]) {
+            items.push({ label: 'MIDI Learn...', action: function () { hardware.midiLearn(instance, port) } })
+        }
+        if (assigned) {
+            items.push({ label: 'Unassign', action: unassign })
+        }
+        // nothing to do with it (no device, no MIDI, nothing assigned): the browser's own menu
+        return items[items.length - 1].separator ? [] : items
+    },
+
+    // Waits for the next of these actuators to be turned or pressed on the device, and puts
+    // the control on it (mod-ui does that, and says so with hw_map). Esc or a click cancels.
+    hmiLearn: function (instance, symbol, actuators) {
+        var self = $(this)
+        hmiLearnEnd(false) // the host cancels the previous learn itself
+        $.ajax({
+            url: '/effect/parameter/hmi_learn' + instance + '/' + symbol,
+            type: 'POST',
+            data: JSON.stringify({ actuators: actuators }),
+            dataType: 'json',
+            success: function (ok) {
+                if (! ok) {
+                    new Notification('warn', "The device is not ready to learn yet, try again in a moment", 5000)
+                    return
+                }
+                var icon = self.data('plugins')[instance]
+                var controls = symbol == ':bypass'
+                    ? icon.find('[mod-role=bypass]')
+                    : icon.find('[mod-role=input-control-port], [mod-role=input-control-value]')
+                          .filter('[mod-port-symbol="' + symbol + '"]')
+                hmiLearning = {
+                    instance: instance,
+                    symbol: symbol,
+                    controls: controls.addClass('mod-hmi-learning'),
+                    notification: new Notification('info', 'Turn a knob or press a footswitch on the ' +
+                                                   'device to assign it. Esc cancels.'),
+                }
+                $(document).on('mousedown.hmilearn', function () { hmiLearnEnd(true) })
+                           .on('keydown.hmilearn', function (e) {
+                               if (e.key === 'Escape') {
+                                   hmiLearnEnd(true)
+                               }
+                           })
+            },
+            error: function () {
+                new Bug("Couldn't start learning from the device")
+            },
+        })
+    },
+
+    // mod-ui is done with a learn: assigned, cancelled, or the board changed under it
+    hmiLearnEnded: function (instance, symbol) {
+        if (hmiLearning && hmiLearning.instance == instance && hmiLearning.symbol == symbol) {
+            hmiLearnEnd(false)
+        }
+    },
+
     pluginMenuItems: function (instance) {
         var self = $(this)
         var icon = self.data('plugins')[instance]
@@ -4870,9 +4979,28 @@ function onPedalBackground(target, pedal) {
     return true
 }
 
+// The control waiting for "Learn from Dwarf", while it waits: { instance, symbol, controls,
+// notification }. One at a time, as on the host.
+var hmiLearning = null
+
+// Takes the waiting look off the control; cancel also tells mod-ui to stop waiting.
+function hmiLearnEnd(cancel) {
+    if (! hmiLearning) {
+        return
+    }
+    hmiLearning.controls.removeClass('mod-hmi-learning')
+    hmiLearning.notification.close()
+    hmiLearning = null
+    $(document).off('.hmilearn')
+    if (cancel) {
+        $.ajax({ url: '/effect/parameter/hmi_learn_cancel', type: 'POST' })
+    }
+}
+
 // A small right-click menu at x, y (viewport coordinates). Items are { label, action,
-// key } -- key is a shortcut shown on the right, so the menu teaches it -- or
-// { separator: true }. Closes on the next click, key or wheel anywhere else.
+// key } -- key is a shortcut shown on the right, so the menu teaches it -- { separator:
+// true }, or { title } for a heading that does nothing when clicked. Closes on the next
+// click, key or wheel anywhere else.
 function showContextMenu(x, y, items) {
     $('.mod-port-contextmenu').remove()
     var menu = $('<div class="mod-port-contextmenu">')
@@ -4885,6 +5013,10 @@ function showContextMenu(x, y, items) {
     items.forEach(function (it) {
         if (it.separator) {
             $('<hr class="mod-contextmenu-separator">').appendTo(menu)
+            return
+        }
+        if (it.title) {
+            $('<div class="mod-contextmenu-title">').text(it.title).appendTo(menu)
             return
         }
         var row = $('<div>').text(it.label).appendTo(menu).on('click', function () {
