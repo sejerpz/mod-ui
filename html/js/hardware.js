@@ -1985,6 +1985,90 @@ function HardwareManager(options) {
         })
     }
 
+    // Stops a MIDI learn that no controller has answered yet; callback only if it worked
+    this.midiUnlearn = function (instance, port, callback) {
+        var instanceAndSymbol = instance+"/"+port.symbol
+        var addressing = {
+            uri    : kMidiUnlearnURI,
+            label  : "",
+            minimum: port.ranges.minimum,
+            maximum: port.ranges.maximum,
+            value  : port.value,
+            steps  : 0,
+        }
+        options.address(instanceAndSymbol, addressing, function (ok) {
+            if (!ok) {
+                console.log("Failed to unmap for port " + port.symbol);
+                return;
+            }
+
+            remove_from_array(self.addressingsByActuator[kMidiLearnURI], instanceAndSymbol)
+
+            delete self.addressingsByPortSymbol[instanceAndSymbol]
+            delete self.addressingsData        [instanceAndSymbol]
+
+            // enable this control
+            options.setEnabled(instance, port.symbol, true)
+
+            callback()
+        })
+    }
+
+    // Takes a port off whatever it is addressed to, a MIDI learn still waiting included
+    this.unaddress = function (instance, port) {
+        var current = self.addressingsData[instance+"/"+port.symbol]
+        if (current && current.uri == kMidiLearnURI) {
+            self.midiUnlearn(instance, port, function () {})
+            return
+        }
+        self.addressNow(instance, port, {}, port.ranges.minimum, port.ranges.maximum, "", 0,
+                        false, null, null, null, null, 0, 0, null)
+    }
+
+    // Starts a MIDI learn for a port with the dialog's defaults: its full range, its name
+    this.midiLearn = function (instance, port) {
+        self.addressNow(instance, port, self.availableActuators(instance, port)[kMidiLearnURI],
+                        port.ranges.minimum, port.ranges.maximum, port.shortName || port.name, 33,
+                        false, null, null, null, null, 0, 0, null)
+    }
+
+    // The device's own knobs and footswitches a port can be learned onto. Groups are left
+    // out: they take two footswitches, and a learn is one turn or press.
+    this.hmiLearnActuators = function (instance, port) {
+        var available = self.availableActuators(instance, port)
+        return Object.keys(available).filter(function (uri) {
+            return startsWith(uri, deviceOption + "/") && !available[uri].actuator_group
+        })
+    }
+
+    // What a port is addressed to, in words for a menu ("Knob 1, page 2, sub-page 3"), or null
+    this.addressingName = function (instance, symbol) {
+        var addressing = self.addressingsData[instance+"/"+symbol]
+        if (!addressing || !addressing.uri || addressing.uri == kNullAddressURI) {
+            return null
+        }
+        if (addressing.uri == kMidiLearnURI) {
+            return "MIDI Learn (waiting for a controller)"
+        }
+        if (startsWith(addressing.uri, kMidiCustomPrefixURI)) {
+            return self.getMidiDisplayLabel(addressing)
+        }
+        if (addressing.uri == kBpmURI) {
+            return "Tempo"
+        }
+        var actuator = HARDWARE_PROFILE.concat(self.cvOutputPorts).find(function (a) {
+            return a.uri == addressing.uri
+        })
+        var name = actuator ? actuator.name : addressing.uri
+        if (addressing.page != null) {
+            name += ", page " + (parseInt(addressing.page) + 1) // a string when the dialog made it
+        }
+        if (addressing.subpage != null && actuator && actuator.subpages) {
+            name += ", sub-page " + (parseInt(addressing.subpage) + 1)
+        }
+        return name
+    }
+
     this.saveAddressing = function (
       instance,
       port,
@@ -2071,29 +2155,7 @@ function HardwareManager(options) {
 
         // if changing from midi-learn, unlearn first
         if (currentAddressing.uri == kMidiLearnURI) {
-            var addressing = {
-                uri    : kMidiUnlearnURI,
-                label  : labelValue,
-                minimum: minv,
-                maximum: maxv,
-                value  : port.value,
-                steps  : sensitivityValue,
-            }
-            options.address(instanceAndSymbol, addressing, function (ok) {
-                if (!ok) {
-                    console.log("Failed to unmap for port " + port.symbol);
-                    return;
-                }
-
-                // remove old one
-                remove_from_array(self.addressingsByActuator[kMidiLearnURI], instanceAndSymbol)
-
-                delete self.addressingsByPortSymbol[instanceAndSymbol]
-                delete self.addressingsData        [instanceAndSymbol]
-
-                // enable this control
-                options.setEnabled(instance, port.symbol, true)
-
+            self.midiUnlearn(instance, port, function () {
                 // now we can address if needed
                 if (actuator.uri) {
                   self.addressNow(
@@ -2335,6 +2397,11 @@ function HardwareManager(options) {
 
         delete self.addressingsByPortSymbol[instanceAndSymbol]
         delete self.addressingsData        [instanceAndSymbol]
+
+        // MIDI mappings are filed under kMidiLearnURI, not under their own custom URI
+        if (actuator_uri && startsWith(actuator_uri, kMidiCustomPrefixURI)) {
+            actuator_uri = kMidiLearnURI
+        }
 
         if (actuator_uri && actuator_uri != kNullAddressURI) {
             remove_from_array(self.addressingsByActuator[actuator_uri], instanceAndSymbol)

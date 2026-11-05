@@ -666,9 +666,35 @@ svg .light {
 .mod-port-contextmenu > div {
     padding: 6px 14px;
 }
+.mod-port-contextmenu > hr.mod-contextmenu-separator {
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid #3a3a3a;
+}
 .mod-port-contextmenu > div:hover {
     background: #883996;
     color: #fff;
+}
+.mod-port-contextmenu > div.mod-contextmenu-title,
+.mod-port-contextmenu > div.mod-contextmenu-title:hover {
+    background: none;
+    color: #999;
+    font-weight: bold;
+    cursor: default;
+}
+/* the ring over a control waiting for "Learn from Dwarf": pulses until a knob or footswitch is used */
+.mod-hmi-learning {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    border: 3px solid #b44fc6;
+    border-radius: 8px;
+    box-shadow: 0 0 10px #b44fc6;
+    animation: mod-hmi-learning 0.8s ease-in-out infinite alternate;
+}
+@keyframes mod-hmi-learning {
+    from { opacity: 0.25; }
+    to   { opacity: 1; }
 }
 .mod-contextmenu-key {
     float: right;

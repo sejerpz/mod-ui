@@ -303,6 +303,13 @@ $('document').ready(function() {
             return
         }
 
+        if (cmd == "hmi_learn_end") {
+            // a "Learn from Dwarf" is over: assigned (an hw_map came first), cancelled, or the board changed
+            data = data.split(" ", 2)
+            desktop.pedalboard.pedalboard('hmiLearnEnded', data[0], data[1])
+            return
+        }
+
         if (cmd == "cv_map") {
           data         = data.split(" ", 12)
           var instance = data[0]

@@ -551,41 +551,44 @@ JqueryClass('pedalboard', {
                     break
                 }
             }
-            $('.mod-port-contextmenu').remove()
             var plural = targets.length > 1 ? 's' : ''
-            var menu = $('<div class="mod-port-contextmenu">')
-                .css({ left: e.clientX, top: e.clientY })
-                .appendTo('body')
-            var close = function () {
-                menu.remove()
-                $(document).off('.portcontextmenu')
+            showContextMenu(e.clientX, e.clientY, [
+                { label: (joining ? 'Join cable' : 'Split cable') + plural, key: TELEPORT_KEY,
+                  action: function () { self.pedalboard('toggleTeleport', targets) } },
+                { label: 'Toggle VU Meter' + plural, key: VUMETER_KEY,
+                  action: function () { self.pedalboard('togglePortsMonitoring', targets) } },
+                // same cables as the split: one jack of an expanded input, else all on the port
+                { label: 'Disconnect' + (targets.length > 1 ? ' all' : ''),
+                  action: function () {
+                      for (const target of targets) {
+                          self.pedalboard('disconnect', target)
+                      }
+                  } },
+            ])
+        })
+
+        // Right-clicking one of a plugin's controls -- a knob or its value, a toggle, a list,
+        // the footswitch -- opens that control's menu: what it is assigned to, and learning
+        // it from the device's knobs and footswitches or from MIDI. The plugin's settings
+        // window, which lives outside the board, gets the same when it is made.
+        self.on('contextmenu', PLUGIN_CONTROLS, function (e) {
+            self.pedalboard('controlContextMenu', e, $(this).closest('[mod-instance]').attr('mod-instance'), this)
+        })
+
+        // Right-clicking a plugin's background opens the plugin's menu. A right-click on
+        // one of its controls opens that control's menu instead (above); a port with cables
+        // never gets here at all, since the port menu above runs first and stops the event.
+        self.on('contextmenu', '[mod-instance]', function (e) {
+            if (self.pedalboard('connecting') || ! onPedalBackground(e.target, this)) {
+                return
             }
-            var item = function (label, action, key) {
-                var row = $('<div>').text(label).appendTo(menu).on('click', function () {
-                    close()
-                    action()
-                })
-                // the shortcut, so the menu teaches it
-                if (key) {
-                    $('<span class="mod-contextmenu-key">').text(key).appendTo(row)
-                }
+            var items = self.pedalboard('pluginMenuItems', $(this).attr('mod-instance'))
+            if (! items.length) {
+                return
             }
-            item((joining ? 'Join cable' : 'Split cable') + plural, function () {
-                self.pedalboard('toggleTeleport', targets)
-            }, TELEPORT_KEY)
-             item(('Toggle VU Meter' + plural), function () {
-                self.pedalboard('togglePortsMonitoring', targets)
-            }, VUMETER_KEY)
-            // same cables as the split: one jack of an expanded input, else all on the port
-            item('Disconnect' + (targets.length > 1 ? ' all' : ''), function () {
-                for (const target of targets) {
-                    self.pedalboard('disconnect', target)
-                }
-            })
-            menu.on('mousedown', function (ev) {
-                ev.stopPropagation()
-            })
-            $(document).on('mousedown.portcontextmenu keydown.portcontextmenu wheel.portcontextmenu', close)
+            e.preventDefault()
+            e.stopPropagation()
+            showContextMenu(e.clientX, e.clientY, items)
         })
 
         // The mouse wheel is used to zoom in and out.
@@ -2045,6 +2048,9 @@ JqueryClass('pedalboard', {
                 }
                 address.click(addressFactory(port))
             }
+            settings.on('contextmenu', PLUGIN_CONTROLS, function (e) {
+                self.pedalboard('controlContextMenu', e, instance, this)
+            })
 
             // Find elements with mod-role of audio/midi input/output ports and assign functionality to them
             var types = ['audio', 'midi', 'cv']
@@ -3508,6 +3514,187 @@ JqueryClass('pedalboard', {
     // How far a teleport's stub runs before it meets its box.
     // (TELEPORT_STUB is defined at the bottom of this file, beside cableDeltaX)
 
+    // A plugin's right-click menu: its everyday actions, its cables, and removal last.
+    // Empty when the instance is not a plugin that has finished loading.
+    // The menu of one of a plugin's controls: what it is assigned to (click that for the
+    // addressing dialog), learning it from the device or from MIDI, and unassigning it.
+    // control is the element right-clicked, on the board or in the settings window.
+    controlMenuItems: function (instance, symbol, control) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        // host.js leaves a bare {} placeholder while /effect/get is in flight
+        var gui = icon && icon.data && icon.data('gui')
+        var port = gui && gui.controls[symbol]
+        if (! port) {
+            return []
+        }
+        var hardware = self.data('hardwareManager')
+        var current = hardware.addressingsData[instance + '/' + symbol]
+        var unassign = function () { hardware.unaddress(instance, port) }
+        // which control this is, so it is clear what gets assigned: "TubeWarmth · Drive"
+        var items = [{ title: (gui.label || gui.effect.label || gui.effect.name) + ' · ' + port.name }]
+
+        // a MIDI learn still waiting for a controller ends before anything else goes on the port
+        if (current && current.uri == kMidiLearnURI) {
+            return items.concat({ separator: true }, { label: 'Cancel MIDI Learn', action: unassign })
+        }
+
+        var assigned = hardware.addressingName(instance, symbol)
+        if (assigned) {
+            items.push({ label: 'Assigned to ' + assigned,
+                         action: function () { hardware.open(instance, port, gui.effect.label) } })
+        }
+        items.push({ separator: true })
+        var actuators = hardware.hmiLearnActuators(instance, port)
+        if (actuators.length) {
+            items.push({ label: 'Learn from ' + (PLATFORM == 'dwarf' ? 'Dwarf' : 'device') + '...',
+                         action: function () { self.pedalboard('hmiLearn', instance, symbol, actuators, control) } })
+        }
+        if (hardware.availableActuators(instance, port)[kMidiLearnURI]) {
+            items.push({ label: 'MIDI Learn...', action: function () { hardware.midiLearn(instance, port) } })
+        }
+        if (assigned) {
+            items.push({ label: 'Unassign', action: unassign })
+        }
+        // nothing to do with it (no device, no MIDI, nothing assigned): the browser's own menu
+        return items[items.length - 1].separator ? [] : items
+    },
+
+    // A right-click e on control, one of instance's PLUGIN_CONTROLS: opens its menu
+    controlContextMenu: function (e, instance, control) {
+        var self = $(this)
+        if (self.pedalboard('connecting')) {
+            return
+        }
+        var role = $(control).attr('mod-role')
+        var symbol = role == 'bypass' || role == 'bypass-address' ? ':bypass' : $(control).attr('mod-port-symbol')
+        var items = self.pedalboard('controlMenuItems', instance, symbol, control)
+        if (! items.length) {
+            return
+        }
+        e.preventDefault()
+        e.stopPropagation()
+        showContextMenu(e.clientX, e.clientY, items)
+    },
+
+    // Waits for the next of these actuators to be turned or pressed on the device, and puts
+    // the control on it (mod-ui does that, and says so with hw_map). Esc or a click cancels.
+    // control is the element the learn was asked from, which the ring goes round.
+    hmiLearn: function (instance, symbol, actuators, control) {
+        var self = $(this)
+        hmiLearnEnd(false) // the host cancels the previous learn itself
+        $.ajax({
+            url: '/effect/parameter/hmi_learn' + instance + '/' + symbol,
+            type: 'POST',
+            data: JSON.stringify({ actuators: actuators }),
+            dataType: 'json',
+            success: function (ok) {
+                if (! ok) {
+                    new Notification('warn', "The device is not ready to learn yet, try again in a moment", 5000)
+                    return
+                }
+                // A ring over the control, in screen pixels. On the control itself it would
+                // shrink with the board's zoom (a fifth of a pixel zoomed out) and be clipped
+                // by the knob's box. Nothing moves under it: a click or a wheel ends the learn.
+                var r = control.getBoundingClientRect()
+                var ring = $('<div class="mod-hmi-learning">').appendTo('body')
+                    .css({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 })
+                hmiLearning = {
+                    instance: instance,
+                    symbol: symbol,
+                    ring: ring,
+                    notification: new Notification('info', 'Turn a knob or press a footswitch on the ' +
+                                                   'device to assign it. Esc cancels.'),
+                }
+                $(document).on('mousedown.hmilearn wheel.hmilearn', function () { hmiLearnEnd(true) })
+                           .on('keydown.hmilearn', function (e) {
+                               if (e.key === 'Escape') {
+                                   hmiLearnEnd(true)
+                               }
+                           })
+            },
+            error: function () {
+                new Bug("Couldn't start learning from the device")
+            },
+        })
+    },
+
+    // mod-ui is done with a learn: assigned, cancelled, or the board changed under it
+    hmiLearnEnded: function (instance, symbol) {
+        if (hmiLearning && hmiLearning.instance == instance && hmiLearning.symbol == symbol) {
+            hmiLearnEnd(false)
+        }
+    },
+
+    pluginMenuItems: function (instance) {
+        var self = $(this)
+        var icon = self.data('plugins')[instance]
+        // host.js leaves a bare {} placeholder while /effect/get is in flight
+        if (! icon || ! icon.data) {
+            return []
+        }
+        var gui = icon.data('gui')
+        var ports = icon.data('ports') || {}
+
+        var everyday = [
+            { label: 'Settings', action: function () { icon.data('settings').window('open') } },
+            { label: 'Info', action: function () { self.data('showPluginInfo')(gui.effect) } },
+        ]
+        var footswitch = icon.find('[mod-role=bypass]').first()
+        if (footswitch.length) {
+            // clicked rather than set: the same path as the pedal's own footswitch, so the
+            // host, the lights and an addressing lock all behave as they do for a click
+            everyday.push({ label: gui && gui.bypassed ? 'Enable' : 'Bypass',
+                            action: function () { footswitch.trigger('click') } })
+        }
+
+        var cables = []
+        var jacks = []
+        self.data('connectionManager').iterateInstance(instance, function (jack) {
+            if (jack.data('connected')) {
+                jacks.push(jack)
+            }
+        })
+        if (jacks.length) {
+            var joining = jacks.every(function (j) { return j.data('teleported') })
+            cables.push({ label: (joining ? 'Join' : 'Split') + ' all cables',
+                          action: function () { self.pedalboard('toggleTeleport', jacks) } })
+        }
+        // every audio output, cabled or not: its spare jack carries it as origin
+        var outputJacks = []
+        icon.find('[mod-role=output-audio-port]').each(function () {
+            var spare = $(this).find('[mod-role=output-jack]').first()
+            if (spare.length) {
+                outputJacks.push(spare)
+            }
+        })
+        if (outputJacks.length) {
+            // no shortcut shown: VUMETER_KEY acts on the hovered port, not on a whole plugin
+            cables.push({ label: 'Toggle VU Meters',
+                          action: function () { self.pedalboard('togglePortsMonitoring', outputJacks) } })
+        }
+        if (jacks.length) {
+            cables.push({ label: 'Disconnect all',
+                          action: function () {
+                              for (var j = 0; j < jacks.length; j++) {
+                                  self.pedalboard('disconnect', jacks[j])
+                              }
+                          } })
+        }
+
+        var removal = [{ label: 'Remove', action: function () { self.pedalboard('removePlugin', instance, ports) } }]
+
+        // groups in order, a separator between the ones that are not empty
+        var items = []
+        ;[everyday, cables, removal].forEach(function (group) {
+            if (group.length && items.length) {
+                items.push({ separator: true })
+            }
+            items = items.concat(group)
+        })
+        return items
+    },
+
     // The name of the point an output feeds, or null if it has none.
     teleportName: function (port) {
         var self = $(this)
@@ -4783,6 +4970,85 @@ var TELEPORT_KEY = 's'
 // matched case-insensitively with no modifier held. Named so a preference, if one
 // is ever added, has one place to write to.
 var VUMETER_KEY = 'v'
+
+// Whether a right-click at target landed on a pedal's background rather than on one of
+// its controls: a knob or its value, the footswitch, presets, a port or jack, a form
+// element, or anything a modgui script made clickable -- there is no marker for those,
+// so a hand cursor counts as one. pedal is the plugin's icon element.
+var PEDAL_CONTROLS = '[mod-role=input-control-port], [mod-role=input-control-value], ' +
+                     '[mod-role=bypass], [mod-role=presets], [mod-port], [mod-role=output-jack], ' +
+                     'input, select, textarea, button, a, [contenteditable]'
+// A plugin's controls that have a menu of their own (controlMenuItems), on its pedal and in
+// its settings window: a knob, list or toggle, its value, the footswitch, and the buttons
+// that open the addressing dialog.
+var PLUGIN_CONTROLS = '[mod-role=input-control-port], [mod-role=input-control-value], ' +
+                      '[mod-role=input-control-address], [mod-role=bypass], [mod-role=bypass-address]'
+
+function onPedalBackground(target, pedal) {
+    if ($(target).closest(PEDAL_CONTROLS, pedal).length) {
+        return false
+    }
+    for (var node = target; node && node !== pedal; node = node.parentNode) {
+        if (node.nodeType === 1 && window.getComputedStyle(node).cursor === 'pointer') {
+            return false
+        }
+    }
+    return true
+}
+
+// The control waiting for "Learn from Dwarf", while it waits: { instance, symbol, ring,
+// notification }. One at a time, as on the host.
+var hmiLearning = null
+
+// Takes the ring off the control; cancel also tells mod-ui to stop waiting.
+function hmiLearnEnd(cancel) {
+    if (! hmiLearning) {
+        return
+    }
+    hmiLearning.ring.remove()
+    hmiLearning.notification.close()
+    hmiLearning = null
+    $(document).off('.hmilearn')
+    if (cancel) {
+        $.ajax({ url: '/effect/parameter/hmi_learn_cancel', type: 'POST' })
+    }
+}
+
+// A small right-click menu at x, y (viewport coordinates). Items are { label, action,
+// key } -- key is a shortcut shown on the right, so the menu teaches it -- { separator:
+// true }, or { title } for a heading that does nothing when clicked. Closes on the next
+// click, key or wheel anywhere else.
+function showContextMenu(x, y, items) {
+    $('.mod-port-contextmenu').remove()
+    var menu = $('<div class="mod-port-contextmenu">')
+        .css({ left: x, top: y })
+        .appendTo('body')
+    var close = function () {
+        menu.remove()
+        $(document).off('.portcontextmenu')
+    }
+    items.forEach(function (it) {
+        if (it.separator) {
+            $('<hr class="mod-contextmenu-separator">').appendTo(menu)
+            return
+        }
+        if (it.title) {
+            $('<div class="mod-contextmenu-title">').text(it.title).appendTo(menu)
+            return
+        }
+        var row = $('<div>').text(it.label).appendTo(menu).on('click', function () {
+            close()
+            it.action()
+        })
+        if (it.key) {
+            $('<span class="mod-contextmenu-key">').text(it.key).appendTo(row)
+        }
+    })
+    menu.on('mousedown', function (ev) {
+        ev.stopPropagation()
+    })
+    $(document).on('mousedown.portcontextmenu keydown.portcontextmenu wheel.portcontextmenu', close)
+}
 
 // Horizontal pull on a cable's bezier control points. The numbers below were
 // empirically obtained by trying several things. It gives us a pretty good result
