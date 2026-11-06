@@ -130,7 +130,13 @@ class SocketSerial(object):
         pass
 
     def flushInput(self):
-        pass
+        # as on a serial line: drop what arrived and was not read, e.g. a late answer to a ping already resent
+        while True:
+            try:
+                if not self.sock.recv(4096):
+                    break
+            except (BlockingIOError, OSError):
+                break
 
     def flushOutput(self):
         pass
