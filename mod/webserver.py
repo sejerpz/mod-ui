@@ -1862,19 +1862,14 @@ class PedalboardTeleports(JsonRequestHandler):
         self.write(True)
 
 class PedalboardHMIWidgets(JsonRequestHandler):
-    # What the display shows above the knobs, column by column: the knob addressing, or a widget a plugin draws.
+    # The widgets of the board and where they are placed, for the Display dialog. The dialog works out the bindings
+    # for the suggested ports itself, from the controls and addressings the page already knows.
     def get(self):
         host = SESSION.host
-        # the knobs are where subpages live, the first one tells how many
-        subpages = 1
-        for actuator in host.descriptor.get('actuators', []):
-            if actuator.get('subpages'):
-                subpages = len(actuator['subpages'])
-                break
         self.write({
-            'columns'  : len(host.hmi_widget_columns()),
+            'areas'    : host.hmi_widget_areas(),
             'pages'    : host.addressings.addressing_pages or 1,
-            'subpages' : subpages if host.addressings.has_hmi_subpages else 1,
+            'subpages' : host.hmi_widget_subpages(),
             'layout'   : host.hmi_widgets,
             'available': host.hmi_widgets_available(),
         })

@@ -4402,22 +4402,65 @@ class Host(object):
     # -----------------------------------------------------------------------------------------------------------------
     # HMI widgets
     #
-    # The user decides, for each column of the display above the knobs, whether it shows the knob addressing or a
-    # widget a plugin draws. The firmware is told about every area of every page up front, so switching pages needs
-    # no round trip; mod-host is only told about the widgets in view, as only those draw.
-
-    def hmi_widget_columns(self):
-        # [x, y, width, height] of each column in display coordinates, from the hardware descriptor
-        return [c for c in self.descriptor.get('hmi_widget_columns', []) if isinstance(c, list) and len(c) == 4]
+    # The user places plugin widgets on the areas of the display, page by page and subpage by subpage, from the
+    # Display dialog. The areas come from the hardware descriptor: a rectangle in display coordinates, the cells it
+    # takes (two areas sharing a cell exclude each other) and whether it follows the subpage. The firmware is told
+    # about every placed area of every page up front, so switching pages needs no round trip; mod-host is only told
+    # about the widgets in view, as only those draw.
 
     # What hmi-widgets.json holds and which revision of it: the file stays on people's devices long after this code
     # changes, so a later mod-ui must be able to tell what it is reading and migrate it. Bump the version whenever
     # an older mod-ui would misread the layout; one that only adds fields it can skip keeps the version.
     HMI_WIDGETS_FILE_FORMAT  = "https://github.com/sejerpz/alabs-hmi-widgets#WidgetLayout"
-    HMI_WIDGETS_FILE_VERSION = 1
+    HMI_WIDGETS_FILE_VERSION = 2
 
     # ALABS_HMI_PixelFormat, as the hardware descriptor names them
     HMI_WIDGET_PIXEL_FORMATS = ('mono1', 'gray4', 'rgb565', 'rgb888')
+
+    def hmi_widget_areas(self):
+        """
+        The areas of the display in the order the device lists them, each a dict with 'id', 'name', 'rect'
+        [x, y, width, height], 'cells' and 'subpages'. The descriptor gives 'hmi_widget_areas' as a list of areas
+        with an 'id', or as an object keyed by id, then ordered by id: a JSON object has no order of its own, and
+        the order breaks ties when the dialog looks for the area closest to a widget's natural size.
+        """
+        raw = self.descriptor.get('hmi_widget_areas')
+        if isinstance(raw, dict):
+            raw = [dict(value, id=key) for key, value in sorted(raw.items()) if isinstance(value, dict)]
+        elif not isinstance(raw, list):
+            return []
+
+        areas, seen = [], set()
+        for area in raw:
+            if not isinstance(area, dict):
+                continue
+            ident, rect, cells = area.get('id'), area.get('rect'), area.get('cells')
+            if not isinstance(ident, str) or not ident or ident in seen:
+                continue
+            if not isinstance(rect, list) or len(rect) != 4 or not all(isinstance(v, int) for v in rect):
+                continue
+            if rect[2] <= 0 or rect[3] <= 0:
+                continue
+            if not isinstance(cells, list) or not cells or not all(isinstance(c, str) for c in cells):
+                continue
+            seen.add(ident)
+            areas.append({
+                'id'      : ident,
+                'name'    : str(area.get('name') or ident),
+                'rect'    : list(rect),
+                'cells'   : sorted(set(cells)),
+                'subpages': area.get('subpages', True) is not False,
+            })
+        return areas
+
+    def hmi_widget_subpages(self):
+        # how many subpages the display has: the knobs are where subpages live, the first one tells how many
+        if not self.addressings.has_hmi_subpages:
+            return 1
+        for actuator in self.descriptor.get('actuators', []):
+            if actuator.get('subpages'):
+                return len(actuator['subpages'])
+        return 1
 
     def hmi_widget_pixel_format(self):
         # the pixel format of the display, mono when the descriptor does not say
@@ -4426,18 +4469,18 @@ class Host(object):
         except ValueError:
             return 0
 
-    def hmi_widget_fullscreen(self):
-        # [x, y, width, height] of the whole display for full screen widgets, None if the device has none
-        rect = self.descriptor.get('hmi_widget_fullscreen')
-        return rect if isinstance(rect, list) and len(rect) == 4 else None
+    @staticmethod
+    def hmi_widget_fits(widget, area):
+        # a missing minimum counts as 1 pixel: the widget fits any area
+        return (area['rect'][2] >= max(1, widget.get('minWidth') or 0) and
+                area['rect'][3] >= max(1, widget.get('minHeight') or 0))
 
-    def hmi_widget_area(self, widget):
-        if widget.get('fullscreen'):
-            return tuple(self.hmi_widget_fullscreen())
-        columns = self.hmi_widget_columns()
-        first, last = columns[widget['column']], columns[widget['column'] + widget['columns'] - 1]
-        x, y, _, height = first
-        return x, y, last[0] + last[2] - x, height
+    @staticmethod
+    def hmi_widgets_overlap(page, subpage, area, other_page, other_subpage, other_area):
+        # an area that does not follow the subpage (subpage None) is there on every subpage of its page
+        if page != other_page or not set(area['cells']) & set(other_area['cells']):
+            return False
+        return subpage is None or other_subpage is None or subpage == other_subpage
 
     def hmi_widget_instance_id(self, instance):
         # None for an instance that is not, or no longer, on the board
@@ -4460,21 +4503,31 @@ class Host(object):
         return dict((w['symbol'], w) for w in widgets if w.get('formats', 1) & format_bit)
 
     def hmi_widgets_available(self):
+        """The widgets of the plugins on the board that fit at least one area of this display."""
+        areas = self.hmi_widget_areas()
         available = []
-        has_fullscreen = self.hmi_widget_fullscreen() is not None
         for instance_id, plugin in self.plugins.items():
             if instance_id == PEDALBOARD_INSTANCE_ID:
                 continue
-            for symbol, widget in self.hmi_widget_declarations(plugin['instance']).items():
-                fullscreen = bool(widget.get('fullscreen'))
-                if fullscreen and not has_fullscreen:
+            try:
+                plugin_name = get_plugin_info(plugin['uri'])['name']
+            except Exception:
+                plugin_name = plugin['instance']
+            declarations = self.hmi_widget_declarations(plugin['instance'])
+            for symbol in sorted(declarations):
+                widget = declarations[symbol]
+                if not any(self.hmi_widget_fits(widget, area) for area in areas):
                     continue
                 available.append({
-                    'instance'  : plugin['instance'],
-                    'symbol'    : symbol,
-                    'name'      : widget['name'],
-                    'columns'   : widget['columns'],
-                    'fullscreen': fullscreen,
+                    'instance'      : plugin['instance'],
+                    'plugin'        : plugin_name,
+                    'symbol'        : symbol,
+                    'name'          : widget['name'],
+                    'minWidth'      : widget.get('minWidth') or 0,
+                    'minHeight'     : widget.get('minHeight') or 0,
+                    'naturalWidth'  : widget.get('naturalWidth') or 0,
+                    'naturalHeight' : widget.get('naturalHeight') or 0,
+                    'suggestedPorts': widget.get('suggestedPorts') or [],
                 })
         return available
 
@@ -4483,51 +4536,60 @@ class Host(object):
 
     def hmi_widgets_validate(self, layout):
         """
-        The entries of `layout` that can be placed: a widget the plugin declares, within the columns of the display,
-        not overlapping one placed before it on the same page and subpage. Each gets its 'columns' filled in.
-        A full screen widget takes every column of its page and subpage, and gets 'fullscreen' too.
+        The entries of `layout` that can be placed: a widget the plugin declares, on an area of the display it fits
+        in, on a page and subpage that exist, not overlapping one placed before it. The same widget may be placed
+        on more than one area. An area that does not follow the subpage takes no 'subpage'.
         """
-        ncolumns = len(self.hmi_widget_columns())
+        areas = dict((area['id'], area) for area in self.hmi_widget_areas())
         pages = self.addressings.addressing_pages or 1
-        valid, taken = [], set()
+        subpages = self.hmi_widget_subpages()
+        valid, placed = [], []
 
         for entry in layout if isinstance(layout, list) else []:
             try:
-                page, subpage, column = int(entry['page']), int(entry['subpage']), int(entry['column'])
+                page = int(entry['page'])
+                area = areas[str(entry['area'])]
                 instance, symbol = str(entry['instance']), str(entry['symbol'])
             except (KeyError, TypeError, ValueError):
                 continue
 
-            declared = self.hmi_widget_declarations(instance).get(symbol)
-            if declared is None or page < 0 or page >= pages or subpage < 0:
+            if page < 0 or page >= pages:
                 continue
 
-            fullscreen = bool(declared.get('fullscreen'))
-            if fullscreen:
-                if self.hmi_widget_fullscreen() is None:
+            subpage = None
+            if area['subpages']:
+                try:
+                    subpage = int(entry['subpage'])
+                except (KeyError, TypeError, ValueError):
                     continue
-                column, span = 0, ncolumns
-            else:
-                span = declared['columns']
+                if subpage < 0 or subpage >= subpages:
+                    continue
 
-            cells = set((page, subpage, c) for c in range(column, column + span))
-            if column < 0 or column + span > ncolumns or cells & taken:
+            declared = self.hmi_widget_declarations(instance).get(symbol)
+            if declared is None or not self.hmi_widget_fits(declared, area):
                 continue
 
-            taken |= cells
+            if any(self.hmi_widgets_overlap(page, subpage, area, p, s, a) for p, s, a in placed):
+                continue
+
+            placed.append((page, subpage, area))
             entry = {
                 'page'    : page,
-                'subpage' : subpage,
-                'column'  : column,
-                'columns' : span,
+                'area'    : area['id'],
                 'instance': instance,
                 'symbol'  : symbol,
             }
-            if fullscreen:
-                entry['fullscreen'] = True
+            if subpage is not None:
+                entry['subpage'] = subpage
             valid.append(entry)
 
         return valid
+
+    def hmi_widget_rect(self, widget):
+        for area in self.hmi_widget_areas():
+            if area['id'] == widget['area']:
+                return tuple(area['rect'])
+        return None
 
     def load_pb_hmi_widgets(self, bundlepath):
         data = safe_json_load(os.path.join(bundlepath, "hmi-widgets.json"), dict)
@@ -4541,6 +4603,10 @@ class Host(object):
         if not isinstance(version, int) or version > self.HMI_WIDGETS_FILE_VERSION:
             logging.warning("hmi-widgets.json version %s is newer than this mod-ui reads, keeping it as is", version)
             self.hmi_widgets_kept = data
+            return
+
+        # version 1 placed widgets by columns, and was never released
+        if version < self.HMI_WIDGETS_FILE_VERSION:
             return
 
         self.hmi_widgets = self.hmi_widgets_validate(data.get('widgets'))
@@ -4564,15 +4630,18 @@ class Host(object):
                 self.hmi_widgets_shown = {}
                 yield gen.Task(self.send_notmodified, "hmi_widget_hide -1")
 
-            columns = self.hmi_widget_columns()
-
-            if send_hmi and self.hmi.initialized and columns:
+            if send_hmi and self.hmi.initialized and self.hmi_widget_areas():
                 yield gen.Task(self.hmi.send, "%s -1" % CMD_WIDGET_AREA_REMOVE)
 
                 for index, widget in enumerate(self.hmi_widgets):
-                    x, y, width, height = self.hmi_widget_area(widget)
+                    rect = self.hmi_widget_rect(widget)
+                    if rect is None:
+                        continue
+                    x, y, width, height = rect
+                    # -1: an area that does not follow the subpage is on every subpage of its page
+                    subpage = widget.get('subpage', -1)
                     yield gen.Task(self.hmi.send, "%s %d %d %d %d %d %d %d" % (CMD_WIDGET_AREA_ADD,
-                                                                                 widget['page'], widget['subpage'],
+                                                                                 widget['page'], subpage,
                                                                                  index + 1, x, y, width, height))
 
             yield gen.Task(self.hmi_widgets_update_visibility)
@@ -4615,24 +4684,24 @@ class Host(object):
 
         wanted = {}
         for index, widget in enumerate(self.hmi_widgets):
-            if widget['page'] != page or widget['subpage'] != subpage:
+            if widget['page'] != page or widget.get('subpage', subpage) != subpage:
                 continue
+            rect = self.hmi_widget_rect(widget)
             instance_id = self.hmi_widget_instance_id(widget['instance'])
-            if instance_id is not None:
-                wanted[index + 1] = (instance_id, widget)
+            if rect is not None and instance_id is not None:
+                wanted[index + 1] = (instance_id, widget, rect)
 
         for area_id in [a for a in self.hmi_widgets_shown if a not in wanted]:
             self.hmi_widgets_shown.pop(area_id, None)
             yield gen.Task(self.send_notmodified, "hmi_widget_hide %d" % area_id)
 
-        for area_id, (instance_id, widget) in wanted.items():
+        for area_id, (instance_id, widget, rect) in wanted.items():
             if area_id in self.hmi_widgets_shown:
                 continue
-            _, _, width, height = self.hmi_widget_area(widget)
             self.hmi_widgets_shown[area_id] = instance_id
             yield gen.Task(self.send_notmodified, "hmi_widget_show %d %s %d %d %d %d" % (instance_id,
                                                                                          widget['symbol'],
-                                                                                         area_id, width, height,
+                                                                                         area_id, rect[2], rect[3],
                                                                                          self.hmi_widget_pixel_format()))
 
     def load_pb_plugins(self, plugins, instances, rinstances, motos):
