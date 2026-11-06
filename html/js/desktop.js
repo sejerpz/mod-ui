@@ -152,6 +152,10 @@ function Desktop(elements) {
 
     this.hmiWidgets = new HMIWidgetsWindow({
         window: elements.hmiWidgetsWindow,
+        // both made further down: read them when the dialog opens
+        hardwareManager: function () { return self.hardwareManager },
+        getGui: function (instance) { return self.pedalboard.pedalboard('getGui', instance) },
+        modified: function () { self.setPedalboardAsModified(true) },
     })
 
     this.saveConfigValue = function (key, value, callback) {

@@ -422,6 +422,7 @@ $('document').ready(function() {
 <script type="text/javascript" src="js/utils/teleport.js?v={{version}}"></script>
 <script type="text/javascript" src="js/utils/tempo.js?v={{version}}"></script>
 <script type="text/javascript" src="js/utils/criticalpath.js?v={{version}}"></script>
+<script type="text/javascript" src="js/utils/hmiwidgetsplan.js?v={{version}}"></script>
 <script type="text/javascript" src="js/utils/plugins.js?v={{version}}"></script>
 <script type="text/javascript" src="js/report.js?v={{version}}"></script>
 <script type="text/javascript" src="js/cpuload.js?v={{version}}"></script>
@@ -783,21 +784,41 @@ $('document').ready(function() {
         <div id="hmi-widgets-window" class="save-popup mod-hidden">
             <div class="mod-box" id="hmi-widgets-box">
                 <h1>Device Display</h1>
-                <form class="bottom">
-                    <fieldset>
-                        <p>Each column above the knobs shows the knob addressing, or a widget drawn by a plugin of this pedalboard.</p>
-                        <p class="js-empty">No plugin in this pedalboard offers display widgets.</p>
-                        <div class="controls clearfix hmi-widgets-where">
-                            <select class="js-page"></select>
-                            <div class="hmi-widgets-subpages js-subpages"></div>
+                <div class="hmi-widgets-body">
+                    <div class="hmi-widgets-side">
+                        <div class="hmi-widgets-tools">
+                            <label class="hmi-widgets-hidden" for="hmi-widgets-search">Search widgets</label>
+                            <input id="hmi-widgets-search" class="js-search" type="search" placeholder="Search widget or plugin" autocomplete="off">
+                            <div class="hmi-widgets-tools-row">
+                                <label class="hmi-widgets-check"><input class="js-placeable" type="checkbox" checked> Placeable only</label>
+                                <div class="hmi-widgets-view" role="group" aria-label="View">
+                                    <button type="button" class="js-view" data-view="flat">Flat</button>
+                                    <button type="button" class="js-view selected" data-view="plugin">By plugin</button>
+                                </div>
+                            </div>
+                            <div class="hmi-widgets-count js-count"></div>
                         </div>
-                        <div class="controls clearfix hmi-widgets-columns js-columns"></div>
-                        <div class="controls actions">
-                            <button class="js-cancel btn btn-danger">Cancel</button>
-                            <button class="js-submit btn btn-success">Save</button>
+                        <div class="hmi-widgets-list js-list"></div>
+                        <div class="hmi-widgets-detail js-detail"></div>
+                    </div>
+                    <div class="hmi-widgets-main">
+                        <div class="hmi-widgets-where">
+                            <label for="hmi-widgets-page">Page</label>
+                            <select id="hmi-widgets-page" class="js-page"></select>
+                            <div class="hmi-widgets-subpages js-subpages" role="group" aria-label="Subpage"></div>
                         </div>
-                    </fieldset>
-                </form>
+                        <p class="hmi-widgets-hint js-hint"></p>
+                        <div class="hmi-widgets-display js-display"></div>
+                        <div class="hmi-widgets-status js-status" aria-live="polite"></div>
+                        <div class="hmi-widgets-controls-title js-controls-title"></div>
+                        <div class="hmi-widgets-controls js-controls"></div>
+                        <p class="hmi-widgets-footnote">The display shows what the device draws in each area, or the widget placed there. Widgets and bindings are independent: a widget can sit above any control.</p>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="js-cancel btn btn-danger">Cancel</button>
+                    <button class="js-submit btn btn-success">Save</button>
+                </div>
             </div>
         </div>
 
