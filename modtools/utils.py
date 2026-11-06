@@ -328,17 +328,17 @@ class PluginPreset(Structure):
         ("path", c_char_p),
     ]
 
-# how many columns a widget can take on the display, see HMI_WIDGET_MAX_COLUMNS in utils/utils.h
-HMI_WIDGET_MAX_COLUMNS = 3
-
 class PluginWidget(Structure):
     _fields_ = [
         ("valid", c_bool),
         ("symbol", c_char_p),
         ("name", c_char_p),
-        ("columns", c_uint),
-        ("fullscreen", c_bool),
+        ("minWidth", c_uint),
+        ("minHeight", c_uint),
+        ("naturalWidth", c_uint),
+        ("naturalHeight", c_uint),
         ("formats", c_uint),
+        ("suggestedPorts", POINTER(c_char_p)),
     ]
 
 class PluginInfo(Structure):
