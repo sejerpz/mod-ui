@@ -364,9 +364,14 @@ struct NamespaceDefinitions {
     LilvNode* modgui_port;
     LilvNode* modgui_monitoredOutputs;
     LilvNode* hmi_widget;
-    LilvNode* hmi_columns;
-    LilvNode* hmi_fullscreen;
+    LilvNode* hmi_min_width;
+    LilvNode* hmi_min_height;
+    LilvNode* hmi_natural_width;
+    LilvNode* hmi_natural_height;
+    LilvNode* hmi_suggested_ports;
     LilvNode* hmi_pixel_format;
+    LilvNode* rdf_first;
+    LilvNode* rdf_rest;
     LilvNode* atom_bufferType;
     LilvNode* atom_Sequence;
     LilvNode* midi_MidiEvent;
@@ -465,9 +470,14 @@ struct NamespaceDefinitions {
         modgui_port              = lilv_new_uri(w, LILV_NS_MODGUI "port");
         modgui_monitoredOutputs  = lilv_new_uri(w, LILV_NS_MODGUI "monitoredOutputs");
         hmi_widget               = lilv_new_uri(w, LILV_NS_ALABS_HMI "widget");
-        hmi_columns              = lilv_new_uri(w, LILV_NS_ALABS_HMI "columns");
-        hmi_fullscreen           = lilv_new_uri(w, LILV_NS_ALABS_HMI "fullscreen");
+        hmi_min_width            = lilv_new_uri(w, LILV_NS_ALABS_HMI "minWidth");
+        hmi_min_height           = lilv_new_uri(w, LILV_NS_ALABS_HMI "minHeight");
+        hmi_natural_width        = lilv_new_uri(w, LILV_NS_ALABS_HMI "naturalWidth");
+        hmi_natural_height       = lilv_new_uri(w, LILV_NS_ALABS_HMI "naturalHeight");
+        hmi_suggested_ports      = lilv_new_uri(w, LILV_NS_ALABS_HMI "suggestedPorts");
         hmi_pixel_format         = lilv_new_uri(w, LILV_NS_ALABS_HMI "pixelFormat");
+        rdf_first                = lilv_new_uri(w, LILV_NS_RDF "first");
+        rdf_rest                 = lilv_new_uri(w, LILV_NS_RDF "rest");
         atom_bufferType          = lilv_new_uri(w, LV2_ATOM__bufferType);
         atom_Sequence            = lilv_new_uri(w, LV2_ATOM__Sequence);
         midi_MidiEvent           = lilv_new_uri(w, LV2_MIDI__MidiEvent);
@@ -544,9 +554,14 @@ struct NamespaceDefinitions {
         lilv_node_free(modgui_port);
         lilv_node_free(modgui_monitoredOutputs);
         lilv_node_free(hmi_widget);
-        lilv_node_free(hmi_columns);
-        lilv_node_free(hmi_fullscreen);
+        lilv_node_free(hmi_min_width);
+        lilv_node_free(hmi_min_height);
+        lilv_node_free(hmi_natural_width);
+        lilv_node_free(hmi_natural_height);
+        lilv_node_free(hmi_suggested_ports);
         lilv_node_free(hmi_pixel_format);
+        lilv_node_free(rdf_first);
+        lilv_node_free(rdf_rest);
         lilv_node_free(atom_bufferType);
         lilv_node_free(atom_Sequence);
         lilv_node_free(midi_MidiEvent);
@@ -1995,6 +2010,21 @@ static void _fill_units(LilvWorld* const w,
 
 }
 
+// a widget size in pixels, 0 when missing or not a positive integer
+static unsigned int _get_widget_size(LilvWorld* const w, const LilvNode* const widgetnode, const LilvNode* const pred)
+{
+    unsigned int size = 0;
+
+    if (LilvNode* const node = lilv_world_get(w, widgetnode, pred, nullptr))
+    {
+        if (lilv_node_is_int(node) && lilv_node_as_int(node) > 0)
+            size = static_cast<unsigned int>(lilv_node_as_int(node));
+        lilv_node_free(node);
+    }
+
+    return size;
+}
+
 const PluginInfo& _get_plugin_info(LilvWorld* const w,
                                    const LilvPlugin* const p,
                                    const NamespaceDefinitions& ns)
@@ -2682,34 +2712,52 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
                 continue;
             }
 
-            // a widget takes 1 to HMI_WIDGET_MAX_COLUMNS contiguous columns, anything else cannot be placed
-            int columns = 1;
-
-            if (LilvNode* const columnsnode = lilv_world_get(w, widgetnode, ns.hmi_columns, nullptr))
-            {
-                columns = lilv_node_is_int(columnsnode) ? lilv_node_as_int(columnsnode) : 0;
-                lilv_node_free(columnsnode);
-            }
-
-            if (columns < 1 || columns > HMI_WIDGET_MAX_COLUMNS)
-            {
-                printf("NOTICE: Plugin '%s' declares widget '%s' with invalid columns, ignored\n",
-                       info.uri, symbol);
-                lilv_node_free(symbolnode);
-                continue;
-            }
-
             PluginWidget& widget(widgets[widgetcount++]);
 
             widget.valid = true;
             widget.symbol = strdup(symbol);
-            widget.columns = static_cast<unsigned int>(columns);
 
-            // the whole display, title and footer included
-            if (LilvNode* const fullscreennode = lilv_world_get(w, widgetnode, ns.hmi_fullscreen, nullptr))
+            // sizes in pixels: the host offers the widget in areas at least as big as its minimum, and uses the
+            // natural size to order them. Anything not a positive integer counts as not declared.
+            widget.minWidth      = _get_widget_size(w, widgetnode, ns.hmi_min_width);
+            widget.minHeight     = _get_widget_size(w, widgetnode, ns.hmi_min_height);
+            widget.naturalWidth  = _get_widget_size(w, widgetnode, ns.hmi_natural_width);
+            widget.naturalHeight = _get_widget_size(w, widgetnode, ns.hmi_natural_height);
+
+            // the ports it would like bound to the controls of the device, an ordered rdf:List of symbols
+            if (LilvNode* listnode = lilv_world_get(w, widgetnode, ns.hmi_suggested_ports, nullptr))
             {
-                widget.fullscreen = lilv_node_is_bool(fullscreennode) && lilv_node_as_bool(fullscreennode);
-                lilv_node_free(fullscreennode);
+                std::vector<const char*> ports;
+
+                // the walk is bounded, a malformed list may loop on itself
+                for (unsigned int guard = 0; listnode != nullptr && guard < 256; ++guard)
+                {
+                    LilvNode* const first = lilv_world_get(w, listnode, ns.rdf_first, nullptr);
+                    LilvNode* const rest  = lilv_world_get(w, listnode, ns.rdf_rest, nullptr);
+
+                    lilv_node_free(listnode);
+                    listnode = rest;
+
+                    if (first == nullptr)
+                        break;
+
+                    if (lilv_node_is_string(first))
+                        ports.push_back(strdup(lilv_node_as_string(first)));
+
+                    lilv_node_free(first);
+                }
+
+                if (listnode != nullptr)
+                    lilv_node_free(listnode);
+
+                if (! ports.empty())
+                {
+                    const char** const list = new const char*[ports.size()+1];
+                    for (size_t i = 0; i < ports.size(); ++i)
+                        list[i] = ports[i];
+                    list[ports.size()] = nullptr;
+                    widget.suggestedPorts = list;
+                }
             }
 
             // the pixel formats it can draw in, as bits in the order of ALABS_HMI_PixelFormat
@@ -3903,6 +3951,13 @@ static void _clear_plugin_info(PluginInfo& info)
         {
             free((void*)info.widgets[i].symbol);
             free((void*)info.widgets[i].name);
+
+            if (info.widgets[i].suggestedPorts != nullptr)
+            {
+                for (int j=0; info.widgets[i].suggestedPorts[j]; ++j)
+                    free((void*)info.widgets[i].suggestedPorts[j]);
+                delete[] info.widgets[i].suggestedPorts;
+            }
         }
         delete[] info.widgets;
     }
