@@ -139,6 +139,11 @@ JqueryClass('pedalboardBox', {
             load: function (bundlepath, broken, callback) {
                 callback()
             },
+            exportFile: function (pedalboard) {
+            },
+            importFile: function (file, callback) {
+                callback()
+            },
             saveConfigValue: function (key, value, callback) {
                 callback([])
             },
@@ -180,6 +185,22 @@ JqueryClass('pedalboardBox', {
         })
 
         self.data('dev_mode', PREFERENCES['dev-mode'] == "on")
+
+        // .modpedalboard import (Developer Mode, always on MOD Desktop)
+        self.find('.js-import').click(function () {
+            var input = $('<input type="file" accept="' + PEDALBOARD_FILE_EXTENSION + '" style="display:none">').appendTo('body')
+            input.on('change', function () {
+                var file = this.files && this.files[0]
+                input.remove()
+                if (! file) {
+                    return
+                }
+                self.data('importFile')(file, function () {
+                    self.window('close')
+                })
+            })
+            input.click()
+        })
 
         options.viewModes.pedalboardsModeSelector(options.resultCanvasUser,
                                                   options.resultCanvasFactory,
@@ -231,6 +252,12 @@ JqueryClass('pedalboardBox', {
             self.data('load')(pedalboard.bundle, pedalboard.broken, function () {
                 self.window('close')
             })
+            return false
+        })
+
+        rendered.find('.js-export').click(function (e) {
+            self.data('exportFile')(pedalboard)
+            e.stopPropagation()
             return false
         })
 

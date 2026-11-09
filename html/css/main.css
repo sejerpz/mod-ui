@@ -6057,9 +6057,6 @@ button.close {
 .plugin-container .status.buildEnvironment:after {
   content: "local";
 }
-.plugin-container .status.buildEnvironment.labs:after {
-  content: "labs";
-}
 .plugin-container .status.buildEnvironment.dev:after {
   content: "dev";
 }

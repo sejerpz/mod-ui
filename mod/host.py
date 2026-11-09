@@ -25,7 +25,7 @@ from urllib.parse import quote, unquote
 from pprint import pprint
 
 import os, json, socket, time, logging, sys
-import shutil
+import shutil, tempfile
 import copy
 import math
 
@@ -41,6 +41,7 @@ from mod import (
     read_file_contents, safe_json_load, normalize_for_hw, os_sync, symbolify
 )
 from mod.presets_metadata import PresetsMetadata
+from mod import preset_share
 from mod.addressings import Addressings
 from mod.plugin_map import INSTANCE as PLUGIN_MAP
 from mod import builder_plugins as CATALOG
@@ -172,6 +173,7 @@ from mod.protocol import (
 from mod.settings import (
     PLUGIN_MAP_MAX_MENU,
     LOG, DEFAULT_PEDALBOARD, DEVICE_HOST_PORT,
+    DESKTOP, IMAGE_VERSION,
     DATA_DIR, LV2_PEDALBOARDS_DIR, LV2_PLUGIN_DIR, LV2_FACTORY_PEDALBOARDS_DIR, USER_FILES_DIR,
     PEDALBOARD_INSTANCE, PEDALBOARD_INSTANCE_ID, PEDALBOARD_URI, PEDALBOARD_TMP_DIR,
     TUNER_URI, TUNER_INSTANCE_ID, TUNER_INPUT_PORT, TUNER_MONITOR_PORT, HMI_TIMEOUT, MODEL_TYPE,
@@ -3205,27 +3207,57 @@ class Host(object):
         # fallback is true
         return True
 
-    def reload_pedalboard(self, affected_uris):
-        # Reload pedalboard if any effect in affected_uris is in use
-        # Reloading works by saving and loading current pedalboard to a tmp path
-        running_uris = dict([ (p['uri'], 1) for p in self.plugins.values() ])
-        affected = False
-        for uri in affected_uris:
-            if running_uris.get(uri.decode()):
-                affected = True
-                break
-        if not affected:
-            return
-        bundlepath = '/tmp/reloaded.pedalboard'
+    def has_plugins_loaded(self):
+        return len(self.plugins) > 1
+
+    # Re-instantiate the running pedalboard, keeping its identity (name, path, bank, modified flag) and every
+    # unsaved change: the current state is written to a temporary bundle, the host is reset and the bundle loaded.
+    # Used after a JACK buffer size change, where mod-host only tells plugins with an LV2 options interface about
+    # the new block length and every other plugin keeps running with buffers sized for the old one.
+    def reload_current_pedalboard(self, callback):
+        name     = self.pedalboard_name
+        path     = self.pedalboard_path
+        empty    = self.pedalboard_empty
+        modified = self.pedalboard_modified
+        version  = self.pedalboard_version
+        bank_id  = self.bank_id
+        last_bank_id, last_path = get_last_bank_and_pedalboard()
+
+        bundlepath = os.path.join(tempfile.gettempdir(), 'reloaded.pedalboard')
         if os.path.exists(bundlepath):
             shutil.rmtree(bundlepath)
         os.mkdir(bundlepath)
-        self.save_state_to_ttl(bundlepath, self.pedalboard_name, 'tmp')
-        def load(ok):
+
+        self.save_state_to_ttl(bundlepath, name or 'Untitled', 'reloaded')
+
+        def loaded(ok):
             if ok:
-                self.load(bundlepath)
-            shutil.rmtree(bundlepath)
-        self.reset(None, load)
+                self.load(bundlepath, modified=modified)
+
+                # load() recorded the temporary bundle as the current pedalboard, put the real one back
+                self.pedalboard_name     = name
+                self.pedalboard_path     = path
+                self.pedalboard_empty    = empty
+                self.pedalboard_modified = modified
+                self.pedalboard_version  = version
+                self.bank_id             = bank_id
+
+                # load() also replaced the "last pedalboard" record (the temporary bundle is not in the library)
+                if last_path is not None:
+                    save_last_bank_and_pedalboard(last_bank_id, last_path)
+
+            # The bundle stays until the next reload: load() only queues "state_load" to mod-host,
+            # which reads the bundle after this returns.
+            callback(ok)
+
+        # Plugin state (the file a NAM, IR or sampler loader has open) lives outside the ttl,
+        # mod-host writes it into the bundle. Without it every file loader comes back empty.
+        def state_saved(ok):
+            if not ok:
+                logging.error("[host] could not save the plugin state before the pedalboard reload")
+            self.reset(bank_id, loaded)
+
+        self.send_notmodified("state_save \"{}\"".format(bundlepath), state_saved, datatype='boolean')
 
     # -----------------------------------------------------------------------------------------------------------------
     # Host stuff - plugin presets
@@ -3422,6 +3454,147 @@ class Host(object):
                                                                        symbolname), host_callback, datatype='boolean')
 
         self.remove_bundle(presetbundle, False, olduri, start)
+
+    # Export / Import as .modpreset files (preset bar, Developer Mode; always on MOD Desktop)
+
+    def _new_preset_bundle_path(self, instance, symbolname):
+        presetbundle = os.path.expanduser("%s/%s-%s.lv2") % (LV2_PLUGIN_DIR, instance.replace("/graph/","",1), symbolname)
+
+        while os.path.exists(presetbundle):
+            presetbundle = os.path.expanduser("%s/%s-%s-%i.lv2" % (LV2_PLUGIN_DIR,
+                                                                   instance.replace("/graph/","",1),
+                                                                   symbolname,
+                                                                   randint(1,99999)))
+        return presetbundle
+
+    def _plugin_version_string(self, plugin_uri):
+        info = get_plugin_info_essentials(plugin_uri)
+        return "%d.%d" % (info['minorVersion'], info['microVersion'])
+
+    def preset_export(self, instance, name, callback):
+        instance_id = self.mapper.instance_map.get(instance, None)
+        if instance_id is None or instance_id not in self.plugins:
+            callback({'ok': False, 'error': "Plugin not found"})
+            return
+
+        pluginData = self.plugins[instance_id]
+        plugin_uri = pluginData['uri']
+        name       = name.strip() or "Preset"
+        symbolname = symbolify(name)[:32]
+        tmpdir     = tempfile.mkdtemp(prefix="modpreset-")
+        bundlepath = os.path.join(tmpdir, symbolname + ".lv2")
+
+        try:
+            plugin_name = get_plugin_info(plugin_uri)['name']
+        except Exception:
+            plugin_name = instance.replace("/graph/","",1)
+
+        def host_callback(ok):
+            try:
+                if not ok:
+                    callback({'ok': False, 'error': "Could not save the plugin state"})
+                    return
+
+                header = preset_share.make_header(plugin_uri,
+                                                  self._plugin_version_string(plugin_uri),
+                                                  name,
+                                                  IMAGE_VERSION or ("desktop" if DESKTOP else ""),
+                                                  "desktop" if DESKTOP else (MODEL_TYPE or ""))
+                data, left_out = preset_share.pack(bundlepath, header)
+                callback({
+                    'ok'      : True,
+                    'data'    : data,
+                    'filename': "%s-%s%s" % (symbolify(plugin_name)[:32], symbolname, preset_share.EXTENSION),
+                    'left_out': left_out,
+                })
+            except Exception as e:
+                logging.exception(e)
+                callback({'ok': False, 'error': "Could not pack the preset"})
+            finally:
+                shutil.rmtree(tmpdir, True)
+
+        # same mod-host call as a normal save, but into a temp dir: nothing is added to the user's presets
+        self.send_notmodified("preset_save %d \"%s\" \"%s\" %s.ttl" % (instance_id,
+                                                                   name.replace('"','\\"'),
+                                                                   bundlepath.replace('"','\\"'),
+                                                                   symbolname), host_callback, datatype='boolean')
+
+    def preset_import(self, instance, data, callback):
+        instance_id = self.mapper.instance_map.get(instance, None)
+        if instance_id is None or instance_id not in self.plugins:
+            callback({'ok': False, 'error': "Plugin not found"})
+            return
+
+        pluginData = self.plugins[instance_id]
+        plugin_uri = pluginData['uri']
+
+        try:
+            preset = preset_share.unpack(data, plugin_uri)
+        except preset_share.PresetFileError as e:
+            callback({'ok': False, 'error': str(e)})
+            return
+
+        header       = preset['header']
+        name         = header['name']
+        presetbundle = self._new_preset_bundle_path(instance, symbolify(name)[:32])
+        preseturi    = "file://%s" % quote(os.path.join(presetbundle, preset['preset_file']))
+
+        warning = ""
+        theirs  = header.get('plugin_version')
+        ours    = self._plugin_version_string(plugin_uri)
+        if theirs and theirs != ours:
+            warning = "This preset was made with version %s of the plugin, this unit has %s" % (theirs, ours)
+        if header.get('files_left_out'):
+            if warning:
+                warning += ". "
+            warning += "Files used by the preset were not included"
+
+        try:
+            os.makedirs(presetbundle)
+            for filename, content in preset['files'].items():
+                with open(os.path.join(presetbundle, filename), 'wb') as fh:
+                    fh.write(content)
+        except Exception as e:
+            logging.exception(e)
+            shutil.rmtree(presetbundle, True)
+            callback({'ok': False, 'error': "Could not write the preset"})
+            return
+
+        os_sync()
+        rescan_plugin_presets(plugin_uri)
+
+        def remove_callback(_):
+            shutil.rmtree(presetbundle, True)
+            rescan_plugin_presets(plugin_uri)
+            os_sync()
+            callback({'ok': False, 'error': "This preset file is damaged"})
+
+        def add_bundle_callback(_):
+            # lilv has the last word: the preset must apply to this plugin.
+            # get_plugin_info applies the pending preset rescan first.
+            label = None
+            try:
+                for p in get_plugin_info(plugin_uri)['presets']:
+                    if p['uri'] == preseturi:
+                        label = p['label']
+                        break
+            except Exception as e:
+                logging.exception(e)
+
+            if label is None or not is_plugin_preset_valid(plugin_uri, preseturi):
+                logging.warning("[host] imported preset %s is not valid for %s", preseturi, plugin_uri)
+                self.remove_bundle(presetbundle, False, preseturi, remove_callback)
+                return
+
+            callback({
+                'ok'     : True,
+                'bundle' : presetbundle,
+                'uri'    : preseturi,
+                'name'   : label or name,
+                'warning': warning,
+            })
+
+        self.add_bundle(presetbundle, add_bundle_callback)
 
     def preset_delete(self, instance, uri, bundlepath, callback):
         instance_id = self.mapper.get_id_without_creating(instance)
@@ -3978,7 +4151,7 @@ class Host(object):
     # -----------------------------------------------------------------------------------------------------------------
     # Host stuff - load & save
 
-    def load(self, bundlepath, isDefault=False, abort_catcher=None):
+    def load(self, bundlepath, isDefault=False, abort_catcher=None, modified=False):
         first_pedalboard = self.first_pedalboard
         self.first_pedalboard = False
 
@@ -4010,7 +4183,7 @@ class Host(object):
         if bundlepath == DEFAULT_PEDALBOARD:
             pb['title'] = "" if isDefault else "Default"
 
-        self.msg_callback("loading_start %i 0" % int(isDefault))
+        self.msg_callback("loading_start %i %i" % (int(isDefault), int(modified)))
         self.msg_callback("size %d %d" % (pb['width'],pb['height']))
         self.send_newer_format_notice(self.msg_callback, pb.get('formatVersion', 1))
 

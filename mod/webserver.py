@@ -9,6 +9,7 @@ import platform
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import sys
 import time
@@ -42,12 +43,12 @@ from mod.settings import (DESKTOP, LOG, DEV_API,
                           HTML_DIR, DOWNLOAD_TMP_DIR, DEVICE_KEY, DEVICE_WEBSERVER_PORT,
                           CLOUD_HTTP_ADDRESS, PLUGINS_HTTP_ADDRESS, PEDALBOARDS_HTTP_ADDRESS, CONTROLCHAIN_HTTP_ADDRESS,
                           USER_BANKS_JSON_FILE,
-                          LV2_PLUGIN_DIR, LV2_PEDALBOARDS_DIR, IMAGE_VERSION,
+                          LV2_PLUGIN_DIR, LV2_PEDALBOARDS_DIR, LV2_FACTORY_PEDALBOARDS_DIR, IMAGE_VERSION,
                           UPDATE_CC_FIRMWARE_FILE, UPDATE_MOD_OS_FILE, UPDATE_MOD_OS_HERLPER_FILE,
                           DEFAULT_ICON_TEMPLATE, DEFAULT_SETTINGS_TEMPLATE, DEFAULT_ICON_IMAGE,
                           DEFAULT_PEDALBOARD, DEFAULT_SNAPSHOT_NAME, DATA_DIR, KEYS_PATH, USER_FILES_DIR,
                           FAVORITES_JSON_FILE, PREFERENCES_JSON_FILE, USER_ID_JSON_FILE,
-                          DEV_ENVIRONMENT, DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE, PEDALBOARDS_LABS_HTTP_ADDRESS,
+                          DEV_ENVIRONMENT, DEV_HOST, UNTITLED_PEDALBOARD_NAME, MODEL_CPU, MODEL_TYPE,
                           FEEDBACK_URL, PLUGIN_MAP_VIEW_WIDTH, PLUGIN_MAP_VIEW_HEIGHT,
                           API_KEY, API_KEY, TONE3000_CLIENT_ID,
                           ACTIVE_UI, ACTIVE_UI_FILE, UIS_DIR)
@@ -57,6 +58,8 @@ from mod import (
     check_environment, jsoncall, safe_json_load,
     get_hardware_descriptor, get_unique_name, os_sync, symbolify,
 )
+from mod import pedalboard_share
+from mod.backup import backup_flags, backup_message
 from mod.bank import list_banks, save_banks, remove_pedalboard_from_banks
 from mod.plugin_map import INSTANCE as PLUGIN_MAP
 from mod.session import SESSION
@@ -65,7 +68,7 @@ from mod.uis import install_zip, list_uis, remove_ui, same_origin, set_active
 from modtools.utils import (
     kPedalboardInfoUserOnly, kPedalboardInfoFactoryOnly, kPedalboardInfoBoth,
     init as lv2_init, cleanup as lv2_cleanup,
-    get_plugin_list, get_all_plugins, get_plugin_info, get_non_cached_plugin_info,
+    get_plugin_list, get_all_plugins, get_plugin_info, get_non_cached_plugin_info, get_plugin_info_essentials,
     get_plugin_gui, get_plugin_gui_mini,
     get_all_pedalboards, get_all_user_pedalboard_names, get_broken_pedalboards, get_pedalboard_info,
     get_jack_buffer_size,
@@ -229,6 +232,10 @@ def restart_services(restartJACK2, restartUI):
     reset_get_all_pedalboards_cache(kPedalboardInfoBoth)
     lv2_cleanup()
     lv2_init()
+
+def restart_after_restore():
+    os_sync()
+    subprocess.Popen(["systemctl", "--no-block", "restart", "jack2", "mod-ui"])
 
 @gen.coroutine
 def start_restore():
@@ -540,7 +547,7 @@ class SystemExeChange(JsonRequestHandler):
         if etype == "command":
             cmd = self.get_argument('cmd').split(" ",1)
             if len(cmd) == 1:
-                cmd = cmd[0]
+                cmd, cdata = cmd[0], ""
             else:
                 cmd, cdata = cmd
 
@@ -551,40 +558,33 @@ class SystemExeChange(JsonRequestHandler):
             elif cmd == "restore":
                 IOLoop.instance().add_callback(start_restore)
 
-            elif cmd == "backup-export":
-                args  = ["mod-backup", "backup"]
-                cdata = cdata.split(",")
-                if cdata[0] == "1":
-                    args.append("-d")
-                if cdata[1] == "1":
-                    args.append("-p")
-                resp  = yield gen.Task(run_command, args, None)
-                error = resp[2].decode("utf-8", errors="ignore").strip()
-                if len(error) > 1:
-                    error = error[0].title()+error[1:]+"."
+            elif cmd in ("backup-export", "backup-import"):
+                args = ["mod-backup", "backup" if cmd == "backup-export" else "restore"] + backup_flags(cdata)
+                resp = yield gen.Task(run_command, args, None)
+                ok   = resp[0] == 0
                 self.write({
-                    'ok'   : resp[0] == 0,
-                    'error': error,
+                    'ok'   : ok,
+                    'error': backup_message(resp[2]) if not ok else "",
+                    'notes': backup_message(resp[2]) if ok else "",
                 })
+                if ok and cmd == "backup-import":
+                    # restart the web interface too: it keeps settings, banks and favorites in memory
+                    IOLoop.instance().add_callback(restart_after_restore)
                 return
 
-            elif cmd == "backup-import":
-                args  = ["mod-backup", "restore"]
-                cdata = cdata.split(",")
-                if cdata[0] == "1":
-                    args.append("-d")
-                if cdata[1] == "1":
-                    args.append("-p")
-                resp = yield gen.Task(run_command, args, None)
-                error = resp[2].decode("utf-8", errors="ignore").strip()
-                if len(error) > 1:
-                    error = error[0].title()+error[1:]+"."
-                self.write({
-                    'ok'   : resp[0] == 0,
-                    'error': error,
-                })
+            elif cmd == "backup-info":
+                resp = yield gen.Task(run_command, ["mod-backup", "info"], None)
+                info = None
                 if resp[0] == 0:
-                    IOLoop.instance().add_callback(restart_services, True, False)
+                    try:
+                        info = json.loads(resp[1].decode("utf-8", errors="ignore"))
+                    except ValueError:
+                        info = None
+                self.write({
+                    'ok'   : info is not None,
+                    'info' : info,
+                    'error': backup_message(resp[2]) if info is None else "",
+                })
                 return
 
             else:
@@ -623,6 +623,24 @@ class SystemExeChange(JsonRequestHandler):
             if path not in ("bluetooth/name",
                             "jack-buffer-size"):
                 self.write(False)
+                return
+
+            # the buffer size also has boot-time marker files to keep in sync
+            if path == "jack-buffer-size":
+                try:
+                    size = int(content)
+                except ValueError:
+                    size = 0
+                if size not in get_allowed_buffer_sizes():
+                    self.write(False)
+                    return
+                try:
+                    save_jack_buffer_size(size)
+                except OSError as ex:
+                    logging.error("[webserver] cannot save the buffer size: %s", ex)
+                    self.write(False)
+                    return
+                self.write(True)
                 return
 
             filename = "/data/" + path
@@ -1352,6 +1370,42 @@ class EffectPresetDelete(JsonRequestHandler):
             logging.exception(e)
         self.write(ok)
 
+class EffectPresetExport(TimelessRequestHandler):
+    # Developer Mode (always on MOD Desktop): current plugin state as a .modpreset download
+    @web.asynchronous
+    @gen.engine
+    def get(self, instance):
+        name = self.get_argument('name', "")
+        resp = yield gen.Task(SESSION.host.preset_export, instance, name)
+
+        if not resp['ok']:
+            self.set_status(500)
+            self.set_header("Content-Type", "text/plain; charset=UTF-8")
+            self.write(resp['error'])
+            self.finish()
+            return
+
+        self.set_header("Content-Type", "application/octet-stream")
+        self.set_header("Content-Disposition", 'attachment; filename="%s"' % resp['filename'])
+        self.set_header("X-Modpreset-Filename", resp['filename'])
+        self.set_header("X-Modpreset-Left-Out", str(len(resp['left_out'])))
+        self.set_header("Cache-Control", "no-store")
+        self.write(resp['data'])
+        self.finish()
+
+class EffectPresetImport(JsonRequestHandler):
+    # Developer Mode (always on MOD Desktop): body = the .modpreset file
+    @web.asynchronous
+    @gen.engine
+    def post(self, instance):
+        resp = yield gen.Task(SESSION.host.preset_import, instance, self.request.body)
+        if resp['ok']:
+            try:
+                yield gen.Task(SESSION.readdress_presets, instance)
+            except Exception as e:
+                logging.exception(e)
+        self.write(resp)
+
 class RemotePedalboardWebSocket(websocket.WebSocketHandler):
     def check_origin(self, origin):
         match = re.match(r'^(\w+)://([^/]*)/?', origin)
@@ -1754,6 +1808,132 @@ class PedalboardLoadWeb(SimpleFileReceiver):
 
         os.remove(filename)
         callback()
+
+# Pedalboard files (.modpedalboard): Export / Import in the Pedalboards Library.
+# Shown with Developer Mode, always on MOD Desktop.
+PEDALBOARD_IMPORT_DIR = os.path.join(tempfile.gettempdir(), "mod-pedalboard-import")
+PEDALBOARD_IMPORTS = {}
+
+def pedalboard_file_plugins(bundlepath):
+    "Plugins of a pedalboard bundle as [{uri, minorVersion, microVersion}], one entry per URI."
+    plugins = []
+    seen = set()
+    for plugin in get_pedalboard_info(bundlepath).get('plugins', []):
+        uri = plugin.get('uri')
+        if not uri or uri in seen:
+            continue
+        seen.add(uri)
+        plugins.append({
+            'uri': uri,
+            'minorVersion': plugin.get('minorVersion', 0),
+            'microVersion': plugin.get('microVersion', 0),
+        })
+    return plugins
+
+def pedalboard_file_name(title):
+    name = re.sub(r'[^A-Za-z0-9 _.()-]', '', title).strip(" .") or "pedalboard"
+    return name[:64] + pedalboard_share.EXTENSION
+
+class PedalboardFileExport(TimelessRequestHandler):
+    def get(self):
+        bundlepath = os.path.abspath(self.get_argument('bundlepath'))
+        allowed = any(bundlepath.startswith(os.path.abspath(d) + os.sep)
+                      for d in (LV2_PEDALBOARDS_DIR, LV2_FACTORY_PEDALBOARDS_DIR))
+
+        try:
+            if not allowed or not os.path.isdir(bundlepath):
+                raise pedalboard_share.PedalboardFileError("Pedalboard not found")
+            try:
+                info = get_pedalboard_info(bundlepath)
+            except Exception:
+                raise pedalboard_share.PedalboardFileError("This pedalboard cannot be read")
+            title  = info.get('title') or os.path.basename(bundlepath).rsplit(".", 1)[0]
+            files  = pedalboard_share.find_user_files(bundlepath, USER_FILES_DIR)
+            header = pedalboard_share.make_header(title,
+                                                  pedalboard_file_plugins(bundlepath),
+                                                  files,
+                                                  IMAGE_VERSION or ("desktop" if DESKTOP else ""),
+                                                  "desktop" if DESKTOP else (MODEL_TYPE or ""))
+            header['user_files_dir'] = USER_FILES_DIR
+            data = pedalboard_share.pack(bundlepath, header)
+        except pedalboard_share.PedalboardFileError as e:
+            self.set_status(500)
+            self.set_header("Content-Type", "text/plain; charset=UTF-8")
+            self.write(str(e))
+            return
+        except Exception as e:
+            logging.exception(e)
+            self.set_status(500)
+            self.set_header("Content-Type", "text/plain; charset=UTF-8")
+            self.write("Could not export the pedalboard")
+            return
+
+        filename = pedalboard_file_name(title)
+        self.set_header("Content-Type", "application/octet-stream")
+        self.set_header("Content-Disposition", 'attachment; filename="%s"' % filename)
+        self.set_header("X-Modpedalboard-Filename", filename)
+        self.set_header("X-Modpedalboard-Files", str(len(files)))
+        self.set_header("Cache-Control", "no-store")
+        self.write(data)
+
+class PedalboardFileImport(JsonRequestHandler):
+    # body = the .modpedalboard file. Unpacks and checks it, nothing is loaded yet.
+    def post(self):
+        shutil.rmtree(PEDALBOARD_IMPORT_DIR, True)
+        PEDALBOARD_IMPORTS.clear()
+
+        token   = uuid4().hex
+        destdir = os.path.join(PEDALBOARD_IMPORT_DIR, token)
+
+        try:
+            os.makedirs(destdir)
+            header, bundlepath = pedalboard_share.unpack(self.request.body, destdir)
+            pedalboard_share.relocate_user_files(bundlepath, header.get('user_files_dir'), USER_FILES_DIR)
+            try:
+                info    = get_pedalboard_info(bundlepath)
+                plugins = pedalboard_file_plugins(bundlepath)
+            except Exception:
+                raise pedalboard_share.PedalboardFileError("This pedalboard file is damaged")
+        except pedalboard_share.PedalboardFileError as e:
+            shutil.rmtree(destdir, True)
+            self.write({'ok': False, 'error': str(e)})
+            return
+        except Exception as e:
+            logging.exception(e)
+            shutil.rmtree(destdir, True)
+            self.write({'ok': False, 'error': "Could not read the pedalboard file"})
+            return
+
+        missing_plugins = [p['uri'] for p in plugins if get_plugin_info_essentials(p['uri']).get('error', False)]
+        missing_files   = [f for f in header['files'] if isinstance(f, str) and
+                           not os.path.exists(os.path.join(USER_FILES_DIR, *f.split("/")))]
+
+        PEDALBOARD_IMPORTS[token] = bundlepath
+        self.write({
+            'ok'            : True,
+            'token'         : token,
+            'title'         : info.get('title') or header['title'],
+            'plugins'       : plugins,
+            'missingPlugins': missing_plugins,
+            'missingFiles'  : missing_files,
+            'platform'      : header.get('platform', ""),
+            'osVersion'     : header.get('os_version', ""),
+        })
+
+class PedalboardFileLoad(JsonRequestHandler):
+    # loads a checked import as an unsaved pedalboard (the page resets the current one first)
+    def post(self):
+        bundlepath = PEDALBOARD_IMPORTS.get(self.get_argument('token'), None)
+        if bundlepath is None or not os.path.isdir(bundlepath):
+            self.write({'ok': False, 'error': "The imported pedalboard is no longer available, please import it again"})
+            return
+        try:
+            title = SESSION.load_pedalboard(bundlepath, False)
+        except Exception as e:
+            logging.exception(e)
+            self.write({'ok': False, 'error': "Could not load the pedalboard"})
+            return
+        self.write({'ok': True, 'title': title})
 
 class PedalboardFactoryCopy(JsonRequestHandler):
     def get(self):
@@ -2431,6 +2611,7 @@ class TemplateHandler(TimelessRequestHandler):
             'preferences': json.dumps(prefs),
             'feedback_url': FEEDBACK_URL,
             'bufferSize': get_jack_buffer_size(),
+            'bufferSizes': get_allowed_buffer_sizes(),
             'sampleRate': get_jack_sample_rate(),
         }
         return context
@@ -2531,15 +2712,60 @@ class TrueBypass(JsonRequestHandler):
         ok = set_truebypass_value(channelName == "Right", bypassed == "true")
         self.write(ok)
 
+# JACK buffer sizes a unit may run at.
+# 64 frames is a Dwarf and Duo X option only: the Duo cannot keep up with it.
+JACK_BUFFER_SIZES = (128, 256)
+JACK_BUFFER_SIZES_WITH_64 = (64, 128, 256)
+
+def get_allowed_buffer_sizes():
+    if get_hardware_descriptor().get('platform', None) in ("dwarf", "duox"):
+        return JACK_BUFFER_SIZES_WITH_64
+    return JACK_BUFFER_SIZES
+
+def save_jack_buffer_size(size, datadir="/data"):
+    """Persist the JACK buffer size for the next boot.
+    /data/jack-buffer-size holds the number; /usr/bin/mod-jackd itself only looks for the marker files
+    /data/using-256-frames and /data/using-64-frames, so those are kept in sync with it."""
+    with open(os.path.join(datadir, "jack-buffer-size"), 'w') as fh:
+        fh.write('%d\n' % size)
+
+    for marker, markersize in ((os.path.join(datadir, "using-64-frames"), 64),
+                               (os.path.join(datadir, "using-256-frames"), 256)):
+        if size == markersize:
+            if not os.path.exists(marker):
+                with open(marker, 'wb') as fh:
+                    fh.write(b"")
+        elif os.path.exists(marker):
+            os.remove(marker)
+
+    os_sync()
+
 class SetBufferSize(JsonRequestHandler):
     def post(self, size):
         size = int(size)
+        oldsize = get_jack_buffer_size()
+
+        if size not in get_allowed_buffer_sizes():
+            self.write({
+                'ok'  : False,
+                'size': oldsize,
+            })
+            return
 
         newsize = SESSION.host.set_buffer_size(size)
+        ok = newsize == size
         self.write({
-            'ok'  : newsize == size,
+            'ok'  : ok,
             'size': newsize,
         })
+
+        # The running plugins were instantiated for the old block length and only those with an LV2 options
+        # interface are told about the new one by mod-host: reload the pedalboard so every plugin starts afresh.
+        if ok and newsize != oldsize:
+            def reloaded(ok):
+                if not ok:
+                    logging.error("[webserver] pedalboard reload after the buffer size change failed")
+            IOLoop.instance().add_callback(SESSION.reload_current_pedalboard, reloaded)
 
 class ResetXruns(JsonRequestHandler):
     def post(self):
@@ -3037,6 +3263,8 @@ application = web.Application(
             (r"/effect/preset/save_new/*(/[A-Za-z0-9_/]+[^/])/?", EffectPresetSaveNew),
             (r"/effect/preset/save_replace/*(/[A-Za-z0-9_/]+[^/])/?", EffectPresetSaveReplace),
             (r"/effect/preset/delete/*(/[A-Za-z0-9_/]+[^/])/?", EffectPresetDelete),
+            (r"/effect/preset/export/*(/[A-Za-z0-9_/]+[^/])/?", EffectPresetExport),
+            (r"/effect/preset/import/*(/[A-Za-z0-9_/]+[^/])/?", EffectPresetImport),
 
             # plugin resources
             (r"/effect/image/(screenshot|thumbnail).png", EffectImage),
@@ -3065,6 +3293,9 @@ application = web.Application(
             (r"/pedalboard/load_bundle/", PedalboardLoadBundle),
             (r"/pedalboard/load_remote/*(/[A-Za-z0-9_/]+[^/])/?", PedalboardLoadRemote),
             (r"/pedalboard/load_web/", PedalboardLoadWeb),
+            (r"/pedalboard/file/export/?", PedalboardFileExport),
+            (r"/pedalboard/file/import/?", PedalboardFileImport),
+            (r"/pedalboard/file/load/?", PedalboardFileLoad),
             (r"/pedalboard/factorycopy/", PedalboardFactoryCopy),
             (r"/pedalboard/info/", PedalboardInfo),
             (r"/pedalboard/remove/", PedalboardRemove),
@@ -3133,7 +3364,7 @@ application = web.Application(
             (r"/hello/?", Hello),
 
             (r"/truebypass/(Left|Right)/(true|false)", TrueBypass),
-            (r"/set_buffersize/(128|256)", SetBufferSize),
+            (r"/set_buffersize/(64|128|256)", SetBufferSize),
             (r"/reset_xruns/", ResetXruns),
             (r"/switch_cpu_freq/", SwitchCpuFreq),
             (r"/cpu_monitor/(0|1)", CpuMonitor),

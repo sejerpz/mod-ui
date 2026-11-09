@@ -1699,6 +1699,82 @@ function GUI(effect, options) {
                         })
                     })
 
+                    // Export / Import (.modpreset files); visible with Developer Mode, always on MOD Desktop
+                    var escapeText = function (text) {
+                        return $('<div>').text(text).html()
+                    }
+
+                    presetElem.find('.preset-btn-export').click(function () {
+                        var item = getCurrentPresetItem(),
+                            name = (item && item.find(".mod-preset-label").text()) || self.effect.label || self.effect.name || "Preset"
+                        options.presetExport(name, function (resp) {
+                            if (! resp.ok) {
+                                new Notification('error', escapeText(resp.error || "Export failed"), 6000)
+                                return
+                            }
+                            var msg = "Preset exported as " + resp.filename
+                            if (resp.leftOut > 0) {
+                                msg += " (files used by the preset are not included)"
+                            }
+                            new Notification('info', escapeText(msg), 5000)
+                        })
+                    })
+
+                    presetElem.find('.preset-btn-import').click(function () {
+                        if (! presetElem.data('enabled')) {
+                            return
+                        }
+                        var input = $('<input type="file" accept=".modpreset" style="display:none">').appendTo('body')
+                        input.on('change', function () {
+                            var file = this.files && this.files[0]
+                            input.remove()
+                            if (! file) {
+                                return
+                            }
+                            options.presetImport(file, function (resp) {
+                                if (! resp.ok) {
+                                    new Notification('error', escapeText(resp.error || "Import failed"), 6000)
+                                    return
+                                }
+                                var newItem = $('<div mod-role="enumeration-option" class="mod-preset">').attr('mod-uri', resp.uri)
+                                                                                                        .attr('mod-path', resp.bundle)
+                                var checkbox = $('<input type="checkbox" class="mod-preset-check" checked>').attr('id', 'preset-' + resp.uri)
+                                                                                                          .attr('mod-uri', resp.uri)
+                                newItem.append(checkbox)
+                                newItem.append($('<label class="mod-preset-label">').text(resp.name))
+                                newItem.appendTo(presetElem.find('.mod-preset-user'))
+
+                                newItem.click((e) => self.presetItemClicked(newItem, presetElem, e))
+                                checkbox.click((e) => {
+                                    e.stopPropagation() // avoid triggering the preset selection when clicking the checkbox
+                                    const enabled = e.target.checked
+
+                                    self.setPresetEnabled(checkbox, enabled, function (resp) {
+                                        if (!resp) {
+                                            // in case of error revert the checkbox state
+                                            e.target.checked = !enabled
+                                        }
+                                    })
+                                })
+
+                                presetElem.find('.radio-preset-user').click()
+                                presetElem.find('.preset-btn-assign-all').removeClass("disabled")
+
+                                totalPresetCount += 1
+                                options.presetLoad(resp.uri)
+                                self.selectPreset(resp.uri)
+
+                                var msg = "Preset \"" + resp.name + "\" imported"
+                                if (resp.warning) {
+                                    new Notification('warn', escapeText(msg + ". " + resp.warning), 8000)
+                                } else {
+                                    new Notification('info', escapeText(msg), 4000)
+                                }
+                            })
+                        })
+                        input.click()
+                    })
+
                     var editButton = self.settings.find('.mod-pedal-settings .mod-edit')
                     if (editButton.length == 1) {
                         editButton.click(function () {
