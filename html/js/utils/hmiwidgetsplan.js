@@ -229,6 +229,24 @@ var HMIWidgetsPlan = (function () {
         return n
     }
 
+    // whether a switch one of `ports` could take is free on a page from `fromPage` on
+    function anySwitchFree(model, ports, fromPage, used) {
+        for (var page = fromPage; page < model.pages; page++) {
+            for (var i = 0; i < model.switches.length; i++) {
+                var uri = model.switches[i].uri, key = slotKey(uri, page, null)
+                if (model.taken[key] || used[key]) {
+                    continue
+                }
+                for (var p = 0; p < ports.length; p++) {
+                    if (model.compatible(ports[p], uri)) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
     // the controls for `ports` (not bound yet), nearest to the widget first: page `fromPage` and the widget's
     // subpage, then the following pages unless `onlyPage`. Switch ports go to knobs only when no switch is free.
     function planPorts(model, ports, fromPage, widgetSubpage, onlyPage) {
@@ -239,8 +257,9 @@ var HMIWidgetsPlan = (function () {
 
         var switchLeft = placeGroup(model, switchPorts, rows(model, 'switch', fromPage, sub, onlyPage), used, targets)
         var knobLeft   = placeGroup(model, knobPorts,   rows(model, 'knob',   fromPage, sub, onlyPage), used, targets)
-        if (switchLeft.length && !onlyPage) {
-            switchLeft = placeGroup(model, switchLeft, rows(model, 'knob', fromPage, sub, false), used, targets)
+        // on the page alone, switch ports still go to its knobs when no switch is free on any page from it on
+        if (switchLeft.length && (!onlyPage || !anySwitchFree(model, switchLeft, fromPage, used))) {
+            switchLeft = placeGroup(model, switchLeft, rows(model, 'knob', fromPage, sub, onlyPage), used, targets)
         }
 
         var unbound = ports.filter(function (p) { return !targets[p.symbol] }).map(function (p) { return p.symbol })

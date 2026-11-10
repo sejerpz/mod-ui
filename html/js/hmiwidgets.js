@@ -82,6 +82,23 @@ function HMIWidgetsWindow(options) {
         return pending.some(function (b) { return b.instance === instance && b.symbol === symbol })
     }
 
+    // where a port is bound, as a slot {uri, page, subpage}, or null
+    function boundSlot(instance, symbol) {
+        var manager = hm(), key = instance + '/' + symbol
+        var uri = manager ? manager.addressingsByPortSymbol[key] : null
+        if (uri) {
+            var data = manager.addressingsData[key] || {}
+            return { uri: uri, page: toInt(data.page, 0),
+                     subpage: isKnob(uri) ? knobSubpage(toInt(data.subpage, 0)) : null }
+        }
+        for (var i = 0; i < pending.length; i++) {
+            if (pending[i].instance === instance && pending[i].symbol === symbol) {
+                return { uri: pending[i].uri, page: pending[i].page, subpage: pending[i].subpage }
+            }
+        }
+        return null
+    }
+
     // the slots holding a binding, with what they show: {key: {label, pending}}
     function takenSlots() {
         var taken = {}
@@ -511,7 +528,7 @@ function HMIWidgetsWindow(options) {
             var where = $('<ul class="hmi-widgets-placements">').appendTo(side)
             placements.forEach(function (entry) {
                 $('<li>').append($('<span>').text(whereText(entry)))
-                         .append($('<button type="button" class="btn btn-mini">').text('Remove').click(function () {
+                         .append($('<button type="button" class="btn btn-mini">').text('Remove from display').click(function () {
                              layout.splice(layout.indexOf(entry), 1)
                              render()
                          }))
@@ -549,7 +566,9 @@ function HMIWidgetsWindow(options) {
                 var label = $('<label>').text(port.name + ' · ' + (port.kind === 'switch' ? 'switch' : 'knob'))
                 field.append(label)
                 if (port.bound) {
-                    field.append($('<div class="hmi-widgets-note">').text('Already bound, left as it is'))
+                    var slot = boundSlot(widget.instance, port.symbol)
+                    field.append($('<div class="hmi-widgets-note">')
+                        .text('Already bound' + (slot ? ' to ' + slotText(slot) : '') + ', left as it is'))
                     return
                 }
                 var id = 'hmi-widgets-port-' + port.symbol.replace(/[^A-Za-z0-9_]/g, '_')
@@ -573,6 +592,12 @@ function HMIWidgetsWindow(options) {
                     select.prop('disabled', true)
                 }
             })
+            var left = ports.filter(function (p) { return !p.bound && !placing.targets[p.symbol] })
+            if (left.length && placingArea()) {
+                side.append($('<div class="hmi-widgets-note hmi-widgets-left">').text('Left unbound: ' +
+                    left.map(function (p) { return p.name }).join(', ') +
+                    (placing.auto ? ' (no free control for them up to the last page)' : '')))
+            }
             side.append($('<div class="hmi-widgets-note">')
                 .text('Bound on Save, as normal bindings: they stay if the widget is removed.'))
         }

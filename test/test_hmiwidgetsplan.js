@@ -181,6 +181,26 @@ const target = (uri, page, subpage) => ({ uri: uri, page: page, subpage: subpage
     assert.strictEqual(result.page, 1)
 }
 {
+    // no footswitch free on any page: a switch port takes a knob, and the widget goes to the first page that has
+    // one free, rather than to page 1 with Fire following to page 2
+    const taken = []
+    for (let page = 0; page < 2; page++) {
+        taken.push(['/hmi/footswitch1', page], ['/hmi/footswitch2', page])
+    }
+    for (let sub = 0; sub < 3; sub++) {
+        taken.push(['/hmi/knob1', 0, sub], ['/hmi/knob2', 0, sub], ['/hmi/knob3', 0, sub])
+    }
+    const result = Plan.autoAssign(model({ pages: 2, taken: taken }), { minWidth: 128, minHeight: 64 }, [switchPort('FIRE')])
+    assert.strictEqual(result.page, 1)
+    assert.deepStrictEqual(result.targets, { FIRE: target('/hmi/knob1', 1, 0) })
+}
+{
+    // a switch free on a later page keeps the switch port off the knobs of this one
+    const plan = Plan.planPorts(model({ pages: 2, taken: [['/hmi/footswitch1', 0], ['/hmi/footswitch2', 0]] }),
+                                [switchPort('fire')], 0, 0, true)
+    assert.deepStrictEqual(plan.unbound, ['fire'])
+}
+{
     // no free area anywhere
     const m = model({ pages: 1, layout: [{ page: 0, area: 'footB', instance: 'a', symbol: 'b' }] })
     assert.strictEqual(Plan.autoAssign(m, { minWidth: 128, minHeight: 64 }, []), null)
