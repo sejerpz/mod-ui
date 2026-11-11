@@ -7686,6 +7686,10 @@ so that the buttons are aligned and spaced nicely.
 .hmi-widgets-count {
   font-size: 12px;
   color: #555;
+  padding: 6px 12px;
+  border-top: 1px solid #ddd;
+  background: #fafafa;
+  text-align: center;
 }
 .hmi-widgets-list {
   flex: 1 1 auto;
@@ -7738,62 +7742,6 @@ so that the buttons are aligned and spaced nicely.
   font-size: 13px;
   color: #555;
 }
-.hmi-widgets-detail {
-  padding: 12px;
-  border-top: 1px solid #ddd;
-  background: #fafafa;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-.hmi-widgets-title {
-  font-size: 14px;
-}
-.hmi-widgets-subtitle {
-  font-size: 13px;
-  font-weight: bold;
-  margin-top: 4px;
-}
-.hmi-widgets-note {
-  margin: 0;
-  font-size: 12px;
-  color: #555;
-}
-.hmi-widgets-port {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-#hmi-widgets-window .hmi-widgets-port label {
-  float: none;
-  width: auto;
-  line-height: 1.4;
-  font-size: 13px;
-}
-#hmi-widgets-window .hmi-widgets-port select {
-  width: 100%;
-  margin: 0;
-}
-.hmi-widgets-placements {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  font-size: 12px;
-}
-.hmi-widgets-placements li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 0;
-}
-.hmi-widgets-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
-}
 #hmi-widgets-window .btn.hmi-widgets-primary {
   background: #883996;
   border-color: #883996;
@@ -7801,6 +7749,7 @@ so that the buttons are aligned and spaced nicely.
   text-shadow: none;
 }
 .hmi-widgets-main {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -7843,17 +7792,130 @@ so that the buttons are aligned and spaced nicely.
 .hmi-widgets-subpage:last-child {
   border-radius: 0 8px 8px 0;
 }
-.hmi-widgets-hint {
-  margin: 0;
-  font-size: 13px;
+/* the band above the page: the widget being placed, its ports, Assign automatically and the trash */
+.hmi-widgets-band {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  height: 96px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fafafa;
+  box-sizing: border-box;
+}
+.hmi-widgets-band.active {
+  border-color: #883996;
+  background: #f3e9f5;
+}
+.hmi-widgets-band.proposal {
+  border-style: dashed;
+}
+.hmi-widgets-band-note {
+  font-size: 15px;
+  color: #555;
+  line-height: 26px;
+}
+.hmi-widgets-band-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hmi-widgets-band-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.hmi-widgets-band-title strong {
+  font-size: 17px;
   color: #5e2468;
+}
+.hmi-widgets-band-title small {
+  font-size: 14px;
+  color: #555;
+}
+.hmi-widgets-band-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.hmi-widgets-chips {
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+.hmi-widgets-chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 14px;
+  padding: 2px 8px;
+  border: 1px dashed #999;
+  border-radius: 10px;
+  color: #555;
+  background: #fff;
+}
+.hmi-widgets-chip.bound {
+  border-style: solid;
+  border-color: #2e6b3a;
+  color: #2e6b3a;
+}
+.hmi-widgets-chip.planned {
+  border-style: solid;
+  border-color: #883996;
+  color: #5e2468;
+}
+/* the red trash: of a widget in the band, of a placement in the corner of its area */
+.hmi-widgets-trash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #c0392b;
+  border-radius: 6px;
+  background: #fff;
+  color: #c0392b;
+  cursor: pointer;
+}
+.hmi-widgets-trash:hover,
+.hmi-widgets-trash:focus {
+  background: #c0392b;
+  color: #fff;
+}
+.hmi-widgets-trash.small {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  pointer-events: auto;
+  z-index: 2;
+}
+/* with a mouse the trash of an area shows while the area is hovered; on touch it is always there */
+@media (hover: hover) and (pointer: fine) {
+  .hmi-widgets-area.taken .hmi-widgets-trash.small,
+  .hmi-widgets-outline .hmi-widgets-trash.small {
+    opacity: 0;
+  }
+  .hmi-widgets-area.taken:hover .hmi-widgets-trash.small,
+  .hmi-widgets-outline.hover .hmi-widgets-trash.small,
+  .hmi-widgets-trash.small:focus {
+    opacity: 1;
+  }
 }
 .hmi-widgets-display {
   align-self: center;
   position: relative;
   background: #e9eef0;
   outline: 6px solid #1e1e1e;
-  margin: 8px 0;
+  margin: 8px 0 14px;
   flex: 0 0 auto;
 }
 .hmi-widgets-area {
@@ -7874,6 +7936,37 @@ so that the buttons are aligned and spaced nicely.
   background: #3b4348;
   border-color: #3b4348;
   color: #fff;
+  cursor: pointer;
+}
+.hmi-widgets-area.selected {
+  background: #883996;
+  border-color: #5e2468;
+  color: #fff;
+}
+/* the full screen is the background of the drawing, its label on the band no other area takes */
+.hmi-widgets-display.full-pickable {
+  cursor: pointer;
+}
+.hmi-widgets-display.full-selected {
+  background: #d9bfe0;
+}
+.hmi-widgets-full-label {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  line-height: 16px;
+  color: #5e2468;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.hmi-widgets-full-label:disabled {
+  color: #9aa3a8;
+  cursor: default;
 }
 .hmi-widgets-area.cell {
   cursor: pointer;
@@ -7895,15 +7988,18 @@ so that the buttons are aligned and spaced nicely.
 .hmi-widgets-outline {
   position: absolute;
   pointer-events: none;
+  z-index: 1;
   box-sizing: border-box;
   outline: 3px solid #1e1e1e;
   outline-offset: 1px;
 }
 .hmi-widgets-status {
   min-height: 20px;
+  margin-bottom: 6px;
   font-size: 15px;
   font-weight: bold;
   color: #5e2468;
+  text-align: center;
 }
 .hmi-widgets-status.problem {
   color: #a33a00;
@@ -7926,7 +8022,31 @@ so that the buttons are aligned and spaced nicely.
   padding: 6px 8px;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
+  background: #fff;
+  color: #222;
+  text-align: left;
+  cursor: pointer;
+}
+.hmi-widgets-control:disabled {
+  cursor: default;
+}
+/* held by a binding that is not this widget's: cannot be tapped */
+.hmi-widgets-control.busy {
+  background: #eee;
+  border-color: #ddd;
+  color: #888;
+}
+.hmi-widgets-control.busy b {
+  color: #999;
+}
+.hmi-widgets-control.free.pickable {
+  border: 2px dashed #883996;
+  background: rgba(136, 57, 150, 0.06);
+}
+.hmi-widgets-control.free.pickable:hover {
+  background: rgba(136, 57, 150, 0.14);
 }
 .hmi-widgets-control b {
   font-size: 11px;
@@ -7952,6 +8072,42 @@ so that the buttons are aligned and spaced nicely.
 .hmi-widgets-control.planned {
   border: 2px solid #883996;
   background: #f3e9f5;
+}
+/* the menu of a control: which port it takes */
+.hmi-widgets-popup {
+  position: absolute;
+  z-index: 5;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  background: #fff;
+  border: 1px solid #883996;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.hmi-widgets-popup b {
+  padding: 2px 12px 6px;
+  font-size: 11px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.hmi-widgets-popup button {
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: #222;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+.hmi-widgets-popup button:hover,
+.hmi-widgets-popup button:focus {
+  background: #f3e9f5;
+}
+.hmi-widgets-popup button.danger {
+  color: #c0392b;
 }
 .hmi-widgets-footnote {
   margin: auto 0 0;

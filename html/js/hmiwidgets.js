@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The Display dialog: which plugin widget each area of the HMI display shows, page by page and subpage by subpage.
-// It starts from the widgets of the pedalboard. Place picks an area by tapping the cells of a drawing of the
-// display; Assign automatically proposes a page, an area and controls for the suggested ports. Nothing changes
-// until Save: the bindings go first, through the same path as the addressing dialog, then the layout.
+// It starts from the widgets of the pedalboard. The widget picked is placed at once by tapping the cells of a drawing
+// of the display, or its background for the full screen, and its suggested ports are bound by tapping the controls;
+// Assign automatically proposes a page, an area and controls to accept or discard. Nothing changes until Save: the
+// bindings go first, through the same path as the addressing dialog, then the layout.
 // The plan itself is in utils/hmiwidgetsplan.js.
 function HMIWidgetsWindow(options) {
     var self = this
@@ -26,7 +27,8 @@ function HMIWidgetsWindow(options) {
     var layout = []     // the placements being edited
     var pending = []    // bindings made by the dialog, applied on Save: {instance, symbol, uri, page, subpage}
     var view = null     // page, subpage, search, placeableOnly, grouped, selected
-    var placing = null  // while placing a widget: {key, page, subpage, cells, targets, auto, firstPlacement}
+    var draft = null    // cells of the selected widget that make no area yet: {key, page, subpage, cells}
+    var proposal = null // Assign automatically, until accepted: {key, page, subpage, area, targets, unbound}
 
     // ---------------------------------------------------------------------------------------------------------------
     // the controls of the device and what holds them
@@ -250,29 +252,76 @@ function HMIWidgetsWindow(options) {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
-    // placing
+    // placing: the widget picked in the list is placed straight away, on the page and subpage in view
 
-    function placingWidget() {
-        return placing ? widgetByKey(placing.key) : null
+    var TRASH_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" ' +
+        'd="M6 1h4l1 1h3v2H2V2h3zM3 5h10l-1 10H4zm3 2v6h1V7zm3 0v6h1V7z"/></svg>'
+
+    function selectedWidget() {
+        return view.selected ? widgetByKey(view.selected) : null
     }
 
-    function placingArea() {
-        return placing ? Plan.areaForCells(state, placing.cells) : null
+    function unboundPorts(widget) {
+        return suggestedPorts(widget).filter(function (p) { return !p.bound })
     }
 
-    // why the cells picked cannot be confirmed, or '' when they can
-    function placingProblem(m) {
-        var widget = placingWidget(), area = placingArea()
-        if (!placing.cells.length) {
-            return 'Tap a cell to start'
+    // whether a placement is on the page and subpage in view
+    function inView(entry) {
+        return entry.page === view.page && (entry.subpage === undefined || entry.subpage === view.subpage)
+    }
+
+    // the placement of a widget on the page and subpage in view: the one its cells edit
+    function currentEntry(widget) {
+        var placements = placementsOf(widget)
+        for (var i = 0; i < placements.length; i++) {
+            if (inView(placements[i])) {
+                return placements[i]
+            }
         }
+        return null
+    }
+
+    // the model with a placement left out, to see what the cells of that placement could become
+    function modelWithout(entry) {
+        var m = model()
+        m.layout = layout.filter(function (e) { return e !== entry })
+        return m
+    }
+
+    // the area covering the whole display, picked by tapping the background of the drawing
+    function fullArea() {
+        var size = displaySize(), best = null
+        state.areas.forEach(function (a) {
+            if (a.rect[0] === 0 && a.rect[1] === 0 && a.rect[2] === size.width && a.rect[3] === size.height) {
+                best = best || a
+            }
+        })
+        return best
+    }
+
+    // the cells the selected widget holds in view: those of a selection that is not an area yet, else of its placement
+    function selectionCells(widget) {
+        if (!widget) {
+            return []
+        }
+        if (draft && draft.key === widgetKey(widget) && draft.page === view.page && draft.subpage === view.subpage) {
+            return draft.cells
+        }
+        var entry = currentEntry(widget)
+        var area = entry ? areaOf(entry) : null
+        return area ? Plan.drawnCellsOf(state, area) : []
+    }
+
+    // why a selection of cells cannot be the widget's area, or '' when it can
+    function cellsProblem(widget, cells, m) {
+        var area = Plan.areaForCells(state, cells)
         if (!area) {
             return 'Not an area of this display'
         }
         if (!Plan.fits(widget, area)) {
-            return 'Too small: needs ' + (widget.minWidth || 1) + ' × ' + (widget.minHeight || 1) + ' px'
+            return 'Too small for ' + widget.name + ': needs ' + (widget.minWidth || 1) + ' × ' + (widget.minHeight || 1) + ' px'
         }
-        var other = Plan.overlapping(m, area, placing.page, placing.subpage)
+        var other = Plan.overlapping(m, area, view.page, view.subpage)
         if (other) {
             var w = widgetByKey(widgetKey(other))
             return 'Taken by ' + (w ? w.name : other.symbol)
@@ -280,131 +329,189 @@ function HMIWidgetsWindow(options) {
         return ''
     }
 
-    function unboundPorts(widget) {
-        return suggestedPorts(widget).filter(function (p) { return !p.bound })
-    }
-
-    // the controls the plan gives the suggested ports, from the page of the widget on
-    function planTargets() {
-        var widget = placingWidget(), area = placingArea()
-        placing.targets = {}
-        if (!placing.firstPlacement || !area) {
+    // the widget's area in view becomes the one these cells make: placed at once, removed when none are left
+    function setCells(widget, cells) {
+        var entry = currentEntry(widget)
+        if (entry) {
+            layout.splice(layout.indexOf(entry), 1)
+        }
+        draft = null
+        if (!cells.length) {
+            render()
             return
         }
-        var sub = area.subpages ? placing.subpage : 0
-        var plan = Plan.planPorts(model(), unboundPorts(widget), placing.page, sub, false)
-        for (var symbol in plan.targets) {
-            placing.targets[symbol] = plan.targets[symbol]
-        }
-    }
-
-    // the cells of the area closest to the widget's natural size, among the free ones of the page in view
-    function preselect() {
-        var areas = Plan.freeAreas(model(), placingWidget(), placing.page, placing.subpage)
-        placing.cells = areas.length ? Plan.drawnCellsOf(state, areas[0]) : []
-        planTargets()
-    }
-
-    function startPlacing(widget) {
-        placing = {
-            key: widgetKey(widget),
-            page: view.page,
-            subpage: view.subpage,
-            cells: [],
-            targets: {},
-            auto: false,
-            firstPlacement: placementsOf(widget).length === 0,
-        }
-        preselect()
-        render()
-    }
-
-    function startAuto(widget) {
-        var firstPlacement = placementsOf(widget).length === 0
-        var ports = firstPlacement ? unboundPorts(widget) : []
-        var result = Plan.autoAssign(model(), widget, ports)
-        if (!result) {
-            new Notification('info', "There is no free area for " + widget.name + " on any page")
+        if (cellsProblem(widget, cells, model())) {
+            // kept as it is, so the next tap can still make an area of it
+            draft = { key: widgetKey(widget), page: view.page, subpage: view.subpage, cells: cells.slice() }
+            render()
             return
         }
-        view.page = result.page
-        view.subpage = result.subpage === null ? view.subpage : result.subpage
-        placing = {
-            key: widgetKey(widget),
-            page: result.page,
-            subpage: view.subpage,
-            cells: Plan.drawnCellsOf(state, result.area),
-            targets: result.targets,
-            auto: true,
-            firstPlacement: firstPlacement,
-        }
-        render()
-    }
-
-    function finishPlacing() {
-        var widget = placingWidget(), area = placingArea()
-        if (!widget || !area || placingProblem(model())) {
-            return
-        }
-        var entry = { page: placing.page, area: area.id, instance: widget.instance, symbol: widget.symbol }
+        var area = Plan.areaForCells(state, cells)
+        var placed = { page: view.page, area: area.id, instance: widget.instance, symbol: widget.symbol }
         if (area.subpages) {
-            entry.subpage = placing.subpage
+            placed.subpage = view.subpage
         }
-        layout.push(entry)
-
-        var ports = suggestedPorts(widget)
-        for (var i = 0; i < ports.length; i++) {
-            var target = placing.targets[ports[i].symbol]
-            if (target && !ports[i].bound) {
-                pending.push({
-                    instance: widget.instance,
-                    symbol: ports[i].symbol,
-                    uri: target.uri,
-                    page: target.page,
-                    subpage: target.subpage,
-                    label: ports[i].name,
-                })
-            }
-        }
-        placing = null
+        layout.push(placed)
         render()
     }
 
-    // the free compatible slots a port can take, page by page, for its select
-    function slotOptions(port) {
-        var taken = model().taken
-        var chosen = {}
-        for (var symbol in placing.targets) {
-            var t = placing.targets[symbol]
-            if (symbol !== port.symbol && t) {
-                chosen[Plan.slotKey(t.uri, t.page, t.subpage)] = true
+    function toggleCell(widget, cell) {
+        var cells = selectionCells(widget).slice()
+        var i = cells.indexOf(cell)
+        if (i >= 0) {
+            cells.splice(i, 1)
+        } else {
+            cells.push(cell)
+        }
+        setCells(widget, cells)
+    }
+
+    // the background of the drawing: the whole display, or nothing when the widget already takes it
+    function toggleFull(widget) {
+        var full = fullArea()
+        if (!widget || !full) {
+            return
+        }
+        var cells = Plan.drawnCellsOf(state, full)
+        var current = selectionCells(widget)
+        var same = current.length === cells.length && cells.every(function (c) { return current.indexOf(c) >= 0 })
+        setCells(widget, same ? [] : cells)
+    }
+
+    function removeEntry(entry) {
+        layout.splice(layout.indexOf(entry), 1)
+        draft = null
+        render()
+    }
+
+    // every placement of a widget; the bindings stay
+    function removeWidget(widget) {
+        layout = layout.filter(function (e) { return !(e.instance === widget.instance && e.symbol === widget.symbol) })
+        draft = null
+        render()
+    }
+
+    function select(widget) {
+        view.selected = widget ? widgetKey(widget) : null
+        // a widget already placed brings the view to where it is, unless one of its placements is in view already
+        var placements = widget ? placementsOf(widget) : []
+        if (placements.length && !placements.some(inView)) {
+            view.page = placements[0].page
+            if (placements[0].subpage !== undefined && placements[0].subpage !== null) {
+                view.subpage = placements[0].subpage
             }
         }
-        var pages = []
-        for (var page = 0; page < state.pages; page++) {
-            var slots = []
-            var add = function (uri, subpage) {
-                var key = Plan.slotKey(uri, page, subpage)
-                if (!taken[key] && !chosen[key] && compatible(port, uri)) {
-                    slots.push({ uri: uri, page: page, subpage: subpage })
-                }
-            }
-            for (var s = 0; s < state.subpages; s++) {
-                for (var k = 0; k < actuators.knobs.length; k++) {
-                    add(actuators.knobs[k].uri, knobSubpage(s))
-                }
-                if (state.subpages <= 1) {
-                    break
-                }
-            }
-            for (var w = 0; w < actuators.switches.length; w++) {
-                add(actuators.switches[w].uri, null)
-            }
-            if (slots.length) {
-                pages.push({ page: page, slots: slots })
+        draft = null
+        proposal = null
+        closePopup()
+        render()
+    }
+
+    // Assign automatically: a widget not on the display yet gets a page, an area and controls; one already placed
+    // only gets controls for its ports left unbound, from the page of its first placement on. Nothing is applied
+    // until the proposal is accepted.
+    function startAuto(widget) {
+        var ports = unboundPorts(widget)
+        var placements = placementsOf(widget)
+        var result
+        if (placements.length) {
+            var first = placements[0]
+            var plan = Plan.planPorts(model(), ports, first.page, first.subpage || 0, false)
+            result = { page: first.page, subpage: first.subpage === undefined ? null : first.subpage, area: null,
+                       targets: plan.targets, unbound: plan.unbound }
+        } else {
+            result = Plan.autoAssign(model(), widget, ports)
+            if (!result) {
+                new Notification('info', "There is no free area for " + widget.name + " on any page")
+                return
             }
         }
-        return pages
+        proposal = { key: widgetKey(widget), page: result.page, subpage: result.subpage, area: result.area,
+                     targets: result.targets, unbound: result.unbound }
+        view.page = result.page
+        if (result.subpage !== null && result.subpage !== undefined) {
+            view.subpage = result.subpage
+        }
+        draft = null
+        render()
+    }
+
+    function acceptProposal() {
+        var widget = widgetByKey(proposal.key)
+        if (proposal.area) {
+            var placed = { page: proposal.page, area: proposal.area.id, instance: widget.instance, symbol: widget.symbol }
+            if (proposal.area.subpages) {
+                placed.subpage = proposal.subpage
+            }
+            layout.push(placed)
+        }
+        unboundPorts(widget).forEach(function (port) {
+            var target = proposal.targets[port.symbol]
+            if (target) {
+                addPending(widget, port, target)
+            }
+        })
+        proposal = null
+        render()
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // binding the suggested ports by tapping the controls
+
+    function addPending(widget, port, slot) {
+        pending.push({
+            instance: widget.instance,
+            symbol: port.symbol,
+            uri: slot.uri,
+            page: slot.page,
+            subpage: slot.subpage,
+            label: port.name,
+        })
+    }
+
+    function pendingAt(key) {
+        for (var i = 0; i < pending.length; i++) {
+            var b = pending[i]
+            if (Plan.slotKey(b.uri, b.page, b.subpage) === key) {
+                return b
+            }
+        }
+        return null
+    }
+
+    function bindPort(widget, port, slot) {
+        pending = pending.filter(function (b) { return !(b.instance === widget.instance && b.symbol === port.symbol) })
+        addPending(widget, port, slot)
+        closePopup()
+        render()
+    }
+
+    function unbindPending(b) {
+        pending.splice(pending.indexOf(b), 1)
+        closePopup()
+        render()
+    }
+
+    function closePopup() {
+        win.find('.js-popup').remove()
+    }
+
+    // a menu under a control: the ports it can take, and for one the dialog bound, a way to leave it free again
+    function openPopup(anchor, title, items) {
+        closePopup()
+        var main = win.find('.hmi-widgets-main')
+        var popup = $('<div class="hmi-widgets-popup js-popup" role="menu">').append($('<b>').text(title))
+        items.forEach(function (item) {
+            $('<button type="button" role="menuitem">').text(item.text).toggleClass('danger', !!item.danger)
+                .click(function (e) {
+                    e.stopPropagation()
+                    item.action()
+                }).appendTo(popup)
+        })
+        var a = anchor.offset(), m = main.offset()
+        popup.css({ left: Math.round(a.left - m.left) + 'px', top: Math.round(a.top - m.top + anchor.outerHeight() + 4) + 'px' })
+        main.append(popup)
+        popup.find('button').first().focus()
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -412,10 +519,9 @@ function HMIWidgetsWindow(options) {
 
     function render() {
         var m = model()
-        // a placement in progress is confirmed or dropped first
-        win.find('.js-submit').prop('disabled', !!placing)
+        win.find('.js-submit').prop('disabled', !!proposal)
         renderList(m)
-        renderSide(m)
+        renderBand(m)
         renderWhere()
         renderDisplay(m)
         renderControls()
@@ -445,11 +551,7 @@ function HMIWidgetsWindow(options) {
         }
         row.append($('<small>').toggleClass('placed', placements.length > 0).text(status))
         row.click(function () {
-            if (placing) {
-                return
-            }
-            view.selected = widgetKey(widget)
-            render()
+            select(view.selected === widgetKey(widget) ? null : widget)
         })
         return row
     }
@@ -500,115 +602,66 @@ function HMIWidgetsWindow(options) {
         })
     }
 
-    function renderSide(m) {
-        var side = win.find('.js-detail').empty()
-        if (placing) {
-            renderPlacingPanel(side, m)
-            return
-        }
-        var widget = view.selected ? widgetByKey(view.selected) : null
+    // the band above the page: the widget being placed, its ports, Assign automatically and the trash
+    function renderBand(m) {
+        var band = win.find('.js-band').empty()
+        var widget = selectedWidget()
+        band.toggleClass('active', !!widget).toggleClass('proposal', !!proposal)
+
         if (!widget) {
-            side.append($('<p class="hmi-widgets-note">').text('Pick a widget to place it on the display.'))
+            band.append($('<span class="hmi-widgets-band-note">').text('Pick a widget on the left to place it on the display.'))
             return
         }
 
-        side.append($('<div class="hmi-widgets-title">').append($('<strong>').text(widget.name))
-                                                       .append(document.createTextNode(' · ' + widget.plugin)))
-        side.append($('<div class="hmi-widgets-note">').text(sizeText(widget)))
+        var head = $('<div class="hmi-widgets-band-head">').appendTo(band)
+        var title = $('<div class="hmi-widgets-band-title">').appendTo(head)
 
-        var ports = suggestedPorts(widget)
-        if (ports.length) {
-            side.append($('<div class="hmi-widgets-note">').text('Suggested ports: ' + ports.map(function (p) {
-                return p.name + ' (' + (p.kind === 'switch' ? 'switch' : 'knob') + ')'
-            }).join(', ')))
-        }
-
-        var placements = placementsOf(widget)
-        if (placements.length) {
-            var where = $('<ul class="hmi-widgets-placements">').appendTo(side)
-            placements.forEach(function (entry) {
-                $('<li>').append($('<span>').text(whereText(entry)))
-                         .append($('<button type="button" class="btn btn-mini">').text('Remove from display').click(function () {
-                             layout.splice(layout.indexOf(entry), 1)
-                             render()
-                         }))
-                         .appendTo(where)
-            })
-        }
-
-        var placeable = isPlaceable(widget, m)
-        var buttons = $('<div class="hmi-widgets-buttons">').appendTo(side)
-        $('<button type="button" class="btn hmi-widgets-primary">').text('Place…').prop('disabled', !placeable)
-            .click(function () { startPlacing(widget) }).appendTo(buttons)
-        $('<button type="button" class="btn">').text('Assign automatically').prop('disabled', !placeable)
-            .click(function () { startAuto(widget) }).appendTo(buttons)
-        if (!placeable) {
-            side.append($('<div class="hmi-widgets-note">').text('No free area on any page fits this widget.'))
-        }
-    }
-
-    function renderPlacingPanel(side, m) {
-        var widget = placingWidget()
-        var problem = placingProblem(m)
-
-        side.append($('<div class="hmi-widgets-title">').append($('<strong>')
-            .text(placing.auto ? 'Proposal' : 'Place ' + widget.name))
-            .append(document.createTextNode(placing.auto ? ' · ' + widget.name + ' · nothing is saved yet' : '')))
-
-        var ports = suggestedPorts(widget)
-        if (ports.length && !placing.firstPlacement) {
-            side.append($('<div class="hmi-widgets-note">')
-                .text('Its suggested ports were offered at its first placement: a port takes one binding.'))
-        } else if (ports.length) {
-            side.append($('<div class="hmi-widgets-subtitle">').text('Suggested ports'))
-            ports.forEach(function (port) {
-                var field = $('<div class="hmi-widgets-port">').appendTo(side)
-                var label = $('<label>').text(port.name + ' · ' + (port.kind === 'switch' ? 'switch' : 'knob'))
-                field.append(label)
-                if (port.bound) {
-                    var slot = boundSlot(widget.instance, port.symbol)
-                    field.append($('<div class="hmi-widgets-note">')
-                        .text('Already bound' + (slot ? ' to ' + slotText(slot) : '') + ', left as it is'))
-                    return
-                }
-                var id = 'hmi-widgets-port-' + port.symbol.replace(/[^A-Za-z0-9_]/g, '_')
-                label.attr('for', id)
-                var select = $('<select>').attr('id', id).appendTo(field)
-                select.append($('<option value="">').text('Leave unbound'))
-                slotOptions(port).forEach(function (group) {
-                    var optgroup = $('<optgroup>').attr('label', 'Page ' + (group.page + 1)).appendTo(select)
-                    group.slots.forEach(function (slot) {
-                        optgroup.append($('<option>').val(JSON.stringify(slot)).text(slotText(slot)))
-                    })
-                })
-                var target = placing.targets[port.symbol]
-                select.val(target ? JSON.stringify({ uri: target.uri, page: target.page, subpage: target.subpage }) : '')
-                select.change(function () {
-                    var value = $(this).val()
-                    placing.targets[port.symbol] = value ? JSON.parse(value) : null
-                    render()
-                })
-                if (!placingArea()) {
-                    select.prop('disabled', true)
-                }
-            })
-            var left = ports.filter(function (p) { return !p.bound && !placing.targets[p.symbol] })
-            if (left.length && placingArea()) {
-                side.append($('<div class="hmi-widgets-note hmi-widgets-left">').text('Left unbound: ' +
-                    left.map(function (p) { return p.name }).join(', ') +
-                    (placing.auto ? ' (no free control for them up to the last page)' : '')))
+        if (proposal) {
+            title.append($('<strong>').text('Proposal: ' + widget.name))
+            var where = proposal.area
+                ? 'Page ' + (proposal.page + 1) + (proposal.subpage !== null && state.subpages > 1 ? ' · Subpage ' + (proposal.subpage + 1) : '') +
+                  ' · ' + proposal.area.name
+                : 'Only its ports, from page ' + (proposal.page + 1)
+            title.append($('<small>').text(where + ' · nothing is applied until you accept it'))
+            var actions = $('<div class="hmi-widgets-band-actions">').appendTo(head)
+            $('<button type="button" class="btn hmi-widgets-primary">').text('Accept').click(acceptProposal).appendTo(actions)
+            $('<button type="button" class="btn">').text('Discard').click(function () {
+                proposal = null
+                render()
+            }).appendTo(actions)
+        } else {
+            title.append($('<strong>').text('Place: ' + widget.name))
+            title.append($('<small>').text(widget.plugin + ' · ' + sizeText(widget)))
+            var buttons = $('<div class="hmi-widgets-band-actions">').appendTo(head)
+            var ports = unboundPorts(widget)
+            $('<button type="button" class="btn">').text('Assign automatically')
+                .prop('disabled', !isPlaceable(widget, m) && !(placementsOf(widget).length && ports.length))
+                .click(function () { startAuto(widget) }).appendTo(buttons)
+            if (placementsOf(widget).length) {
+                $('<button type="button" class="hmi-widgets-trash">').html(TRASH_SVG)
+                    .attr({ title: 'Remove ' + widget.name + ' from the display', 'aria-label': 'Remove ' + widget.name + ' from the display' })
+                    .click(function () { removeWidget(widget) }).appendTo(buttons)
             }
-            side.append($('<div class="hmi-widgets-note">')
-                .text('Bound on Save, as normal bindings: they stay if the widget is removed.'))
         }
 
-        var buttons = $('<div class="hmi-widgets-buttons">').appendTo(side)
-        $('<button type="button" class="btn hmi-widgets-primary">').text(placing.auto ? 'Accept' : 'Done')
-            .prop('disabled', !!problem).click(finishPlacing).appendTo(buttons)
-        $('<button type="button" class="btn">').text(placing.auto ? 'Discard' : 'Back').click(function () {
-            placing = null
-            render()
-        }).appendTo(buttons)
+        // the suggested ports, where each one is or would be bound
+        var list = suggestedPorts(widget)
+        if (list.length) {
+            var chips = $('<div class="hmi-widgets-chips">').appendTo(band)
+            list.forEach(function (port) {
+                var slot = boundSlot(widget.instance, port.symbol)
+                var planned = proposal && !port.bound ? proposal.targets[port.symbol] : null
+                var chip = $('<span class="hmi-widgets-chip">').append($('<b>').text(port.name))
+                if (slot) {
+                    chip.addClass('bound').append(document.createTextNode(' ' + slotText(slot)))
+                } else if (planned) {
+                    chip.addClass('planned').append(document.createTextNode(' ' + slotText(planned)))
+                } else {
+                    chip.append(document.createTextNode(' ' + (port.kind === 'switch' ? 'switch' : 'knob') + ', not bound'))
+                }
+                chips.append(chip)
+            })
+        }
     }
 
     function renderWhere() {
@@ -632,20 +685,13 @@ function HMIWidgetsWindow(options) {
                 })
                 .appendTo(switcher)
         }
-
-        win.find('.js-hint').toggle(!!placing).text(placing
-            ? 'Tap the lit cells to pick an area for ' + placingWidget().name + '. Only cells of free areas it fits in are lit.'
-            : '')
     }
 
     function setWhere(page, subpage) {
         view.page = page
         view.subpage = subpage
-        if (placing) {
-            placing.page = page
-            placing.subpage = subpage
-            preselect()
-        }
+        draft = null
+        closePopup()
         render()
     }
 
@@ -667,76 +713,136 @@ function HMIWidgetsWindow(options) {
         }
     }
 
+    function trashButton(label, action) {
+        return $('<button type="button" class="hmi-widgets-trash small">').html(TRASH_SVG)
+            .attr({ title: label, 'aria-label': label })
+            .click(function (e) {
+                e.stopPropagation()
+                action()
+            })
+    }
+
     function renderDisplay(m) {
         var size = displaySize()
         var scale = DRAW_WIDTH / size.width
-        var drawing = win.find('.js-display').empty()
+        var drawing = win.find('.js-display').empty().removeClass('full-selected full-pickable')
             .css({ width: DRAW_WIDTH + 'px', height: Math.round(size.height * scale) + 'px' })
+        var status = win.find('.js-status').text('').removeClass('problem')
 
-        // what the page in view already shows
-        var shown = layout.filter(function (e) {
-            return e.page === view.page && (e.subpage === undefined || e.subpage === view.subpage)
-        })
-        var covered = []
-        shown.forEach(function (entry) {
+        var widget = selectedWidget()
+        var mine = widget && !proposal ? currentEntry(widget) : null
+        var full = fullArea()
+
+        // the selection: a proposal, or the cells of the selected widget in view
+        var selected = proposal && proposal.area && proposal.page === view.page &&
+                       (proposal.subpage === null || proposal.subpage === view.subpage)
+            ? Plan.drawnCellsOf(state, proposal.area) : (proposal ? [] : selectionCells(widget))
+
+        // the other placements in view, each with its trash; tapping one picks its widget
+        var covered = [], fullTaken = false
+        layout.forEach(function (entry) {
+            if (entry === mine || !inView(entry)) {
+                return
+            }
             var area = areaOf(entry)
             if (!area) {
                 return
             }
             var w = widgetByKey(widgetKey(entry))
             covered = covered.concat(area.cells)
+            fullTaken = fullTaken || area === full
             $('<div class="hmi-widgets-area taken">').css(box(area.rect, scale))
-                .text(w ? w.name : entry.symbol).attr('title', area.name).appendTo(drawing)
-        })
-
-        var cells = Plan.drawableCells(state).filter(function (c) { return covered.indexOf(c) < 0 })
-
-        if (!placing) {
-            cells.forEach(function (cell) {
-                var area = Plan.areaForCells(state, [cell])
-                $('<div class="hmi-widgets-area">').css(box(Plan.cellRect(state, cell), scale))
-                    .text(area ? area.name : cell).appendTo(drawing)
-            })
-            win.find('.js-status').text('').removeClass('problem')
-            return
-        }
-
-        // the cells of the free areas the widget fits in can be picked
-        var widget = placingWidget(), lit = []
-        Plan.freeAreas(m, widget, placing.page, placing.subpage).forEach(function (area) {
-            lit = lit.concat(Plan.drawnCellsOf(state, area))
-        })
-
-        cells.forEach(function (cell) {
-            var area = Plan.areaForCells(state, [cell])
-            var selected = placing.cells.indexOf(cell) >= 0
-            $('<button type="button" class="hmi-widgets-area cell">').css(box(Plan.cellRect(state, cell), scale))
-                .text(area ? area.name : cell)
-                .toggleClass('lit', lit.indexOf(cell) >= 0)
-                .toggleClass('selected', selected)
-                .attr('aria-pressed', selected ? 'true' : 'false')
-                .prop('disabled', lit.indexOf(cell) < 0 && !selected)
+                .attr('title', area.name)
+                .append($('<span>').text(w ? w.name : entry.symbol))
+                .append(trashButton('Remove ' + (w ? w.name : entry.symbol) + ' from ' + area.name,
+                                    function () { removeEntry(entry) }))
                 .click(function () {
-                    var i = placing.cells.indexOf(cell)
-                    if (i >= 0) {
-                        placing.cells.splice(i, 1)
-                    } else {
-                        placing.cells.push(cell)
+                    if (w && !proposal) {
+                        select(w)
                     }
-                    planTargets()
-                    render()
                 })
                 .appendTo(drawing)
         })
 
-        var area = placingArea()
-        if (area) {
-            $('<div class="hmi-widgets-outline">').css(box(area.rect, scale)).appendTo(drawing)
+        // the full screen is the background: its label sits on the band no other area has
+        var fullFree = false
+        if (full && widget && !proposal) {
+            var without = modelWithout(mine)
+            fullFree = Plan.fits(widget, full) && Plan.isFree(without, full, view.page, view.subpage)
+        }
+        var allFull = full && selected.length && Plan.drawnCellsOf(state, full).every(function (c) { return selected.indexOf(c) >= 0 })
+        drawing.toggleClass('full-selected', !!allFull).toggleClass('full-pickable', fullFree)
+        if (full && !fullTaken) {
+            $('<button type="button" class="hmi-widgets-full-label">').text(full.name)
+                .prop('disabled', !fullFree)
+                .click(function (e) {
+                    e.stopPropagation()
+                    toggleFull(widget)
+                }).appendTo(drawing)
+        }
+        drawing.off('click').on('click', function (e) {
+            if (e.target === this && fullFree) {
+                toggleFull(widget)
+            }
+        })
+
+        var cells = Plan.drawableCells(state).filter(function (c) { return covered.indexOf(c) < 0 })
+
+        if (!widget || proposal) {
+            cells.forEach(function (cell) {
+                var area = Plan.areaForCells(state, [cell])
+                $('<div class="hmi-widgets-area">').css(box(Plan.cellRect(state, cell), scale))
+                    .toggleClass('selected', selected.indexOf(cell) >= 0)
+                    .text(area ? area.name : cell).appendTo(drawing)
+            })
+            return
         }
 
-        var problem = placingProblem(m)
-        win.find('.js-status').toggleClass('problem', !!problem)
-            .text(problem || area.name + ' · ' + area.rect[2] + ' × ' + area.rect[3] + ' px')
+        // the cells of the free areas the widget fits in can be tapped, its own ones too
+        var lit = []
+        Plan.freeAreas(modelWithout(mine), widget, view.page, view.subpage).forEach(function (area) {
+            lit = lit.concat(Plan.drawnCellsOf(state, area))
+        })
+
+        var own = []
+        cells.forEach(function (cell) {
+            var area = Plan.areaForCells(state, [cell])
+            var isSelected = selected.indexOf(cell) >= 0
+            var button = $('<button type="button" class="hmi-widgets-area cell">').css(box(Plan.cellRect(state, cell), scale))
+                .text(area ? area.name : cell)
+                .toggleClass('lit', lit.indexOf(cell) >= 0)
+                .toggleClass('selected', isSelected)
+                .attr('aria-pressed', isSelected ? 'true' : 'false')
+                .prop('disabled', lit.indexOf(cell) < 0 && !isSelected)
+                .click(function (e) {
+                    e.stopPropagation()
+                    toggleCell(widget, cell)
+                })
+                .appendTo(drawing)
+            if (isSelected) {
+                own.push(button)
+            }
+        })
+
+        // the area the widget takes, with the trash in its corner; on a desktop it shows while the area is hovered
+        if (mine && areaOf(mine)) {
+            var area = areaOf(mine)
+            var outline = $('<div class="hmi-widgets-outline">').css(box(area.rect, scale))
+                .append(trashButton('Remove ' + widget.name + ' from ' + area.name, function () { removeEntry(mine) }))
+                .appendTo(drawing)
+            own.concat([outline.find('.hmi-widgets-trash')]).forEach(function (el) {
+                el.on('mouseenter', function () { outline.addClass('hover') })
+                  .on('mouseleave', function () { outline.removeClass('hover') })
+            })
+            status.text(widget.name + ' · ' + area.name + ' · ' + area.rect[2] + ' × ' + area.rect[3] + ' px')
+        } else if (selected.length) {
+            status.addClass('problem').text(cellsProblem(widget, selected, modelWithout(null)))
+        } else if (!lit.length && !fullFree) {
+            status.addClass('problem').text('No free area of this page fits ' + widget.name +
+                                            ': pick another page or subpage, or Assign automatically')
+        } else {
+            status.text('Tap the display to place ' + widget.name + (fullFree ? ', or its background for the full screen' : ''))
+        }
     }
 
     function renderControls() {
@@ -745,31 +851,62 @@ function HMIWidgetsWindow(options) {
         var title = 'Controls · Page ' + (view.page + 1) + (state.subpages > 1 ? ' · Subpage ' + (view.subpage + 1) : '')
         win.find('.js-controls-title').text(title)
 
-        // what the plan in progress would add
+        var widget = proposal ? null : selectedWidget()
+        var ports = widget ? unboundPorts(widget) : []
+
+        // what a proposal would add
         var planned = {}
-        if (placing) {
-            for (var symbol in placing.targets) {
-                var t = placing.targets[symbol]
-                if (t) {
-                    var port = portOf(placingWidget().instance, symbol)
-                    planned[Plan.slotKey(t.uri, t.page, t.subpage)] = port ? port.name : symbol
-                }
+        if (proposal) {
+            var pw = widgetByKey(proposal.key)
+            for (var symbol in proposal.targets) {
+                var t = proposal.targets[symbol]
+                var port = portOf(pw.instance, symbol)
+                planned[Plan.slotKey(t.uri, t.page, t.subpage)] = port ? port.name : symbol
             }
         }
 
         var add = function (control, subpage) {
+            var slot = { uri: control.uri, page: view.page, subpage: subpage }
             var key = Plan.slotKey(control.uri, view.page, subpage)
-            var cell = $('<div class="hmi-widgets-control">').append($('<b>').text(control.name))
+            var cell = $('<button type="button" class="hmi-widgets-control">').append($('<b>').text(control.name))
+            var b = pendingAt(key)
+            var ownPending = b && widget && b.instance === widget.instance &&
+                             suggestedPorts(widget).some(function (p) { return p.symbol === b.symbol })
+
             if (planned[key]) {
-                cell.addClass('planned').append($('<span>').text(planned[key]))
-                    .append($('<em>').text('on Save'))
+                cell.addClass('planned').prop('disabled', true)
+                    .append($('<span>').text(planned[key])).append($('<em>').text('proposed'))
+            } else if (ownPending) {
+                // bound by the dialog to a port of this widget: no replacing, it is unassigned first
+                cell.addClass('planned').append($('<span>').text(b.label)).append($('<em>').text('on Save'))
+                cell.click(function () {
+                    openPopup(cell, control.name, [
+                        { text: 'Unassign', danger: true, action: function () { unbindPending(b) } },
+                    ])
+                })
             } else if (taken[key]) {
-                cell.toggleClass('planned', taken[key].pending).append($('<span>').text(taken[key].label))
+                cell.addClass('busy').prop('disabled', true).append($('<span>').text(taken[key].label))
                 if (taken[key].pending) {
                     cell.append($('<em>').text('on Save'))
                 }
             } else {
+                var fit = ports.filter(function (p) { return compatible(p, control.uri) })
                 cell.addClass('free').append($('<span>').text('Free'))
+                if (!fit.length) {
+                    cell.prop('disabled', true)
+                } else {
+                    cell.addClass('pickable').attr('title', 'Bind a port of ' + widget.name + ' here')
+                    cell.click(function () {
+                        if (fit.length === 1) {
+                            bindPort(widget, fit[0], slot)
+                            return
+                        }
+                        openPopup(cell, control.name, fit.map(function (p) {
+                            return { text: p.name + ' · ' + (p.kind === 'switch' ? 'switch' : 'knob'),
+                                     action: function () { bindPort(widget, p, slot) } }
+                        }))
+                    })
+                }
             }
             strip.append(cell)
         }
@@ -865,7 +1002,7 @@ function HMIWidgetsWindow(options) {
     }
 
     function save() {
-        if (placing) {
+        if (proposal) {
             return
         }
         var bindings = pending.slice()
@@ -885,6 +1022,18 @@ function HMIWidgetsWindow(options) {
 
     // ---------------------------------------------------------------------------------------------------------------
     // wiring
+
+    // a tap anywhere else closes the menu of a control
+    win.on('mousedown', function (e) {
+        if (!$(e.target).closest('.js-popup, .hmi-widgets-control').length) {
+            closePopup()
+        }
+    }).on('keydown', function (e) {
+        if (e.key === 'Escape' && win.find('.js-popup').length) {
+            closePopup()
+            e.stopPropagation()
+        }
+    })
 
     win.find('.js-page').change(function () {
         setWhere(parseInt($(this).val()), view.subpage)
@@ -909,7 +1058,9 @@ function HMIWidgetsWindow(options) {
     })
 
     win.find('.js-cancel').click(function () {
-        placing = null
+        draft = null
+        proposal = null
+        closePopup()
         pending = []
         win.hide()
         return false
@@ -933,7 +1084,8 @@ function HMIWidgetsWindow(options) {
                 state = data
                 layout = JSON.parse(JSON.stringify(data.layout))
                 pending = []
-                placing = null
+                draft = null
+                proposal = null
                 view = { page: 0, subpage: 0, search: '', placeableOnly: true, grouped: true, selected: null }
 
                 win.find('.js-search').val('')

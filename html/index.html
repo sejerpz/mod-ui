@@ -798,18 +798,17 @@ $('document').ready(function() {
                                     <button type="button" class="js-view selected" data-view="plugin">By plugin</button>
                                 </div>
                             </div>
-                            <div class="hmi-widgets-count js-count"></div>
                         </div>
                         <div class="hmi-widgets-list js-list"></div>
-                        <div class="hmi-widgets-detail js-detail"></div>
+                        <div class="hmi-widgets-count js-count"></div>
                     </div>
                     <div class="hmi-widgets-main">
+                        <div class="hmi-widgets-band js-band" aria-live="polite"></div>
                         <div class="hmi-widgets-where">
                             <label for="hmi-widgets-page">Page</label>
                             <select id="hmi-widgets-page" class="js-page"></select>
                             <div class="hmi-widgets-subpages js-subpages" role="group" aria-label="Subpage"></div>
                         </div>
-                        <p class="hmi-widgets-hint js-hint"></p>
                         <div class="hmi-widgets-display js-display"></div>
                         <div class="hmi-widgets-status js-status" aria-live="polite"></div>
                         <div class="hmi-widgets-controls-title js-controls-title"></div>
