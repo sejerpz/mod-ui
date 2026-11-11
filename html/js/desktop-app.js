@@ -231,7 +231,17 @@ var DesktopApp = {
 
     setupAddressing: function () {
         // The snapshot "assign all" button drives hardware addressing.
-        $('#pedal-presets-window').find('.js-assign-all').hide()
+        if (! DesktopApp.hasActuators()) {
+            $('#pedal-presets-window').find('.js-assign-all').hide()
+        }
+    },
+
+    /* The hardware descriptor of MOD Desktop has no actuators. One that has them
+     * comes with a controller attached (mod-hw-emulator): hardware addressing is
+     * there to use, not to advertise. */
+    hasActuators: function () {
+        return typeof HARDWARE_PROFILE !== 'undefined' && !!HARDWARE_PROFILE &&
+               Object.keys(HARDWARE_PROFILE).length > 0
     },
 
     /* Hardware-only addressing targets stay selectable in the dialog. Picking one
