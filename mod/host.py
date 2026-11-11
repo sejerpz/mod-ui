@@ -8154,9 +8154,9 @@ _:b%i
         if symbol == ':presets':
             actuator_uri = "/hmi/knob" + str(hw_id + 1)
             hmitype = self.addressings.get_hmitype(symbol, actuator_uri, None)
-            # transform list of file://uri/preset_name.ttl in list of Preset Name
-            mp = plugin.get('mapPresets') or []
-            options = list(enumerate([uri.split('/')[-1].replace('.ttl', '').replace('_', ' ') for uri in mp]))
+            # use the preset labels, same as hmi_builder_control_list (uris like urn:...#preset-x carry no name)
+            presets = self.addressings.get_presets_as_options(instance_id)
+            options = presets[2] if presets is not None else []
             data = dict()
             data['label'] = "presets"
             data['hmitype'] = hmitype
