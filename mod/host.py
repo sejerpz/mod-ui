@@ -462,6 +462,8 @@ class Host(object):
         self.compare_status = "empty"
         self.next_hmi_pedalboard_to_load = None
         self.next_hmi_pedalboard_loading = False
+        # a parameter waiting for the first actuator turned on the device; see hmi_learn_start
+        self.hmi_learning = None
         self.next_hmi_bpb = [0, False, False]
         self.next_hmi_bpm = [0, False, False]
         self.next_hmi_play = [False, False, False]
@@ -2544,6 +2546,7 @@ class Host(object):
 
         self.bank_id = bank_id if bank_id is not None else self.first_user_bank
         self.connections = []
+        self.hmi_learning = None
         self.addressings.clear()
         self.mapper.clear()
         self.init_plugins_data()
@@ -4020,6 +4023,8 @@ class Host(object):
             # NOTE: ignoring callback here, as HMI is handling a request right now
             self.hmi.control_add(next_addressing_data, hw_id, uri, None)
         self.addressings.current_page = idx % self.addressings.addressing_pages
+        # the device cleared every control for the new page, LEARN ones included
+        self.hmi_learn_show()
 
         # callback must be last action
         callback(True)
@@ -6800,6 +6805,12 @@ _:b%i
         # out of the way first; see the docstring
         callback(True, '1 %d' % freed)
 
+        self.hmi_bind(instance, node_id, param, actuator, page, previous is not None)
+
+    def hmi_bind(self, instance, node_id, param, actuator, page, replaced, callback=None):
+        """Address one parameter (a BINDINGS.parameters() entry) to one actuator slot
+        ({'uri', 'subpage'}) and tell the browser, which did not ask for it. Shared by the
+        device's binding manager and the web UI's "Learn from Dwarf"."""
         # the web UI names a bypass or a presets addressing after the plugin, so the
         # panel does too
         label = param['name']
@@ -6811,16 +6822,24 @@ _:b%i
                 label = plugin['name'] or label
 
         def bound(ok):
-            logging.debug("hmi builder bind %s/%s -> %s page %d subpage %s: %s",
+            logging.debug("hmi bind %s/%s -> %s page %s subpage %s: %s",
                           instance, param['symbol'], actuator['uri'], page,
                           actuator['subpage'], ok and "done" or "failed")
 
             if ok:
-                self.hmi_builder_binding_broadcast(instance, param, actuator, page,
-                                                previous is not None)
+                self.hmi_builder_binding_broadcast(instance, param, actuator, page, replaced)
+            if callback is not None:
+                callback(ok)
+
+        # BINDINGS calls the bypass "Enabled", 1 while the plugin runs; the :bypass port the
+        # addressing drives is 1 while it is bypassed. Passed as is, the footswitch started
+        # out showing the opposite of the plugin, and its first press changed nothing.
+        value = param['value']
+        if param['symbol'] == ":bypass":
+            value = 1.0 if self.plugins[node_id]['bypassed'] else 0.0
 
         self.address(instance, param['symbol'], actuator['uri'], label,
-                     param['minimum'], param['maximum'], param['value'], param['steps'],
+                     param['minimum'], param['maximum'], value, param['steps'],
                      {'page': page, 'subpage': actuator['subpage']}, bound)
 
     # -----------------------------------------------------------------------------------------------------------------
@@ -7457,12 +7476,144 @@ _:b%i
         instance_id, portsymbol = self.get_addressed_port_info(hw_id)
         callback(self.addr_task_get_port_value(instance_id, portsymbol))
 
+    # -----------------------------------------------------------------------------------------------------------------
+    # Learn: the web UI's "Learn from Dwarf" -- the next actuator turned or pressed takes a parameter
+
+    def hmi_learn_start(self, instance, portsymbol, actuator_uris, callback):
+        """Wait for the first of these actuators to be used on the device, and address the
+        parameter to it, on the page (and knob sub-page) the device is showing.
+
+        Each actuator gets a "LEARN" control in place of what it holds, so the device shows
+        which ones are listening, and reports a turn or a press on it like on any control --
+        that report is what hmi_parameter_set catches. The browser picks the actuators, since
+        it already knows which suit the parameter (HardwareManager.availableActuators).
+        """
+        self.hmi_learn_cancel()
+
+        hw_ids = dict((self.addressings.hmi_uri2hw_map[uri], uri) for uri in actuator_uris
+                      if uri in self.addressings.hmi_uri2hw_map)
+
+        if not hw_ids or not self.hmi.initialized or self.mapper.instance_map.get(instance) is None:
+            callback(False)
+            return
+
+        self.hmi_learning = {'instance': instance, 'symbol': portsymbol, 'hw_ids': hw_ids, 'chosen': None}
+        self.hmi_learn_show()
+        callback(True)
+
+    def hmi_learn_show(self, hw_ids=None):
+        """Put the LEARN placeholder on the listening actuators (or just hw_ids), over what they
+        show. Again after a page or knob sub-page change, as the device clears its controls
+        then: learning goes on, onto the page the device is showing now."""
+        learning = self.hmi_learning
+        if learning is None or learning['chosen'] is not None:
+            return
+
+        for hw_id, uri in learning['hw_ids'].items():
+            if hw_ids is not None and hw_id not in hw_ids:
+                continue
+            # A knob gets a trigger: the firmware reports a turn on one either way, where a
+            # value at its minimum or maximum ignores a turn past it; and it shows a "TRIG"
+            # box rather than a meaningless number. A footswitch gets a toggle.
+            footswitch = uri.startswith("/hmi/footswitch")
+            self.hmi.control_add({'label': "LEARN", 'unit': "none", 'options': [],
+                                  'hmitype': FLAG_CONTROL_TOGGLED if footswitch else FLAG_CONTROL_TRIGGER,
+                                  'value': 0.0, 'minimum': 0.0, 'maximum': 1.0, 'steps': 1,
+                                  'addrs_idx': 1, 'addrs_max': 1}, hw_id, uri, None)
+
+    def hmi_learn_cancel(self):
+        """Stop waiting, and give the actuators back what they held. Too late once one is picked."""
+        learning = self.hmi_learning
+        if learning is None or learning['chosen'] is not None:
+            return
+
+        self.hmi_learn_drop()
+        self.hmi.control_rm(list(learning['hw_ids']), None)
+        for uri in learning['hw_ids'].values():
+            self.addressings.hmi_load_current(uri, None)
+
+    def hmi_learn_drop(self):
+        """Forget the parameter waiting to be learned, and tell the browser to stop waiting."""
+        learning, self.hmi_learning = self.hmi_learning, None
+        if learning is not None:
+            self.msg_callback("hmi_learn_end %s %s" % (learning['instance'], learning['symbol']))
+
+    def hmi_learn_finish(self, learning):
+        hw_id    = learning['chosen']
+        uri      = learning['hw_ids'][hw_id]
+        instance = learning['instance']
+        symbol   = learning['symbol']
+        page     = self.addressings.current_page if self.addressings.addressing_pages else None
+        subpage  = self.addressings.hmi_hwsubpages[hw_id]
+
+        # the placeholders go, and the actuators not picked get back what they held
+        self.hmi.control_rm(list(learning['hw_ids']), None)
+        for other in learning['hw_ids'].values():
+            if other != uri:
+                self.addressings.hmi_load_current(other, None)
+
+        node_id = self.mapper.instance_map.get(instance)
+        param = None
+        if node_id in self.plugins:
+            param = next((p for p in BINDINGS.parameters(self, node_id) if p['symbol'] == symbol), None)
+
+        if param is None:
+            logging.warning("[host] learned %s for %s/%s, which is gone", uri, instance, symbol)
+            self.addressings.hmi_load_current(uri, None)
+            self.hmi_learn_drop()
+            return
+
+        replaced = self.plugins[node_id]['addressings'].get(symbol) is not None
+
+        # With pages a slot holds one addressing, and Host.address() does not clear it, only
+        # the parameter's own old one -- so whatever is on it now is taken off first. (Without
+        # pages an actuator holds a list, and the parameter just joins it.)
+        held = self.addressings.hmi_addressings[uri]['addrs']
+        occupant = None
+        if page is not None and self.addressings.is_page_assigned(held, page, subpage):
+            occupant = self.addressings.get_addressing_for_page(held, page, subpage)
+        if occupant is not None and (occupant['instance_id'], occupant['port']) == (node_id, symbol):
+            occupant = None
+
+        def bound(ok):
+            # a learn started meanwhile is not this one's to end
+            if self.hmi_learning is learning:
+                self.hmi_learn_drop()
+
+        def take(ok=True):
+            self.hmi_bind(instance, node_id, param, {'uri': uri, 'subpage': subpage}, page, replaced, bound)
+
+        if occupant is None:
+            take()
+            return
+
+        occupant_instance = self.mapper.get_instance(occupant['instance_id'])
+
+        def freed(ok):
+            if ok:
+                self.msg_callback("hw_unmap %s %s" % (occupant_instance, occupant['port']))
+            take()
+
+        self.unaddress(occupant_instance, occupant['port'], True, freed)
+
     def hmi_parameter_set(self, hw_id, value, callback):
         logging.debug("hmi parameter set")
         if self.next_hmi_pedalboard_loading:
             callback(False)
             logging.error("hmi_parameter_set, pedalboard loading is in progress")
             return
+
+        learning = self.hmi_learning
+        if learning is not None and hw_id in learning['hw_ids']:
+            # The device waits on this answer, so it goes first (see hmi_builder_binding_add).
+            # A knob sends a burst of these: the first picks it, the rest are swallowed until
+            # the parameter is on it, so none reach what the actuator held before.
+            callback(True)
+            if learning['chosen'] is None:
+                learning['chosen'] = hw_id
+                self.hmi_learn_finish(learning)
+            return
+
         instance_id, portsymbol = self.get_addressed_port_info(hw_id)
         self.hmi_or_cc_parameter_set(instance_id, portsymbol, value, hw_id, callback)
 
@@ -7758,6 +7909,7 @@ _:b%i
     def hmi_parameter_load_subpage(self, hw_id, subpage, callback):
         logging.debug("hmi parameter load subpage")
         self.addressings.hmi_load_subpage(hw_id, subpage)
+        self.hmi_learn_show([hw_id])
         callback(True)
 
     def hmi_next_control_page_compat(self, hw_id, props, callback):

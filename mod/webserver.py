@@ -1286,6 +1286,21 @@ class EffectParameterAddress(JsonRequestHandler):
 
         self.write(ok)
 
+class EffectParameterHmiLearn(JsonRequestHandler):
+    # "Learn from Dwarf": the body lists the actuators that suit the port; the next one used takes it
+    @web.asynchronous
+    @gen.engine
+    def post(self, port):
+        data = json.loads(self.request.body.decode("utf-8", errors="ignore"))
+        instance, portsymbol = port.rsplit("/", 1)
+        ok = yield gen.Task(SESSION.host.hmi_learn_start, instance, portsymbol, data.get('actuators', []))
+        self.write(ok)
+
+class EffectParameterHmiLearnCancel(JsonRequestHandler):
+    def post(self):
+        SESSION.host.hmi_learn_cancel()
+        self.write(True)
+
 class EffectPresetLoad(JsonRequestHandler):
     @web.asynchronous
     @gen.engine
@@ -3257,6 +3272,8 @@ application = web.Application(
             # plugin parameters
             (r"/effect/parameter/address/*(/[A-Za-z0-9_:/]+[^/])/?", EffectParameterAddress),
             (r"/effect/parameter/set/?", EffectParameterSet),
+            (r"/effect/parameter/hmi_learn/*(/[A-Za-z0-9_:/]+[^/])/?", EffectParameterHmiLearn),
+            (r"/effect/parameter/hmi_learn_cancel/?", EffectParameterHmiLearnCancel),
 
             # plugin presets
             (r"/effect/preset/load/*(/[A-Za-z0-9_/]+[^/])/?", EffectPresetLoad),
