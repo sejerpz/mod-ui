@@ -87,6 +87,9 @@ function HardwareManager(options) {
 
         // used to save config on the server side
         saveConfigValue: function( key, value, callback ) { },
+
+        // Starts a "Learn from Dwarf" onto one of these actuators, see the Device tab
+        hmiLearn: function (instance, symbol, actuators) {},
     }, options)
 
     this.beatsPerMinutePort = {
@@ -460,7 +463,7 @@ function HardwareManager(options) {
       else if (typeInputVal === deviceOption)
       {
         form.find('.device-table').find('.selected').click()
-        form.find('.device-table').show()
+        form.find('.device-table, .device-learn').show()
       }
       else if (typeInputVal === ccOption)
       {
@@ -1575,6 +1578,23 @@ function HardwareManager(options) {
           self.showDynamicField(model.is_overview, model.form, model.typeInput.val(), model.addressing, model.port, model.cvPortSelect.val(), false)
           self.updateView(model)
         })
+
+        // "Learn from Dwarf", as in the control's right-click menu. On a touchscreen this is
+        // the way to it: a long press on a control is left to the control. The learn binds
+        // the control itself, so the dialog closes for it. Not the transport's tempo and
+        // play: the host learns plugins' parameters only
+        var learnActuators = model.is_overview || model.instance == '/pedalboard' ? []
+                           : self.hmiLearnActuators(model.instance, model.port)
+        if (learnActuators.length) {
+          $('<div class="dynamic-field device-learn form-group clearfix">').append(
+            $('<span class="btn btn-primary js-hmi-learn">')
+              .text('Learn from ' + (PLATFORM == 'dwarf' ? 'Dwarf' : 'device') + '...')
+              .click(function () {
+                form.find('.js-close').first().click()
+                options.hmiLearn(model.instance, model.port.symbol, learnActuators)
+              })
+          ).insertBefore(model.deviceTable)
+        }
 
         // refresh  predefined tab
         self.showDynamicField(model.is_overview, model.form, model.typeInput.val(), model.addressing, model.port, model.cvPortSelect.val(), true)

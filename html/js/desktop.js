@@ -243,7 +243,10 @@ function Desktop(elements) {
         isApp: function() {
             return self.isApp;
         },
-        saveConfigValue: this.saveConfigValue
+        saveConfigValue: this.saveConfigValue,
+        hmiLearn: function (instance, symbol, actuators) {
+            self.pedalboard.pedalboard('hmiLearn', instance, symbol, actuators, null)
+        },
     })
 
     this.pedalPresets = new SnapshotsManager({

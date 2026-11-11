@@ -3596,9 +3596,13 @@ JqueryClass('pedalboard', {
                 // A ring over the control, in screen pixels. On the control itself it would
                 // shrink with the board's zoom (a fifth of a pixel zoomed out) and be clipped
                 // by the knob's box. Nothing moves under it: a click or a wheel ends the learn.
-                var r = control.getBoundingClientRect()
-                var ring = $('<div class="mod-hmi-learning">').appendTo('body')
-                    .css({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 })
+                // None from the addressing dialog, which has closed: the notification says it
+                var ring = $()
+                if (control) {
+                    var r = control.getBoundingClientRect()
+                    ring = $('<div class="mod-hmi-learning">').appendTo('body')
+                        .css({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 })
+                }
                 hmiLearning = {
                     instance: instance,
                     symbol: symbol,
@@ -3606,7 +3610,8 @@ JqueryClass('pedalboard', {
                     notification: new Notification('info', 'Turn a knob or press a footswitch on the ' +
                                                    'device to assign it. Esc cancels.'),
                 }
-                $(document).on('mousedown.hmilearn wheel.hmilearn', function () { hmiLearnEnd(true) })
+                // pointerdown, not mousedown: a tap on a knob sends no mousedown, see modgui.js
+                $(document).on('pointerdown.hmilearn wheel.hmilearn', function () { hmiLearnEnd(true) })
                            .on('keydown.hmilearn', function (e) {
                                if (e.key === 'Escape') {
                                    hmiLearnEnd(true)
