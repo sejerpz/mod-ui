@@ -180,8 +180,10 @@ var DesktopApp = {
         $('#mod-status').hide()
         $('#mod-ram').hide()
         $('#mod-show-midi-port').hide()
-        // no device display to put widgets on
-        $('#pedalboard-info .js-hmi-widgets').hide()
+        // no device display to put widgets on, but where a controller is attached (mod-hw-emulator)
+        if (! DesktopApp.hasActuators()) {
+            $('#pedalboard-info .js-hmi-widgets').hide()
+        }
         $('#pedalboards-library').find('a').hide()
 
         DesktopApp.setupExclusiveIcons()
