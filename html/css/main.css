@@ -7603,6 +7603,361 @@ so that the buttons are aligned and spaced nicely.
   width: 40px;
   margin-right: 6px;
 }
+#hmi-widgets-window .mod-box {
+  width: 1000px;
+  margin: -330px -500px;
+  box-sizing: border-box;
+}
+#hmi-widgets-window h1 {
+  margin-bottom: 14px;
+}
+.hmi-widgets-hidden {
+  position: absolute;
+  left: -9999px;
+}
+.hmi-widgets-body {
+  display: flex;
+  gap: 18px;
+  height: 560px;
+}
+.hmi-widgets-side {
+  width: 310px;
+  flex: 0 0 310px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ddd;
+  min-height: 0;
+}
+.hmi-widgets-tools {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#hmi-widgets-window .hmi-widgets-tools input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+  height: 30px;
+  margin: 0;
+}
+.hmi-widgets-tools-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#hmi-widgets-window .hmi-widgets-check {
+  float: none;
+  width: auto;
+  line-height: 1.4;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#hmi-widgets-window .hmi-widgets-check input {
+  margin: 0;
+}
+.hmi-widgets-view {
+  display: flex;
+  margin-left: auto;
+}
+.hmi-widgets-view button {
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid #888;
+  background: #fff;
+  color: #222;
+  margin-left: -1px;
+}
+.hmi-widgets-view button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.hmi-widgets-view button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+.hmi-widgets-view button.selected,
+.hmi-widgets-subpage.selected {
+  background: #883996;
+  border-color: #883996;
+  color: #fff;
+}
+.hmi-widgets-count {
+  font-size: 12px;
+  color: #555;
+}
+.hmi-widgets-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 96px;
+}
+.hmi-widgets-group {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #333;
+  background: #f0f0f0;
+  border-bottom: 1px solid #e3e3e3;
+  display: flex;
+  justify-content: space-between;
+}
+.hmi-widgets-group-count {
+  font-weight: normal;
+  color: #555;
+}
+.hmi-widgets-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid #e3e3e3;
+  background: #fff;
+  color: #222;
+  text-align: left;
+  cursor: pointer;
+}
+.hmi-widgets-row strong {
+  font-size: 14px;
+}
+.hmi-widgets-row small {
+  font-size: 12px;
+  color: #555;
+}
+.hmi-widgets-row small.placed {
+  color: #2e6b3a;
+}
+.hmi-widgets-row.selected {
+  background: #f3e9f5;
+  box-shadow: inset 3px 0 0 #883996;
+}
+.hmi-widgets-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: #555;
+}
+.hmi-widgets-detail {
+  padding: 12px;
+  border-top: 1px solid #ddd;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.hmi-widgets-title {
+  font-size: 14px;
+}
+.hmi-widgets-subtitle {
+  font-size: 13px;
+  font-weight: bold;
+  margin-top: 4px;
+}
+.hmi-widgets-note {
+  margin: 0;
+  font-size: 12px;
+  color: #555;
+}
+.hmi-widgets-port {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+#hmi-widgets-window .hmi-widgets-port label {
+  float: none;
+  width: auto;
+  line-height: 1.4;
+  font-size: 13px;
+}
+#hmi-widgets-window .hmi-widgets-port select {
+  width: 100%;
+  margin: 0;
+}
+.hmi-widgets-placements {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.hmi-widgets-placements li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+.hmi-widgets-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+#hmi-widgets-window .btn.hmi-widgets-primary {
+  background: #883996;
+  border-color: #883996;
+  color: #fff;
+  text-shadow: none;
+}
+.hmi-widgets-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hmi-widgets-where {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#hmi-widgets-window #hmi-widgets-box .hmi-widgets-where label {
+  float: none;
+  width: auto;
+  font-size: 13px;
+  color: #555;
+}
+#hmi-widgets-window .hmi-widgets-where select {
+  margin: 0;
+  width: auto;
+}
+/* the subpage switch, in the style of the A/B compare one */
+.hmi-widgets-subpages {
+  display: inline-flex;
+  margin-left: auto;
+}
+.hmi-widgets-subpage {
+  font-size: 13px;
+  line-height: 28px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #333;
+  background: #fff;
+  color: #222;
+  margin-left: -1px;
+}
+.hmi-widgets-subpage:first-child {
+  border-radius: 8px 0 0 8px;
+}
+.hmi-widgets-subpage:last-child {
+  border-radius: 0 8px 8px 0;
+}
+.hmi-widgets-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #5e2468;
+}
+.hmi-widgets-display {
+  align-self: center;
+  position: relative;
+  background: #e9eef0;
+  outline: 6px solid #1e1e1e;
+  margin: 8px 0;
+  flex: 0 0 auto;
+}
+.hmi-widgets-area {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+  border: 1px solid #9aa3a8;
+  color: #3b4348;
+  padding: 0;
+  background: transparent;
+}
+.hmi-widgets-area.taken {
+  background: #3b4348;
+  border-color: #3b4348;
+  color: #fff;
+}
+.hmi-widgets-area.cell {
+  cursor: pointer;
+}
+.hmi-widgets-area.cell:disabled {
+  cursor: default;
+  color: #7a8388;
+}
+.hmi-widgets-area.cell.lit {
+  border: 2px dashed #883996;
+  background: rgba(136, 57, 150, 0.08);
+  color: #5e2468;
+}
+.hmi-widgets-area.cell.selected {
+  border: 2px solid #5e2468;
+  background: #883996;
+  color: #fff;
+}
+.hmi-widgets-outline {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  outline: 3px solid #1e1e1e;
+  outline-offset: 1px;
+}
+.hmi-widgets-status {
+  min-height: 20px;
+  font-size: 15px;
+  font-weight: bold;
+  color: #5e2468;
+}
+.hmi-widgets-status.problem {
+  color: #a33a00;
+}
+.hmi-widgets-controls-title {
+  font-size: 12px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.hmi-widgets-controls {
+  display: flex;
+  gap: 8px;
+}
+.hmi-widgets-control {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hmi-widgets-control b {
+  font-size: 11px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.hmi-widgets-control span {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hmi-widgets-control em {
+  font-size: 11px;
+  font-style: normal;
+  color: #5e2468;
+}
+.hmi-widgets-control.free {
+  border-style: dashed;
+  color: #555;
+}
+.hmi-widgets-control.planned {
+  border: 2px solid #883996;
+  background: #f3e9f5;
+}
+.hmi-widgets-footnote {
+  margin: auto 0 0;
+  font-size: 12px;
+  color: #555;
+}
 /**
  * Typography
  */
