@@ -6724,6 +6724,13 @@ _:b%i
         for entry in window:
             responseData += ' ' + entry['label']
 
+        # then where each of them is bound, "page,row" or "-": after the labels, so a device
+        # that reads only those is not thrown
+        listed = BINDINGS.actuators(self)
+        for entry in window:
+            where = BINDINGS.bound_at(self, node_id, entry['symbol'], listed)
+            responseData += ' ' + ('%d,%d' % where if where else '-')
+
         logging.debug("hmi builder params %d %d %d -> %d of %d",
                       node_id, first, count, len(window), len(entries))
         callback(True, responseData)
