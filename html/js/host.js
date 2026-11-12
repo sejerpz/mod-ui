@@ -70,6 +70,14 @@ $('document').ready(function() {
             return
         }
 
+        // changed somewhere other than here, the device most of the time
+        if (cmd == "pedalboard_modified") {
+            if (data == "1") {
+                desktop.setPedalboardAsModified(true)
+            }
+            return
+        }
+
         if (cmd == "param_set") {
             data         = data.split(" ",3)
             var instance = data[0]

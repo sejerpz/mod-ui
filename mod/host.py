@@ -367,6 +367,23 @@ class Host(object):
     HMI_SNAPSHOTS_2      = 0 - (HMI_SNAPSHOTS_OFFSET + 1)
     HMI_SNAPSHOTS_3      = 0 - (HMI_SNAPSHOTS_OFFSET + 2)
 
+    @property
+    def pedalboard_modified(self):
+        return self._pedalboard_modified
+
+    @pedalboard_modified.setter
+    def pedalboard_modified(self, modified):
+        """The board differs from its files. The web UI is told as soon as it does.
+
+        It marks its own changes, but not the ones made elsewhere: a parameter turned on
+        the device, or a plugin the device's builder added.
+        """
+        was = getattr(self, '_pedalboard_modified', False)
+        self._pedalboard_modified = modified
+
+        if modified and not was:
+            self.msg_callback("pedalboard_modified 1")
+
     def __init__(self, hmi, prefs, msg_callback):
         self.hmi = hmi
         self.prefs = prefs
