@@ -4616,12 +4616,85 @@ class Host(object):
     # ALABS_HMI_PixelFormat, as the hardware descriptor names them
     HMI_WIDGET_PIXEL_FORMATS = ('mono1', 'gray4', 'rgb565', 'rgb888')
 
+    # the id of the one display of a device whose descriptor lists no 'hmi_widget_displays'
+    HMI_WIDGET_DEFAULT_DISPLAY = "display"
+
+    @staticmethod
+    def hmi_widget_valid_rect(rect):
+        return (isinstance(rect, list) and len(rect) == 4 and all(isinstance(v, int) for v in rect) and
+                rect[2] > 0 and rect[3] > 0)
+
+    @staticmethod
+    def hmi_widget_control_rows(raw):
+        # the controls a display shows: a list of actuator URIs is one row, a list of lists one row each
+        if not isinstance(raw, list):
+            return []
+        if all(isinstance(uri, str) for uri in raw):
+            raw = [raw]
+        rows = []
+        for row in raw:
+            if isinstance(row, list):
+                row = [uri for uri in row if isinstance(uri, str) and uri]
+                if row:
+                    rows.append(row)
+        return rows
+
+    def hmi_widget_declared_displays(self):
+        """
+        The displays the descriptor lists in 'hmi_widget_displays', in its order, each a dict with 'id', 'name',
+        'rect' [x, y, width, height] on the device surface, 'format' and 'controls' (rows of actuator URIs).
+        Empty for a device with one display, which does not list it.
+        """
+        raw = self.descriptor.get('hmi_widget_displays')
+        if not isinstance(raw, list):
+            return []
+        default_format = self.hmi_widget_pixel_format()
+        displays, seen = [], set()
+        for display in raw:
+            if not isinstance(display, dict):
+                continue
+            ident, rect = display.get('id'), display.get('rect')
+            if not isinstance(ident, str) or not ident or ident in seen or not self.hmi_widget_valid_rect(rect):
+                continue
+            seen.add(ident)
+            displays.append({
+                'id'      : ident,
+                'name'    : str(display.get('name') or ident),
+                'rect'    : list(rect),
+                'format'  : self.hmi_widget_format_index(display.get('pixel_format'), default_format),
+                'controls': self.hmi_widget_control_rows(display.get('controls')),
+            })
+        return displays
+
+    def hmi_widget_displays(self):
+        """
+        The displays of the device. One that lists none has a single display, as big as its areas, showing all
+        the controls.
+        """
+        displays = self.hmi_widget_declared_displays()
+        if displays:
+            return displays
+        areas = self.hmi_widget_areas()
+        if not areas:
+            return []
+        width  = max(area['rect'][0] + area['rect'][2] for area in areas)
+        height = max(area['rect'][1] + area['rect'][3] for area in areas)
+        return [{
+            'id'      : self.HMI_WIDGET_DEFAULT_DISPLAY,
+            'name'    : "Display",
+            'rect'    : [0, 0, width, height],
+            'format'  : self.hmi_widget_pixel_format(),
+            'controls': [],
+        }]
+
     def hmi_widget_areas(self):
         """
-        The areas of the display in the order the device lists them, each a dict with 'id', 'name', 'rect'
-        [x, y, width, height], 'cells' and 'subpages'. The descriptor gives 'hmi_widget_areas' as a list of areas
-        with an 'id', or as an object keyed by id, then ordered by id: a JSON object has no order of its own, and
-        the order breaks ties when the dialog looks for the area closest to a widget's natural size.
+        The areas of the displays in the order the device lists them, each a dict with 'id', 'name', 'display',
+        'rect' [x, y, width, height] in the coordinates of its display, 'cells', 'subpages' and 'format'. The
+        descriptor gives 'hmi_widget_areas' as a list of areas with an 'id', or as an object keyed by id, then
+        ordered by id: a JSON object has no order of its own, and the order breaks ties when the dialog looks for
+        the area closest to a widget's natural size. On a device with more displays an area names its display and
+        never leaves it, and its cells are its display's own: areas of two displays never exclude each other.
         """
         raw = self.descriptor.get('hmi_widget_areas')
         if isinstance(raw, dict):
@@ -4629,26 +4702,39 @@ class Host(object):
         elif not isinstance(raw, list):
             return []
 
+        displays = dict((d['id'], d) for d in self.hmi_widget_declared_displays())
+        default_format = self.hmi_widget_pixel_format()
+
         areas, seen = [], set()
         for area in raw:
             if not isinstance(area, dict):
                 continue
             ident, rect, cells = area.get('id'), area.get('rect'), area.get('cells')
-            if not isinstance(ident, str) or not ident or ident in seen:
-                continue
-            if not isinstance(rect, list) or len(rect) != 4 or not all(isinstance(v, int) for v in rect):
-                continue
-            if rect[2] <= 0 or rect[3] <= 0:
+            if not isinstance(ident, str) or not ident or ident in seen or not self.hmi_widget_valid_rect(rect):
                 continue
             if not isinstance(cells, list) or not cells or not all(isinstance(c, str) for c in cells):
                 continue
+            if displays:
+                display = displays.get(area.get('display'))
+                if display is None:
+                    continue
+                # an area never crosses the edge of its display
+                if (rect[0] < 0 or rect[1] < 0 or rect[0] + rect[2] > display['rect'][2] or
+                        rect[1] + rect[3] > display['rect'][3]):
+                    continue
+                display_id, pixel_format = display['id'], display['format']
+                cells = ["%s/%s" % (display_id, cell) for cell in cells]
+            else:
+                display_id, pixel_format = self.HMI_WIDGET_DEFAULT_DISPLAY, default_format
             seen.add(ident)
             areas.append({
                 'id'      : ident,
                 'name'    : str(area.get('name') or ident),
+                'display' : display_id,
                 'rect'    : list(rect),
                 'cells'   : sorted(set(cells)),
                 'subpages': area.get('subpages', True) is not False,
+                'format'  : pixel_format,
             })
         return areas
 
@@ -4661,18 +4747,23 @@ class Host(object):
                 return len(actuator['subpages'])
         return 1
 
-    def hmi_widget_pixel_format(self):
-        # the pixel format of the display, mono when the descriptor does not say
+    def hmi_widget_format_index(self, name, fallback):
         try:
-            return self.HMI_WIDGET_PIXEL_FORMATS.index(str(self.descriptor.get('hmi_widget_pixel_format', 'mono1')).lower())
+            return self.HMI_WIDGET_PIXEL_FORMATS.index(str(name).lower())
         except ValueError:
-            return 0
+            return fallback
+
+    def hmi_widget_pixel_format(self):
+        # the pixel format of the displays that do not name their own, mono when the descriptor does not say
+        return self.hmi_widget_format_index(self.descriptor.get('hmi_widget_pixel_format', 'mono1'), 0)
 
     @staticmethod
     def hmi_widget_fits(widget, area):
-        # a missing minimum counts as 1 pixel: the widget fits any area
+        # a missing minimum counts as 1 pixel: the widget fits any area big enough, of a display in a pixel format
+        # the widget draws in
         return (area['rect'][2] >= max(1, widget.get('minWidth') or 0) and
-                area['rect'][3] >= max(1, widget.get('minHeight') or 0))
+                area['rect'][3] >= max(1, widget.get('minHeight') or 0) and
+                bool((widget.get('formats') or 1) & (1 << area.get('format', 0))))
 
     @staticmethod
     def hmi_widgets_overlap(page, subpage, area, other_page, other_subpage, other_area):
@@ -4697,9 +4788,8 @@ class Host(object):
             widgets = get_plugin_info(self.plugins[instance_id]['uri'])['widgets'] or []
         except Exception:
             return {}
-        # only the widgets that can draw in the pixel format of this display
-        format_bit = 1 << self.hmi_widget_pixel_format()
-        return dict((w['symbol'], w) for w in widgets if w.get('formats', 1) & format_bit)
+        # whether a widget draws in the pixel format of a display is up to hmi_widget_fits, area by area
+        return dict((w['symbol'], w) for w in widgets)
 
     def hmi_widgets_available(self):
         """The widgets of the plugins on the board that fit at least one area of this display."""
@@ -4726,6 +4816,7 @@ class Host(object):
                     'minHeight'     : widget.get('minHeight') or 0,
                     'naturalWidth'  : widget.get('naturalWidth') or 0,
                     'naturalHeight' : widget.get('naturalHeight') or 0,
+                    'formats'       : widget.get('formats') or 1,
                     'suggestedPorts': widget.get('suggestedPorts') or [],
                 })
         return available
@@ -4784,11 +4875,26 @@ class Host(object):
 
         return valid
 
-    def hmi_widget_rect(self, widget):
+    def hmi_widget_area(self, widget):
         for area in self.hmi_widget_areas():
             if area['id'] == widget['area']:
-                return tuple(area['rect'])
+                return area
         return None
+
+    def hmi_widget_rect(self, widget):
+        """
+        The rectangle of a placement on the device surface: the origin of its display plus the rectangle of its
+        area. The controller finds the display from it, so more displays need nothing more in the protocol.
+        """
+        area = self.hmi_widget_area(widget)
+        if area is None:
+            return None
+        x, y = 0, 0
+        for display in self.hmi_widget_declared_displays():
+            if display['id'] == area['display']:
+                x, y = display['rect'][0], display['rect'][1]
+                break
+        return (x + area['rect'][0], y + area['rect'][1], area['rect'][2], area['rect'][3])
 
     def load_pb_hmi_widgets(self, bundlepath):
         data = safe_json_load(os.path.join(bundlepath, "hmi-widgets.json"), dict)
@@ -4885,23 +4991,26 @@ class Host(object):
         for index, widget in enumerate(self.hmi_widgets):
             if widget['page'] != page or widget.get('subpage', subpage) != subpage:
                 continue
-            rect = self.hmi_widget_rect(widget)
+            area = self.hmi_widget_area(widget)
             instance_id = self.hmi_widget_instance_id(widget['instance'])
-            if rect is not None and instance_id is not None:
-                wanted[index + 1] = (instance_id, widget, rect)
+            if area is not None and instance_id is not None:
+                wanted[index + 1] = (instance_id, widget, area)
 
         for area_id in [a for a in self.hmi_widgets_shown if a not in wanted]:
             self.hmi_widgets_shown.pop(area_id, None)
             yield gen.Task(self.send_notmodified, "hmi_widget_hide %d" % area_id)
 
-        for area_id, (instance_id, widget, rect) in wanted.items():
+        for area_id, (instance_id, widget, area) in wanted.items():
             if area_id in self.hmi_widgets_shown:
                 continue
             self.hmi_widgets_shown[area_id] = instance_id
+            # the size of the area and the pixel format of its display: the plugin never learns where it is
             yield gen.Task(self.send_notmodified, "hmi_widget_show %d %s %d %d %d %d" % (instance_id,
                                                                                          widget['symbol'],
-                                                                                         area_id, rect[2], rect[3],
-                                                                                         self.hmi_widget_pixel_format()))
+                                                                                         area_id,
+                                                                                         area['rect'][2],
+                                                                                         area['rect'][3],
+                                                                                         area['format']))
 
     def load_pb_plugins(self, plugins, instances, rinstances, motos):
         for p in plugins:

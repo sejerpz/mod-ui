@@ -5,7 +5,10 @@
 // dialog proposes, worked out in the browser. Plain functions over plain data, no DOM, so node can test them.
 //
 // The model:
-//   areas    : the areas of the display, as the server gives them: {id, name, rect: [x, y, w, h], cells, subpages}
+//   areas    : the areas of the displays, as the server gives them: {id, name, display, rect: [x, y, w, h] in the
+//              coordinates of its display, cells, subpages, format}
+//   displays : the displays, as the server gives them: {id, controls: rows of actuator URIs}. Optional: without it,
+//              or when no display names its controls, every control counts as shown by every display
 //   pages    : how many pages, subpages: how many subpages
 //   layout   : the placements so far: {page, subpage (only for areas that follow the subpage), area, instance, symbol}
 //   knobs    : the controls with subpages, in device order: [{uri, name}]
@@ -21,10 +24,12 @@ var HMIWidgetsPlan = (function () {
     function areaWidth(area)  { return area.rect[2] }
     function areaHeight(area) { return area.rect[3] }
 
-    // a missing minimum counts as 1 pixel: the widget fits any area
+    // a missing minimum counts as 1 pixel: the widget fits any area big enough, on a display in a pixel format it
+    // draws in (a bit per ALABS_HMI_PixelFormat, mono alone when missing)
     function fits(widget, area) {
         return areaWidth(area)  >= Math.max(1, widget.minWidth  || 0) &&
-               areaHeight(area) >= Math.max(1, widget.minHeight || 0)
+               areaHeight(area) >= Math.max(1, widget.minHeight || 0) &&
+               ((widget.formats || 1) & (1 << (area.format || 0))) !== 0
     }
 
     // how far an area is from the size a widget looks best at; a missing natural size is the minimum
@@ -95,17 +100,32 @@ var HMIWidgetsPlan = (function () {
         return found.map(function (f) { return f.area })
     }
 
-    // the cells the dialog draws as buttons: those with an area of their own. A cell only some bigger area takes
-    // (the title band on the Dwarf, under the full screen one) is not drawn and cannot be picked by itself.
-    function drawableCells(model) {
+    // the cells the dialog draws as buttons: those with an area of their own, of one display when `display` is
+    // given. A cell only some bigger area takes (the title band on the Dwarf, under the full screen one) is not
+    // drawn and cannot be picked by itself.
+    function drawableCells(model, display) {
         var cells = []
         for (var i = 0; i < model.areas.length; i++) {
             var area = model.areas[i]
+            if (display !== undefined && area.display !== display) {
+                continue
+            }
             if (area.cells.length === 1 && cells.indexOf(area.cells[0]) < 0) {
                 cells.push(area.cells[0])
             }
         }
         return cells
+    }
+
+    // the display an area of the model is on, for a cell drawn by itself
+    function displayOfCell(model, cell) {
+        for (var i = 0; i < model.areas.length; i++) {
+            var area = model.areas[i]
+            if (area.cells.length === 1 && area.cells[0] === cell) {
+                return area.display
+            }
+        }
+        return null
     }
 
     function cellRect(model, cell) {
@@ -151,28 +171,52 @@ var HMIWidgetsPlan = (function () {
         return properties.indexOf('toggled') >= 0 || properties.indexOf('trigger') >= 0 ? 'switch' : 'knob'
     }
 
-    // the rows of controls from `fromPage` on (or that page alone), in the order the plan takes them: the knobs of
-    // the widget's subpage before the other subpages of a page
-    function rows(model, kind, fromPage, widgetSubpage, onlyPage) {
+    // the controls of a kind split by the display that shows them, each group in device order: the widget's display
+    // first, then the others as the device lists them, then the controls no display shows. One group with all of
+    // them when no display names its controls.
+    function displayGroups(model, controls, widgetDisplay) {
+        var displays = (model.displays || []).filter(function (d) { return d.controls && d.controls.length })
+        if (!displays.length) {
+            return controls.length ? [controls] : []
+        }
+        displays.sort(function (a, b) { return (a.id === widgetDisplay ? 0 : 1) - (b.id === widgetDisplay ? 0 : 1) })
+        var groups = [], shown = {}
+        displays.forEach(function (d) {
+            var uris = [].concat.apply([], d.controls)
+            uris.forEach(function (uri) { shown[uri] = true })
+            var group = controls.filter(function (c) { return uris.indexOf(c.uri) >= 0 })
+            if (group.length) {
+                groups.push(group)
+            }
+        })
+        var rest = controls.filter(function (c) { return !shown[c.uri] })
+        if (rest.length) {
+            groups.push(rest)
+        }
+        return groups
+    }
+
+    // the rows of controls from `fromPage` on (or that page alone), in the order the plan takes them: within a page
+    // the controls of the widget's display before the others, and the knobs of the widget's subpage before the other
+    // subpages
+    function rows(model, kind, fromPage, widgetSubpage, onlyPage, widgetDisplay) {
         var result = [], last = onlyPage ? fromPage : model.pages - 1
+        var groups = displayGroups(model, kind === 'switch' ? model.switches : model.knobs, widgetDisplay)
+        var order = [widgetSubpage]
+        for (var s = 0; s < model.subpages; s++) {
+            if (s !== widgetSubpage) {
+                order.push(s)
+            }
+        }
         for (var page = fromPage; page <= last; page++) {
-            if (kind === 'switch') {
-                if (model.switches.length) {
-                    result.push({ page: page, subpage: null, controls: model.switches })
+            for (var g = 0; g < groups.length; g++) {
+                if (kind === 'switch') {
+                    result.push({ page: page, subpage: null, controls: groups[g] })
+                    continue
                 }
-                continue
-            }
-            if (!model.knobs.length) {
-                continue
-            }
-            var order = [widgetSubpage]
-            for (var s = 0; s < model.subpages; s++) {
-                if (s !== widgetSubpage) {
-                    order.push(s)
+                for (var j = 0; j < order.length; j++) {
+                    result.push({ page: page, subpage: model.subpages > 1 ? order[j] : null, controls: groups[g] })
                 }
-            }
-            for (var j = 0; j < order.length; j++) {
-                result.push({ page: page, subpage: model.subpages > 1 ? order[j] : null, controls: model.knobs })
             }
         }
         return result
@@ -247,19 +291,21 @@ var HMIWidgetsPlan = (function () {
         return false
     }
 
-    // the controls for `ports` (not bound yet), nearest to the widget first: page `fromPage` and the widget's
-    // subpage, then the following pages unless `onlyPage`. Switch ports go to knobs only when no switch is free.
-    function planPorts(model, ports, fromPage, widgetSubpage, onlyPage) {
+    // the controls for `ports` (not bound yet), nearest to the widget first: page `fromPage`, the controls of the
+    // widget's display and its subpage, then the following pages unless `onlyPage`. Switch ports go to knobs only
+    // when no switch is free.
+    function planPorts(model, ports, fromPage, widgetSubpage, onlyPage, widgetDisplay) {
         var used = {}, targets = {}
         var switchPorts = ports.filter(function (p) { return p.kind === 'switch' })
         var knobPorts   = ports.filter(function (p) { return p.kind !== 'switch' })
         var sub = widgetSubpage || 0
+        var rowsOf = function (kind) { return rows(model, kind, fromPage, sub, onlyPage, widgetDisplay) }
 
-        var switchLeft = placeGroup(model, switchPorts, rows(model, 'switch', fromPage, sub, onlyPage), used, targets)
-        var knobLeft   = placeGroup(model, knobPorts,   rows(model, 'knob',   fromPage, sub, onlyPage), used, targets)
+        var switchLeft = placeGroup(model, switchPorts, rowsOf('switch'), used, targets)
+        var knobLeft   = placeGroup(model, knobPorts,   rowsOf('knob'),   used, targets)
         // on the page alone, switch ports still go to its knobs when no switch is free on any page from it on
         if (switchLeft.length && (!onlyPage || !anySwitchFree(model, switchLeft, fromPage, used))) {
-            switchLeft = placeGroup(model, switchLeft, rows(model, 'knob', fromPage, sub, onlyPage), used, targets)
+            switchLeft = placeGroup(model, switchLeft, rowsOf('knob'), used, targets)
         }
 
         var unbound = ports.filter(function (p) { return !targets[p.symbol] }).map(function (p) { return p.symbol })
@@ -299,7 +345,7 @@ var HMIWidgetsPlan = (function () {
             if (!best) {
                 continue
             }
-            var plan = planPorts(model, ports, page, best.sub, true)
+            var plan = planPorts(model, ports, page, best.sub, true, best.area.display)
             if (!plan.unbound.length) {
                 return { page: page, subpage: best.subpage, area: best.area, targets: plan.targets, unbound: [] }
             }
@@ -310,7 +356,7 @@ var HMIWidgetsPlan = (function () {
         if (!first) {
             return null
         }
-        var spread = planPorts(model, ports, first.page, first.best.sub, false)
+        var spread = planPorts(model, ports, first.page, first.best.sub, false, first.best.area.display)
         return { page: first.page, subpage: first.best.subpage, area: first.best.area,
                  targets: spread.targets, unbound: spread.unbound }
     }
@@ -323,6 +369,7 @@ var HMIWidgetsPlan = (function () {
         isFree: isFree,
         freeAreas: freeAreas,
         drawableCells: drawableCells,
+        displayOfCell: displayOfCell,
         cellRect: cellRect,
         areaForCells: areaForCells,
         drawnCellsOf: drawnCellsOf,

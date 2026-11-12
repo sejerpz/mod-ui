@@ -8114,6 +8114,91 @@ so that the buttons are aligned and spaced nicely.
   font-size: 12px;
   color: #555;
 }
+/* the displays, side by side as on the device (the Duo X), each with its name; one display as before. With more
+   displays the box is a bit taller, for the controls under each one */
+#hmi-widgets-window.multi .mod-box {
+  margin-top: -350px;
+}
+#hmi-widgets-window.multi .hmi-widgets-body {
+  height: 600px;
+}
+.hmi-widgets-screens {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.hmi-widgets-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.hmi-widgets-screen-name {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.hmi-widgets-screen-name.current {
+  color: #883996;
+}
+/* the controls of each display under it, in the rows of the descriptor */
+.hmi-widgets-controls.multi {
+  justify-content: center;
+}
+.hmi-widgets-screens.multi .hmi-widgets-display {
+  margin: 6px 0;
+}
+.hmi-widgets-screens.multi .hmi-widgets-screen-name {
+  margin-bottom: 0;
+}
+.hmi-widgets-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hmi-widgets-control-row {
+  display: flex;
+  gap: 6px;
+}
+/* more controls in the same height: name and binding on one line */
+.hmi-widgets-control-group .hmi-widgets-control {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+}
+.hmi-widgets-control-group .hmi-widgets-control span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.hmi-widgets-control-group .hmi-widgets-control b {
+  white-space: nowrap;
+}
+/* the border tells a binding to come; its words ("on Save", "proposed") are in the tooltip */
+.hmi-widgets-control-group .hmi-widgets-control em {
+  display: none;
+}
+/* on a narrow screen one display at a time, picked with the switch */
+.hmi-widgets-screen-switch {
+  display: none;
+  margin-left: auto;
+}
+.hmi-widgets-screen-count {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: bold;
+}
+@media (max-width: 1000px) {
+  .hmi-widgets-screen-switch.multi {
+    display: inline-flex;
+  }
+  .hmi-widgets-screens.multi .hmi-widgets-screen.other,
+  .hmi-widgets-controls.multi .hmi-widgets-control-group.other {
+    display: none;
+  }
+}
 /**
  * Typography
  */

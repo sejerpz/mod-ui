@@ -2047,6 +2047,7 @@ class PedalboardHMIWidgets(JsonRequestHandler):
     def get(self):
         host = SESSION.host
         self.write({
+            'displays' : host.hmi_widget_displays(),
             'areas'    : host.hmi_widget_areas(),
             'pages'    : host.addressings.addressing_pages or 1,
             'subpages' : host.hmi_widget_subpages(),

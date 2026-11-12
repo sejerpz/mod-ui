@@ -46,7 +46,9 @@ function HMIWidgetsWindow(options) {
             actuators.byUri[act.uri] = act
             if (act.actuator_group) {
                 actuators.groups.push(act)
-            } else if (act.subpages && act.subpages.length) {
+            } else if ((act.subpages && act.subpages.length) || (act.modes || '').indexOf(':float:') >= 0) {
+                // a control with subpages, or one that takes a continuous value: a device without subpages, like
+                // the Duo X, still has knobs
                 actuators.knobs.push({ uri: act.uri, name: act.name })
             } else {
                 actuators.switches.push({ uri: act.uri, name: act.name })
@@ -158,6 +160,7 @@ function HMIWidgetsWindow(options) {
         }
         return {
             areas: state.areas,
+            displays: state.displays,
             pages: state.pages,
             subpages: state.subpages,
             layout: layout,
@@ -233,13 +236,47 @@ function HMIWidgetsWindow(options) {
         return Plan.areaById(state, entry.area)
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // the displays: one on the Dwarf, side by side on the Duo X
+
+    function displays() {
+        return state.displays
+    }
+
+    function multi() {
+        return state.displays.length > 1
+    }
+
+    function displayById(id) {
+        for (var i = 0; i < state.displays.length; i++) {
+            if (state.displays[i].id === id) {
+                return state.displays[i]
+            }
+        }
+        return null
+    }
+
+    // the display an area is on, by name, for the texts of a device with more displays; '' with one
+    function displayText(area) {
+        var display = area && multi() ? displayById(area.display) : null
+        return display ? display.name + ' · ' : ''
+    }
+
+    // how wide each display is drawn: one display as before, more side by side in the width of the page
+    var MAIN_WIDTH = 632, SCREENS_GAP = 24
+
+    function drawWidth() {
+        var n = state.displays.length
+        return n > 1 ? Math.min(DRAW_WIDTH, Math.floor((MAIN_WIDTH - SCREENS_GAP * (n - 1)) / n)) : DRAW_WIDTH
+    }
+
     function whereText(entry) {
         var area = areaOf(entry)
         var text = 'Page ' + (entry.page + 1)
         if (entry.subpage !== undefined && entry.subpage !== null && state.subpages > 1) {
             text += ' · Subpage ' + (entry.subpage + 1)
         }
-        return text + ' · ' + (area ? area.name : entry.area)
+        return text + ' · ' + displayText(area) + (area ? area.name : entry.area)
     }
 
     function slotText(target) {
@@ -270,11 +307,12 @@ function HMIWidgetsWindow(options) {
         return entry.page === view.page && (entry.subpage === undefined || entry.subpage === view.subpage)
     }
 
-    // the placement of a widget on the page and subpage in view: the one its cells edit
-    function currentEntry(widget) {
+    // the placement of a widget on a display, on the page and subpage in view: the one its cells edit there
+    function currentEntry(widget, display) {
         var placements = placementsOf(widget)
         for (var i = 0; i < placements.length; i++) {
-            if (inView(placements[i])) {
+            var area = areaOf(placements[i])
+            if (inView(placements[i]) && area && area.display === display) {
                 return placements[i]
             }
         }
@@ -288,26 +326,28 @@ function HMIWidgetsWindow(options) {
         return m
     }
 
-    // the area covering the whole display, picked by tapping the background of the drawing
-    function fullArea() {
-        var size = displaySize(), best = null
+    // the area covering a whole display, picked by tapping the background of its drawing
+    function fullArea(display) {
+        var rect = displayById(display).rect, best = null
         state.areas.forEach(function (a) {
-            if (a.rect[0] === 0 && a.rect[1] === 0 && a.rect[2] === size.width && a.rect[3] === size.height) {
+            if (a.display === display && a.rect[0] === 0 && a.rect[1] === 0 && a.rect[2] === rect[2] && a.rect[3] === rect[3]) {
                 best = best || a
             }
         })
         return best
     }
 
-    // the cells the selected widget holds in view: those of a selection that is not an area yet, else of its placement
-    function selectionCells(widget) {
+    // the cells the selected widget holds in view on a display: those of a selection that is not an area yet, else
+    // of its placement there
+    function selectionCells(widget, display) {
         if (!widget) {
             return []
         }
-        if (draft && draft.key === widgetKey(widget) && draft.page === view.page && draft.subpage === view.subpage) {
+        if (draft && draft.key === widgetKey(widget) && draft.display === display && draft.page === view.page &&
+            draft.subpage === view.subpage) {
             return draft.cells
         }
-        var entry = currentEntry(widget)
+        var entry = currentEntry(widget, display)
         var area = entry ? areaOf(entry) : null
         return area ? Plan.drawnCellsOf(state, area) : []
     }
@@ -316,7 +356,7 @@ function HMIWidgetsWindow(options) {
     function cellsProblem(widget, cells, m) {
         var area = Plan.areaForCells(state, cells)
         if (!area) {
-            return 'Not an area of this display'
+            return 'Not an area of ' + (multi() ? 'the ' + displayById(Plan.displayOfCell(state, cells[0])).name : 'this display')
         }
         if (!Plan.fits(widget, area)) {
             return 'Too small for ' + widget.name + ': needs ' + (widget.minWidth || 1) + ' × ' + (widget.minHeight || 1) + ' px'
@@ -329,20 +369,22 @@ function HMIWidgetsWindow(options) {
         return ''
     }
 
-    // the widget's area in view becomes the one these cells make: placed at once, removed when none are left
-    function setCells(widget, cells) {
-        var entry = currentEntry(widget)
+    // the widget's area in view on a display becomes the one these cells make: placed at once, removed when none
+    // are left. Its placements on the other displays stay as they are.
+    function setCells(widget, cells, display) {
+        var entry = currentEntry(widget, display)
         if (entry) {
             layout.splice(layout.indexOf(entry), 1)
         }
         draft = null
+        view.screen = display
         if (!cells.length) {
             render()
             return
         }
         if (cellsProblem(widget, cells, model())) {
             // kept as it is, so the next tap can still make an area of it
-            draft = { key: widgetKey(widget), page: view.page, subpage: view.subpage, cells: cells.slice() }
+            draft = { key: widgetKey(widget), display: display, page: view.page, subpage: view.subpage, cells: cells.slice() }
             render()
             return
         }
@@ -355,27 +397,29 @@ function HMIWidgetsWindow(options) {
         render()
     }
 
+    // a cell belongs to one display: the selection of that display takes it or gives it back, the others stay
     function toggleCell(widget, cell) {
-        var cells = selectionCells(widget).slice()
+        var display = Plan.displayOfCell(state, cell)
+        var cells = selectionCells(widget, display).slice()
         var i = cells.indexOf(cell)
         if (i >= 0) {
             cells.splice(i, 1)
         } else {
             cells.push(cell)
         }
-        setCells(widget, cells)
+        setCells(widget, cells, display)
     }
 
-    // the background of the drawing: the whole display, or nothing when the widget already takes it
-    function toggleFull(widget) {
-        var full = fullArea()
+    // the background of a drawing: the whole display, or nothing when the widget already takes it
+    function toggleFull(widget, display) {
+        var full = fullArea(display)
         if (!widget || !full) {
             return
         }
         var cells = Plan.drawnCellsOf(state, full)
-        var current = selectionCells(widget)
+        var current = selectionCells(widget, display)
         var same = current.length === cells.length && cells.every(function (c) { return current.indexOf(c) >= 0 })
-        setCells(widget, same ? [] : cells)
+        setCells(widget, same ? [] : cells, display)
     }
 
     function removeEntry(entry) {
@@ -401,6 +445,12 @@ function HMIWidgetsWindow(options) {
                 view.subpage = placements[0].subpage
             }
         }
+        // and the display it is on, for a device with more displays
+        var shown = placements.filter(inView)
+        var area = shown.length ? areaOf(shown[0]) : null
+        if (area) {
+            view.screen = area.display
+        }
         draft = null
         proposal = null
         closePopup()
@@ -416,7 +466,8 @@ function HMIWidgetsWindow(options) {
         var result
         if (placements.length) {
             var first = placements[0]
-            var plan = Plan.planPorts(model(), ports, first.page, first.subpage || 0, false)
+            var firstArea = areaOf(first)
+            var plan = Plan.planPorts(model(), ports, first.page, first.subpage || 0, false, firstArea ? firstArea.display : undefined)
             result = { page: first.page, subpage: first.subpage === undefined ? null : first.subpage, area: null,
                        targets: plan.targets, unbound: plan.unbound }
         } else {
@@ -431,6 +482,9 @@ function HMIWidgetsWindow(options) {
         view.page = result.page
         if (result.subpage !== null && result.subpage !== undefined) {
             view.subpage = result.subpage
+        }
+        if (result.area) {
+            view.screen = result.area.display
         }
         draft = null
         render()
@@ -620,7 +674,7 @@ function HMIWidgetsWindow(options) {
             title.append($('<strong>').text('Proposal: ' + widget.name))
             var where = proposal.area
                 ? 'Page ' + (proposal.page + 1) + (proposal.subpage !== null && state.subpages > 1 ? ' · Subpage ' + (proposal.subpage + 1) : '') +
-                  ' · ' + proposal.area.name
+                  ' · ' + displayText(proposal.area) + proposal.area.name
                 : 'Only its ports, from page ' + (proposal.page + 1)
             title.append($('<small>').text(where + ' · nothing is applied until you accept it'))
             var actions = $('<div class="hmi-widgets-band-actions">').appendTo(head)
@@ -695,15 +749,6 @@ function HMIWidgetsWindow(options) {
         render()
     }
 
-    function displaySize() {
-        var w = 1, h = 1
-        state.areas.forEach(function (a) {
-            w = Math.max(w, a.rect[0] + a.rect[2])
-            h = Math.max(h, a.rect[1] + a.rect[3])
-        })
-        return { width: w, height: h }
-    }
-
     function box(rect, scale) {
         return {
             left: Math.round(rect[0] * scale) + 'px',
@@ -722,21 +767,65 @@ function HMIWidgetsWindow(options) {
             })
     }
 
+    // the drawings of the displays, side by side, and the status of the display in view
     function renderDisplay(m) {
-        var size = displaySize()
-        var scale = DRAW_WIDTH / size.width
-        var drawing = win.find('.js-display').empty().removeClass('full-selected full-pickable')
-            .css({ width: DRAW_WIDTH + 'px', height: Math.round(size.height * scale) + 'px' })
-        var status = win.find('.js-status').text('').removeClass('problem')
-
+        var screens = win.find('.js-screens').empty().toggleClass('multi', multi()).css('gap', SCREENS_GAP + 'px')
         var widget = selectedWidget()
-        var mine = widget && !proposal ? currentEntry(widget) : null
-        var full = fullArea()
+        var notes = {}
+        displays().forEach(function (display) {
+            var block = $('<div class="hmi-widgets-screen">').attr('data-display', display.id)
+                .toggleClass('other', view.screen !== display.id).appendTo(screens)
+            if (multi()) {
+                $('<div class="hmi-widgets-screen-name">').text(display.name)
+                    .toggleClass('current', view.screen === display.id).appendTo(block)
+            }
+            var drawing = $('<div class="hmi-widgets-display">').appendTo(block)
+            notes[display.id] = renderDrawing(m, display, drawing, widget)
+        })
+        renderScreenSwitch()
+        var note = notes[view.screen] || { text: '' }
+        win.find('.js-status').text(note.text).toggleClass('problem', !!note.problem)
+    }
+
+    // on a narrow screen one display at a time: a switch, counting the widgets each one shows on the page in view
+    function renderScreenSwitch() {
+        var switcher = win.find('.js-screen-switch').empty().toggleClass('multi', multi())
+        if (!multi()) {
+            return
+        }
+        displays().forEach(function (display) {
+            var count = layout.filter(function (e) {
+                var area = areaOf(e)
+                return inView(e) && area && area.display === display.id
+            }).length
+            $('<button type="button" class="hmi-widgets-subpage">').text(display.name)
+                .append($('<span class="hmi-widgets-screen-count">').text(count))
+                .toggleClass('selected', view.screen === display.id)
+                .attr('aria-pressed', view.screen === display.id ? 'true' : 'false')
+                .click(function () {
+                    view.screen = display.id
+                    draft = null
+                    closePopup()
+                    render()
+                })
+                .appendTo(switcher)
+        })
+    }
+
+    // one display: its areas, the widgets in view and the cells to tap. Returns what the status says about it.
+    function renderDrawing(m, display, drawing, widget) {
+        var width = drawWidth()
+        var scale = width / display.rect[2]
+        drawing.css({ width: width + 'px', height: Math.round(display.rect[3] * scale) + 'px' })
+
+        var mine = widget && !proposal ? currentEntry(widget, display.id) : null
+        var full = fullArea(display.id)
+        var onThis = function (area) { return !!area && area.display === display.id }
 
         // the selection: a proposal, or the cells of the selected widget in view
-        var selected = proposal && proposal.area && proposal.page === view.page &&
+        var selected = proposal && proposal.area && onThis(proposal.area) && proposal.page === view.page &&
                        (proposal.subpage === null || proposal.subpage === view.subpage)
-            ? Plan.drawnCellsOf(state, proposal.area) : (proposal ? [] : selectionCells(widget))
+            ? Plan.drawnCellsOf(state, proposal.area) : (proposal ? [] : selectionCells(widget, display.id))
 
         // the other placements in view, each with its trash; tapping one picks its widget
         var covered = [], fullTaken = false
@@ -745,7 +834,7 @@ function HMIWidgetsWindow(options) {
                 return
             }
             var area = areaOf(entry)
-            if (!area) {
+            if (!onThis(area)) {
                 return
             }
             var w = widgetByKey(widgetKey(entry))
@@ -777,16 +866,16 @@ function HMIWidgetsWindow(options) {
                 .prop('disabled', !fullFree)
                 .click(function (e) {
                     e.stopPropagation()
-                    toggleFull(widget)
+                    toggleFull(widget, display.id)
                 }).appendTo(drawing)
         }
         drawing.off('click').on('click', function (e) {
             if (e.target === this && fullFree) {
-                toggleFull(widget)
+                toggleFull(widget, display.id)
             }
         })
 
-        var cells = Plan.drawableCells(state).filter(function (c) { return covered.indexOf(c) < 0 })
+        var cells = Plan.drawableCells(state, display.id).filter(function (c) { return covered.indexOf(c) < 0 })
 
         if (!widget || proposal) {
             cells.forEach(function (cell) {
@@ -795,13 +884,15 @@ function HMIWidgetsWindow(options) {
                     .toggleClass('selected', selected.indexOf(cell) >= 0)
                     .text(area ? area.name : cell).appendTo(drawing)
             })
-            return
+            return { text: '' }
         }
 
         // the cells of the free areas the widget fits in can be tapped, its own ones too
         var lit = []
         Plan.freeAreas(modelWithout(mine), widget, view.page, view.subpage).forEach(function (area) {
-            lit = lit.concat(Plan.drawnCellsOf(state, area))
+            if (onThis(area)) {
+                lit = lit.concat(Plan.drawnCellsOf(state, area))
+            }
         })
 
         var own = []
@@ -834,19 +925,25 @@ function HMIWidgetsWindow(options) {
                 el.on('mouseenter', function () { outline.addClass('hover') })
                   .on('mouseleave', function () { outline.removeClass('hover') })
             })
-            status.text(widget.name + ' · ' + area.name + ' · ' + area.rect[2] + ' × ' + area.rect[3] + ' px')
-        } else if (selected.length) {
-            status.addClass('problem').text(cellsProblem(widget, selected, modelWithout(null)))
-        } else if (!lit.length && !fullFree) {
-            status.addClass('problem').text('No free area of this page fits ' + widget.name +
-                                            ': pick another page or subpage, or Assign automatically')
-        } else {
-            status.text('Tap the display to place ' + widget.name + (fullFree ? ', or its background for the full screen' : ''))
+            return { text: widget.name + ' · ' + displayText(area) + area.name + ' · ' + area.rect[2] + ' × ' + area.rect[3] + ' px' }
         }
+        if (selected.length) {
+            return { text: cellsProblem(widget, selected, modelWithout(null)), problem: true }
+        }
+        if (!lit.length && !fullFree) {
+            return { problem: true, text: multi()
+                ? 'No free area of the ' + display.name + ' fits ' + widget.name + ': pick another display or page, or Assign automatically'
+                : 'No free area of this page fits ' + widget.name + ': pick another page or subpage, or Assign automatically' }
+        }
+        return { text: multi()
+            ? 'Tap a display to place ' + widget.name + (fullFree ? ', or its background for its full screen' : '')
+            : 'Tap the display to place ' + widget.name + (fullFree ? ', or its background for the full screen' : '') }
     }
 
+    // the controls of the page in view: in a row on a device with one display, under each display on one with more,
+    // in the rows its descriptor gives
     function renderControls() {
-        var strip = win.find('.js-controls').empty()
+        var strip = win.find('.js-controls').empty().toggleClass('multi', multi()).css('gap', multi() ? SCREENS_GAP + 'px' : '')
         var taken = takenSlots()
         var title = 'Controls · Page ' + (view.page + 1) + (state.subpages > 1 ? ' · Subpage ' + (view.subpage + 1) : '')
         win.find('.js-controls-title').text(title)
@@ -865,7 +962,7 @@ function HMIWidgetsWindow(options) {
             }
         }
 
-        var add = function (control, subpage) {
+        var cellFor = function (control, subpage) {
             var slot = { uri: control.uri, page: view.page, subpage: subpage }
             var key = Plan.slotKey(control.uri, view.page, subpage)
             var cell = $('<button type="button" class="hmi-widgets-control">').append($('<b>').text(control.name))
@@ -908,10 +1005,35 @@ function HMIWidgetsWindow(options) {
                     })
                 }
             }
-            strip.append(cell)
+            // where a row has no room for the state ("on Save", "proposed"), the tooltip says it
+            var note = cell.find('em').text()
+            if (note && !cell.attr('title')) {
+                cell.attr('title', control.name + ' · ' + cell.find('span').text() + ' · ' + note)
+            }
+            return cell
         }
-        actuators.knobs.forEach(function (k) { add(k, knobSubpage(view.subpage)) })
-        actuators.switches.forEach(function (s) { add(s, null) })
+
+        if (!multi()) {
+            actuators.knobs.forEach(function (k) { strip.append(cellFor(k, knobSubpage(view.subpage))) })
+            actuators.switches.forEach(function (s) { strip.append(cellFor(s, null)) })
+            return
+        }
+
+        displays().forEach(function (display) {
+            var group = $('<div class="hmi-widgets-control-group">').attr('data-display', display.id)
+                .toggleClass('other', view.screen !== display.id).css('width', drawWidth() + 'px').appendTo(strip)
+            var rows = display.controls.length ? display.controls
+                : [actuators.knobs.concat(actuators.switches).map(function (c) { return c.uri })]
+            rows.forEach(function (row) {
+                var line = $('<div class="hmi-widgets-control-row">').appendTo(group)
+                row.forEach(function (uri) {
+                    var act = actuators.byUri[uri]
+                    if (act && !act.actuator_group) {
+                        line.append(cellFor({ uri: uri, name: act.name }, isKnob(uri) ? knobSubpage(view.subpage) : null))
+                    }
+                })
+            })
+        })
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -1071,6 +1193,21 @@ function HMIWidgetsWindow(options) {
         return false
     })
 
+    // a server that names no displays has one, as big as its areas, with every area on it
+    function withDisplays(data) {
+        if (data.displays && data.displays.length) {
+            return data
+        }
+        var w = 1, h = 1
+        data.areas.forEach(function (a) {
+            w = Math.max(w, a.rect[0] + a.rect[2])
+            h = Math.max(h, a.rect[1] + a.rect[3])
+            a.display = 'display'
+        })
+        data.displays = [{ id: 'display', name: 'Display', rect: [0, 0, w, h], controls: [] }]
+        return data
+    }
+
     this.start = function () {
         $.ajax({
             url: '/pedalboard/hmi-widgets',
@@ -1081,12 +1218,14 @@ function HMIWidgetsWindow(options) {
                     return
                 }
                 readActuators()
-                state = data
+                state = withDisplays(data)
                 layout = JSON.parse(JSON.stringify(data.layout))
                 pending = []
                 draft = null
                 proposal = null
-                view = { page: 0, subpage: 0, search: '', placeableOnly: true, grouped: true, selected: null }
+                view = { page: 0, subpage: 0, search: '', placeableOnly: true, grouped: true, selected: null,
+                         screen: state.displays[0].id }
+                win.toggleClass('multi', multi())
 
                 win.find('.js-search').val('')
                 win.find('.js-placeable').prop('checked', true)
