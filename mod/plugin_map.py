@@ -1898,7 +1898,8 @@ class PluginMap(object):
                     'nid': node.nid,
                     'type': ptype,
                     'bits': dict(TYPE_BITS).get(ptype, 0),
-                    'label': node.title or node.label or '-',
+                    # the model is never laid out, and only the layout sets title and label
+                    'label': node.title or sanitize_label(node.raw_label, TITLE_W) or '-',
                     'key': node.key,
                 })
 

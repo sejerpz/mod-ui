@@ -106,7 +106,8 @@ def actuators(host):
 
         if meta.get('actuator_group'):
             groups.append(meta)
-        elif 'knob' in uri:
+        # the Duo X's potentiometers are knobs too, after its two endless ones
+        elif 'knob' in uri or 'potentiometer' in uri:
             knobs.append(meta)
         elif 'footswitch' in uri:
             switches.append(meta)
