@@ -8337,8 +8337,10 @@ _:b%i
         # if pedalboard was deleted by HMI management, recreate the whole deal
         if not os.path.exists(self.pedalboard_path):
             self.save_state_manifest(self.pedalboard_path, titlesym)
-            self.save_state_addressings(self.pedalboard_path)
-            self.save_state_presets_metadata(self.pedalboard_path)
+
+        # the bindings too, as the web UI's save writes them: the device makes them as well now
+        self.save_state_addressings(self.pedalboard_path)
+        self.save_state_presets_metadata(self.pedalboard_path)
 
         self.save_state_snapshots(self.pedalboard_path)
         self.save_state_teleports(self.pedalboard_path)
