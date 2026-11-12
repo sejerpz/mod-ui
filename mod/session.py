@@ -13,6 +13,7 @@ from mod.development import FakeHost, FakeHMI
 from mod.hmi import HMI
 from mod.recorder import Recorder, Player
 from mod.screenshot import ScreenshotGenerator
+from modtools.utils import update_cached_pedalboard_version
 from mod.settings import (LOG,
                           DEV_ENVIRONMENT, DEV_HMI, DEV_HOST,
                           HMI_SERIAL_PORT, HMI_BAUD_RATE, HMI_TIMEOUT,
@@ -92,6 +93,7 @@ class Session(object):
 
         self.host = Host(self.hmi, self.prefs, self.msg_callback)
         self.host.new_pedalboard_callback = self.new_pedalboard
+        self.host.pedalboard_saved_callback = self.pedalboard_saved
 
     def signal_save(self):
         # reuse HMI function
@@ -453,6 +455,18 @@ class Session(object):
         for ws in self.websockets:
             if ws == ws2: continue
             ws.write_message(msg)
+
+    def pedalboard_saved(self, bundlepath):
+        """A save from the device: what the web UI's own save refreshes besides the files.
+
+        The library's cached copy of the board, and its picture. The picture is taken
+        whatever screenshot_needed says, since the changes made on the device are never
+        counted there.
+        """
+        update_cached_pedalboard_version(bundlepath)
+
+        self.screenshot_needed = False
+        self.screenshot_generator.schedule_screenshot(bundlepath)
 
     def new_pedalboard(self, callback):
         """New pedalboard from the device: the system's default board, untitled.

@@ -55,6 +55,11 @@ $('document').ready(function() {
             desktop.ccDeviceUpdateFinished()
             return
         }
+        // saved from the device: nothing left to save here either
+        if (cmd == "pedalboard_saved") {
+            desktop.setPedalboardAsModified(false)
+            return
+        }
 
         // everything from here onwards has at least 1 argument
         data = data.substr(cmd.length+1);

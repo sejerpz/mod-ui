@@ -252,7 +252,6 @@ CV_OPTION = '/cv'
 HW_CV_PREFIX = CV_OPTION + '/graph/' + CV_PREFIX
 
 # TODO: check pluginData['designations'] when doing addressing
-# TODO: hmi_save_current_pedalboard does not send browser msgs, needed?
 # TODO: finish presets, testing
 
 def midi_port_alias_to_name(alias, withSpaces):
@@ -375,6 +374,10 @@ class Host(object):
 
         # set by the session, resets everything like "New pedalboard" in the web-ui does
         self.new_pedalboard_callback = None
+
+        # set by the session, which refreshes what depends on the board's files after a save
+        # from the device
+        self.pedalboard_saved_callback = None
 
         # set by the web server, restarts it with the active web interface
         self.restart_ui_callback = None
@@ -8318,6 +8321,14 @@ _:b%i
 
         def host_callback(ok):
             os_sync()
+
+            # the board on disk is the one in hand again, and the web UI says so as well
+            self.pedalboard_modified = False
+            self.msg_callback("pedalboard_saved")
+
+            if self.pedalboard_saved_callback is not None:
+                self.pedalboard_saved_callback(self.pedalboard_path)
+
             callback(True)
 
         logging.debug("hmi save current pedalboard")
