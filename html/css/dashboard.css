@@ -2961,14 +2961,6 @@ body.app-bar-mode #plugins-library.grid-library > * {
     display: block;
 }
 
-/* Save, for the device display's layout only, see js/appbar.js */
-.mod-app-bar > .dialog > .display-save {
-    display: none;
-}
-.mod-app-bar > .dialog.for-display > .display-save {
-    display: block;
-}
-
 /* the way back from the viewed plugin's settings */
 .mod-app-bar > .dialog {
     max-width: 640px;

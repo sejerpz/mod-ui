@@ -480,12 +480,13 @@ JqueryClass('appBar', {
 
         // The snapshot dialogs, and the one saving the pedalboard, take the room the dock
         // would cover: it slides away while one is up. They open and close with show() and hide(), whatever opened them,
-        // and so do the MIDI ports. So do the
+        // and so do the MIDI ports and the device display's layout. So do the
         // bindings and the CV ports, which are added to the page while open, and the
         // windows of a plugin the board shows alone, see below. It comes back over them
         // to ask whether to go on with something one of them does, see confirm below
         var dialogs = $()
         var shown = options.snapshotDialogs.add(options.saveWindow).add(options.midiPortsWindow)
+                           .add(options.hmiWidgetsWindow)
         var makeRoom = function () {
             self.toggleClass('away', ! self.hasClass('confirming') &&
                                      (shown.filter(':visible').length > 0 ||
@@ -918,27 +919,9 @@ JqueryClass('appBar', {
                 $('#report-window .js-cancel').first().click()
             } else if (options.shareWindow.is(':visible')) {
                 options.shareWindow.find('#record-cancel').click()
-            } else if (options.hmiWidgetsWindow.is(':visible')) {
-                options.hmiWidgetsWindow.find('.js-cancel').click()
             }
         // first, the plugin's tools after it
         }).prependTo(dialog)
-
-        // The device display's layout, see js/hmiwidgets.js, takes the screen above the
-        // dock as a plugin's settings do: the dock folds down to the way back, which
-        // leaves it as it was, and Save. It shows and hides itself
-        $('<div class="display-save">').text('Save').click(function () {
-            options.hmiWidgetsWindow.find('.js-submit').click()
-        }).appendTo(dialog)
-        var showDisplay = function () {
-            var shown = options.hmiWidgetsWindow.is(':visible')
-            dialog.toggleClass('for-display', shown)
-            setState('dialog', shown || !! settings || !! info || options.transportWindow.is(':visible'))
-        }
-        new MutationObserver(showDisplay).observe(options.hmiWidgetsWindow[0], {
-            attributes: true,
-            attributeFilter: ['style', 'class']
-        })
 
         // The plugins' CPU usage, see js/cpuload.js, takes the screen above the dock as a
         // plugin's settings do: the dock folds down to the way back and Reset peaks. It

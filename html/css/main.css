@@ -9075,154 +9075,526 @@ body.app-bar-mode #share-window-bottom {
   font-weight: bold;
 }
 @media (max-width: 1000px) {
-  .hmi-widgets-screen-switch.multi {
+  body:not(.app-bar-mode) .hmi-widgets-screen-switch.multi {
     display: inline-flex;
   }
-  .hmi-widgets-screens.multi .hmi-widgets-screen.other,
-  .hmi-widgets-controls.multi .hmi-widgets-control-group.other {
+  body:not(.app-bar-mode) .hmi-widgets-screens.multi .hmi-widgets-screen.other,
+  body:not(.app-bar-mode) .hmi-widgets-controls.multi .hmi-widgets-control-group.other {
     display: none;
   }
 }
-body.app-bar-mode #hmi-widgets-window {
-  position: fixed;
-  z-index: 1000;
-  overflow-y: auto;
-  background: #111;
+/* what only the app bar has: the way out in the title, the pages as buttons, the list's own title on a narrow screen */
+body:not(.app-bar-mode) #hmi-widgets-window header .close,
+.hmi-widgets-side-head,
+.hmi-widgets-pages {
+  display: none;
 }
-body.app-bar-mode #hmi-widgets-window .mod-box {
-  position: relative;
-  top: auto;
-  left: auto;
+body.app-bar-mode #hmi-widgets-window .mod-sheet {
+  margin: 0;
+  width: calc(100% - 32px);
+  max-width: calc(1040px * var(--touch-zoom, 1));
+  height: calc(100% - 48px);
+  max-height: calc(760px * var(--touch-zoom, 1));
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .mod-sheet {
   width: auto;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 16px 16px 100px;
-  box-sizing: border-box;
-  border: none;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: #fff;
-  text-align: left;
-  zoom: var(--touch-zoom, 1);
+  max-width: none;
+  height: calc(100% - 16px);
+  max-height: none;
 }
 body.app-bar-mode #hmi-widgets-window h1 {
-  float: none;
-  margin: 4px 4px 6px;
-  font-size: 22px;
-  font-weight: normal;
-  text-transform: none;
+  margin: 0;
+}
+body.app-bar-mode #hmi-widgets-window .actions .js-submit {
+  border-color: #883996;
+  background: #883996;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  gap: 16px;
+  padding: 12px 16px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-side {
+  width: 260px;
+  flex: 0 0 260px;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1c1c1c;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-main {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-main > * {
+  flex-shrink: 0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-tools,
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-count {
+  border-color: #333;
+  background: #222;
+  color: #999;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-tools {
+  gap: 8px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-tools input[type="search"] {
+  height: 44px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-tools-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-view {
+  margin-left: 0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-view button {
+  flex: 1 1 0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-check {
+  font-size: 14px;
+  color: #ccc;
+  white-space: nowrap;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: #883996;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-count {
+  font-size: 13px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-view button,
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #3a3a3a;
+  background: #2a2a2a;
+  color: #ccc;
+  font-size: 14px;
+  line-height: 38px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-view button.selected,
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage.selected {
+  border-color: #883996;
+  background: #883996;
   color: #fff;
 }
-body.app-bar-mode #hmi-widgets-window form,
-body.app-bar-mode #hmi-widgets-window fieldset {
-  margin: 0;
-  padding: 0;
-  border: none;
-}
-body.app-bar-mode #hmi-widgets-window p {
-  margin: 0 4px 12px;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-group {
+  padding: 14px 12px 6px;
+  border: 0;
+  background: none;
   color: #999;
-  font-size: 14px;
-  line-height: 1.35;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-body.app-bar-mode #hmi-widgets-window .actions {
-  display: none;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-group-count {
+  color: #777;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-row {
+  min-height: 52px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #2c2c2c;
+  background: none;
+  color: #eee;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-row:active {
+  background: #333;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-row strong {
+  font-size: 15px;
+  font-weight: normal;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-row small {
+  color: #999;
+  font-size: 13px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-row small.placed {
+  color: #c79bd0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-row.selected {
+  background: #3a2a3e;
+  box-shadow: inset 3px 0 0 #c79bd0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-empty {
+  color: #999;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band {
+  height: 112px;
+  border-color: #3a3a3a;
+  border-radius: 12px;
+  background: #222;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band.active {
+  border-color: #883996;
+  background: #2a2030;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band-note {
+  color: #aaa;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band-title strong {
+  overflow: hidden;
+  color: #fff;
+  font-weight: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band-title small {
+  overflow: hidden;
+  color: #999;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band .btn {
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 15px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-band .btn.hmi-widgets-primary {
+  border-color: #883996;
+  background: #883996;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chips {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chip {
+  border: 1px solid #b0711c;
+  background: #b0711c;
+  color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chip b {
+  color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chip.bound {
+  border-style: solid;
+  border-color: #5c9a68;
+  background: none;
+  color: #8fd19c;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chip.planned {
+  border-style: solid;
+  border-color: #c79bd0;
+  background: none;
+  color: #e3c6ea;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chip.bound b,
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-chip.planned b {
+  color: inherit;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-trash {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border-color: #a33;
+  background: #b33;
+  color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-trash svg {
+  width: 18px;
+  height: 18px;
 }
 body.app-bar-mode #hmi-widgets-window .hmi-widgets-where {
   flex-wrap: wrap;
-  gap: 10px;
-  margin: 0 0 14px;
+  gap: 8px;
 }
-body.app-bar-mode #hmi-widgets-window select {
-  height: 44px;
-  margin: 0;
-  padding: 0 10px;
+body.app-bar-mode #hmi-widgets-window #hmi-widgets-box .hmi-widgets-where label,
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-where select {
+  display: none;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-pages {
+  display: flex;
+  gap: 4px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page {
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: 1px solid #3a3a3a;
   border-radius: 10px;
-  background: #1c1c1c;
-  color: #fff;
-  font-size: 16px;
-}
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpages {
-  flex: 1 1 auto;
-  margin-left: 0;
-  border: 1px solid #3a3a3a;
-  border-radius: 10px;
-  overflow: hidden;
-}
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage {
-  flex: 1;
-  height: 42px;
-  line-height: 42px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 0;
   background: #2a2a2a;
   color: #ccc;
   font-size: 15px;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage + .hmi-widgets-subpage {
-  border-left: 1px solid #3a3a3a;
-}
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-subpage.selected {
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page.selected {
+  border-color: #883996;
   background: #883996;
   color: #fff;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-columns {
-  gap: 8px;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(8) {
+  box-shadow: inset 0 -3px 0 #8080ff;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  min-height: 0;
-  padding: 10px;
-  box-sizing: border-box;
-  border: 1px solid #3a3a3a;
-  border-radius: 12px;
-  background: #2a2a2a;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(7) {
+  box-shadow: inset 0 -3px 0 #ff66ff;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-column-widget {
-  border-color: #883996;
-  box-shadow: inset 0 3px 0 #883996;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(6) {
+  box-shadow: inset 0 -3px 0 #66ff66;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-column h5 {
-  margin: 0;
-  color: #c79bd0;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(5) {
+  box-shadow: inset 0 -3px 0 #f5a77e;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(4) {
+  box-shadow: inset 0 -3px 0 #bb7cd5;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(3) {
+  box-shadow: inset 0 -3px 0 #66ffff;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(2) {
+  box-shadow: inset 0 -3px 0 #ffff66;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-page:nth-child(1) {
+  box-shadow: inset 0 -3px 0 #ff6666;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-display {
+  margin: 4px 0 8px;
+  border-radius: 6px;
+  outline: none;
+  background: #0c0c0c;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-display.full-selected {
+  background: #3a2a3e;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area {
+  border-color: #444;
+  border-radius: 4px;
+  color: #888;
+  font-size: 13px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area.taken {
+  border-color: #555;
+  background: #2e2e2e;
+  color: #ddd;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area.cell:disabled {
+  color: #555;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area.cell.lit {
+  border-color: #c79bd0;
+  background: rgba(199, 155, 208, 0.12);
+  color: #e3c6ea;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area.selected,
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area.cell.selected {
+  border-color: #c79bd0;
+  background: #883996;
+  color: #fff;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-full-label {
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #e3c6ea;
   font-size: 12px;
-  font-weight: bold;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  line-height: 18px;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-column select {
-  width: 100%;
-  min-width: 0;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-full-label:disabled {
+  color: #555;
 }
-body.app-bar-mode #hmi-widgets-window .hmi-widgets-note {
-  margin: 0;
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-outline {
+  border-radius: 4px;
+  outline-color: #c79bd0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-area.taken .hmi-widgets-trash {
+  display: none;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-trash.small {
+  top: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  opacity: 1;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-screen-name {
+  color: #999;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-screen-name.current {
+  color: #c79bd0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-status {
+  color: #e3c6ea;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-status.problem {
+  color: #e8b86b;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-controls-title {
+  color: #999;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-controls:not(.multi) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control {
+  min-height: 56px;
+  border-color: #3a3a3a;
+  border-radius: 10px;
+  background: #2a2a2a;
+  color: #eee;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control b {
+  color: #999;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control span {
+  font-size: 14px;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control.busy {
+  border-color: #2c2c2c;
+  background: #222;
+  color: #777;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control.free {
+  color: #999;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control.free.pickable {
+  border-color: #c79bd0;
+  background: rgba(199, 155, 208, 0.08);
+  color: #e3c6ea;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control.planned {
+  border-color: #c79bd0;
+  background: #3a2a3e;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control em {
+  color: #c79bd0;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-control-group .hmi-widgets-control {
+  min-height: 44px;
+  align-items: center;
+}
+body.app-bar-mode #hmi-widgets-window .hmi-widgets-footnote {
+  margin-top: 8px;
+  color: #888;
   font-size: 13px;
 }
-body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column {
-  padding: 8px 6px;
-}
-body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column select {
-  height: 40px;
-  padding: 0 4px;
-  font-size: 13px;
-}
-body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-column h5 {
-  font-size: 11px;
-}
-body.app-bar-mode .hmi-widgets-sheet .panel {
+.hmi-widgets-sheet .panel {
   max-height: 70%;
   overflow-y: auto;
 }
-body.app-bar-mode .hmi-widgets-sheet .item.selected {
+.hmi-widgets-sheet .item.danger {
+  color: #ff8a86;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-body {
+  padding: 10px 12px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-side {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: none;
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: #161616;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window.choosing .hmi-widgets-side {
+  display: flex;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 0 4px 0 16px;
+  border-bottom: 1px solid #333;
   color: #fff;
-  background: #3a2a3e;
-  box-shadow: inset 3px 0 0 #c79bd0;
+  font-size: 17px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-side-head button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: #bbb;
+  font-size: 28px;
+  line-height: 42px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-band {
+  height: auto;
+  min-height: 72px;
+  overflow: visible;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-band > .js-choose {
+  width: 100%;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-band-title small {
+  display: none;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #555;
+  border-radius: 10px;
+  background: #2c2c2c;
+  color: #fff;
+  font-size: 16px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-picker strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-picker:after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border: solid #c79bd0;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-band-actions {
+  gap: 6px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-band .btn {
+  padding: 0 10px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-pages {
+  flex: 1 1 100%;
+  justify-content: space-between;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-page {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-subpages,
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-screen-switch.multi {
+  display: flex;
+  flex: 1 1 100%;
+  margin: 0;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-subpage {
+  flex: 1 1 0;
+  padding: 0 4px;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-screens.multi .hmi-widgets-screen.other,
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-controls.multi .hmi-widgets-control-group.other {
+  display: none;
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-controls:not(.multi) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+body.app-bar-mode.narrow-screen #hmi-widgets-window .hmi-widgets-footnote {
+  display: none;
 }
 /* Make clicks pass-through */
 #nprogress {

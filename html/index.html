@@ -871,11 +871,18 @@ $('document').ready(function() {
             </div>
         </div>
 
-        <div id="hmi-widgets-window" class="save-popup mod-hidden">
-            <div class="mod-box" id="hmi-widgets-box">
-                <h1>Device Display</h1>
+        <div id="hmi-widgets-window" class="save-popup mod-sheet-popup mod-hidden">
+            <div class="mod-box mod-sheet" id="hmi-widgets-box">
+                <header>
+                    <h1>Device Display</h1>
+                    <span class="js-cancel close" aria-label="Cancel">&times;</span>
+                </header>
                 <div class="hmi-widgets-body">
                     <div class="hmi-widgets-side">
+                        <div class="hmi-widgets-side-head">
+                            <span>Choose widget</span>
+                            <button type="button" class="js-side-close" aria-label="Close the list">&times;</button>
+                        </div>
                         <div class="hmi-widgets-tools">
                             <label class="hmi-widgets-hidden" for="hmi-widgets-search">Search widgets</label>
                             <input id="hmi-widgets-search" class="js-search" type="search" placeholder="Search widget or plugin" autocomplete="off">
@@ -895,6 +902,7 @@ $('document').ready(function() {
                         <div class="hmi-widgets-where">
                             <label for="hmi-widgets-page">Page</label>
                             <select id="hmi-widgets-page" class="js-page"></select>
+                            <div class="hmi-widgets-pages js-pages" role="group" aria-label="Page"></div>
                             <div class="hmi-widgets-subpages js-subpages" role="group" aria-label="Subpage"></div>
                             <div class="hmi-widgets-screen-switch js-screen-switch" role="group" aria-label="Display"></div>
                         </div>

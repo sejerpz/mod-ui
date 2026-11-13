@@ -262,11 +262,30 @@ function HMIWidgetsWindow(options) {
         return display ? display.name + ' · ' : ''
     }
 
-    // how wide each display is drawn: one display as before, more side by side in the width of the page
+    // With the app bar, see js/appbar.js, the dialog is a sheet sized for a finger, see .mod-sheet-popup in
+    // dashboard.css: the display as wide as there is room, the controls' menus rising from the bottom and, on a
+    // narrow screen, the list of the widgets over the rest until one is picked
+    function touch() {
+        return $('body').hasClass('app-bar-mode')
+    }
+
+    function narrow() {
+        return touch() && $('body').hasClass('narrow-screen')
+    }
+
+    // a cell is never drawn shorter than a finger is wide: a footer of the Dwarf, 10 px high, is taller than in scale
+    var TOUCH_MIN_HEIGHT = 36
+
+    // how wide each display is drawn: one display as before, more side by side in the width of the page. With the
+    // app bar as wide as the room there is, one display at a time on a narrow screen
     var MAIN_WIDTH = 632, SCREENS_GAP = 24
 
     function drawWidth() {
         var n = state.displays.length
+        if (touch()) {
+            var room = win.find('.js-screens').width() || DRAW_WIDTH
+            return narrow() || n < 2 ? Math.floor(room) : Math.floor((room - SCREENS_GAP * (n - 1)) / n)
+        }
         return n > 1 ? Math.min(DRAW_WIDTH, Math.floor((MAIN_WIDTH - SCREENS_GAP * (n - 1)) / n)) : DRAW_WIDTH
     }
 
@@ -548,11 +567,33 @@ function HMIWidgetsWindow(options) {
 
     function closePopup() {
         win.find('.js-popup').remove()
+        $('.hmi-widgets-sheet').remove()
     }
 
-    // a menu under a control: the ports it can take, and for one the dialog bound, a way to leave it free again
+    // a menu under a control: the ports it can take, and for one the dialog bound, a way to leave it free again.
+    // With the app bar a sheet from the bottom of the screen, as a long press on a control brings up, see
+    // touchControlSheet in js/modgui.js
     function openPopup(anchor, title, items) {
         closePopup()
+        if (touch()) {
+            var sheet = $('<div class="mod-touch-sheet hmi-widgets-sheet" role="menu">')
+            var panel = $('<div class="panel">').append($('<div class="title">').text(title)).appendTo(sheet)
+            items.forEach(function (item) {
+                $('<div class="item" role="menuitem">').toggleClass('danger', !!item.danger)
+                    .append($('<span>').text(item.text))
+                    .click(function (e) {
+                        e.stopPropagation()
+                        sheet.remove()
+                        item.action()
+                    }).appendTo(panel)
+            })
+            sheet.click(function (e) {
+                if (e.target === sheet[0]) {
+                    sheet.remove()
+                }
+            }).appendTo('body')
+            return
+        }
         var main = win.find('.hmi-widgets-main')
         var popup = $('<div class="hmi-widgets-popup js-popup" role="menu">').append($('<b>').text(title))
         items.forEach(function (item) {
@@ -605,6 +646,11 @@ function HMIWidgetsWindow(options) {
         }
         row.append($('<small>').toggleClass('placed', placements.length > 0).text(status))
         row.click(function () {
+            if (narrow()) {
+                win.removeClass('choosing')
+                select(widget)
+                return
+            }
             select(view.selected === widgetKey(widget) ? null : widget)
         })
         return row
@@ -662,8 +708,21 @@ function HMIWidgetsWindow(options) {
         var widget = selectedWidget()
         band.toggleClass('active', !!widget).toggleClass('proposal', !!proposal)
 
+        // on a narrow screen the list is over the rest, brought up from here: by a button of its own until a widget
+        // is picked, then by the name of the widget, a choice as a select would be
+        var choose = function () {
+            win.addClass('choosing')
+        }
+
         if (!widget) {
-            band.append($('<span class="hmi-widgets-band-note">').text('Pick a widget on the left to place it on the display.'))
+            if (narrow()) {
+                $('<button type="button" class="btn hmi-widgets-primary js-choose">').text('Choose widget')
+                    .click(choose).appendTo(band)
+                return
+            }
+            band.append($('<span class="hmi-widgets-band-note">').text(touch()
+                ? 'Pick a widget in the list to place it on the display.'
+                : 'Pick a widget on the left to place it on the display.'))
             return
         }
 
@@ -684,11 +743,19 @@ function HMIWidgetsWindow(options) {
                 render()
             }).appendTo(actions)
         } else {
-            title.append($('<strong>').text('Place: ' + widget.name))
+            if (narrow()) {
+                $('<button type="button" class="hmi-widgets-picker js-choose">')
+                    .attr('aria-label', 'Choose another widget')
+                    .append($('<strong>').text(widget.name))
+                    .click(choose).appendTo(title)
+            } else {
+                title.append($('<strong>').text('Place: ' + widget.name))
+            }
             title.append($('<small>').text(widget.plugin + ' · ' + sizeText(widget)))
             var buttons = $('<div class="hmi-widgets-band-actions">').appendTo(head)
             var ports = unboundPorts(widget)
-            $('<button type="button" class="btn">').text('Assign automatically')
+            $('<button type="button" class="btn">').text(narrow() ? 'Auto' : 'Assign automatically')
+                .attr('title', 'Assign automatically')
                 .prop('disabled', !isPlaceable(widget, m) && !(placementsOf(widget).length && ports.length))
                 .click(function () { startAuto(widget) }).appendTo(buttons)
             if (placementsOf(widget).length) {
@@ -728,6 +795,20 @@ function HMIWidgetsWindow(options) {
         }
         pageSelect.val(view.page)
 
+        // with the app bar the pages are buttons, as the rows of the bindings, each with its colour
+        var pages = win.find('.js-pages').empty()
+        if (touch()) {
+            for (var p = 0; p < state.pages; p++) {
+                $('<button type="button" class="hmi-widgets-page">').text(p + 1)
+                    .attr({ 'data-page': p, 'aria-pressed': p === view.page ? 'true' : 'false' })
+                    .toggleClass('selected', p === view.page)
+                    .click(function () {
+                        setWhere(parseInt($(this).attr('data-page')), view.subpage)
+                    })
+                    .appendTo(pages)
+            }
+        }
+
         var switcher = win.find('.js-subpages').empty().toggle(state.subpages > 1)
         for (var s = 0; s < state.subpages; s++) {
             $('<button type="button" class="hmi-widgets-subpage">')
@@ -741,50 +822,6 @@ function HMIWidgetsWindow(options) {
         }
     }
 
-    // With the app bar, a choice opens a sheet from the bottom of the screen, as a long
-    // press on a control does, see touchControlSheet in js/modgui.js, rather than the
-    // browser's own list, which is drawn as zoomed as the page, see --touch-zoom in
-    // js/appbar.js. The select stays what holds the choice
-    win.on('mousedown touchstart', 'select', function (e) {
-        if (! $('body').hasClass('app-bar-mode')) {
-            return
-        }
-        e.preventDefault()
-        var select = $(this)
-        $('.mod-touch-sheet').remove()
-        var sheet = $('<div class="mod-touch-sheet hmi-widgets-sheet">')
-        var panel = $('<div class="panel">').appendTo(sheet)
-        var title = select.closest('.hmi-widgets-column').children('h5').text() || 'Page'
-        $('<div class="title">').text(title).appendTo(panel)
-        var add = function (option) {
-            $('<div class="item">').toggleClass('selected', option.value === select.val())
-                .append($('<span>').text(option.text))
-                .click(function () {
-                    sheet.remove()
-                    if (select.val() !== option.value) {
-                        select.val(option.value).change()
-                    }
-                    return false
-                }).appendTo(panel)
-        }
-        select.children().each(function () {
-            if (this.tagName === 'OPTGROUP') {
-                $('<div class="title">').text(this.label).appendTo(panel)
-                $(this).children().each(function () {
-                    add(this)
-                })
-            } else {
-                add(this)
-            }
-        })
-        sheet.click(function (e) {
-            if (e.target === sheet[0]) {
-                sheet.remove()
-            }
-        }).appendTo('body')
-        return false
-    })
-
     function setWhere(page, subpage) {
         view.page = page
         view.subpage = subpage
@@ -793,13 +830,29 @@ function HMIWidgetsWindow(options) {
         render()
     }
 
+    function boxHeight(rect, scale) {
+        var height = Math.round(rect[3] * scale)
+        return touch() ? Math.max(height, TOUCH_MIN_HEIGHT) : height
+    }
+
     function box(rect, scale) {
         return {
             left: Math.round(rect[0] * scale) + 'px',
             top: Math.round(rect[1] * scale) + 'px',
             width: Math.round(rect[2] * scale) + 'px',
-            height: Math.round(rect[3] * scale) + 'px',
+            height: boxHeight(rect, scale) + 'px',
         }
+    }
+
+    // how tall a display is drawn: in scale, or down to its lowest area, which can be taller than in scale
+    function drawingHeight(display, scale) {
+        var height = Math.round(display.rect[3] * scale)
+        state.areas.forEach(function (a) {
+            if (a.display === display.id) {
+                height = Math.max(height, Math.round(a.rect[1] * scale) + boxHeight(a.rect, scale))
+            }
+        })
+        return height
     }
 
     function trashButton(label, action) {
@@ -860,7 +913,7 @@ function HMIWidgetsWindow(options) {
     function renderDrawing(m, display, drawing, widget) {
         var width = drawWidth()
         var scale = width / display.rect[2]
-        drawing.css({ width: width + 'px', height: Math.round(display.rect[3] * scale) + 'px' })
+        drawing.css({ width: width + 'px', height: drawingHeight(display, scale) + 'px' })
 
         var mine = widget && !proposal ? currentEntry(widget, display.id) : null
         var full = fullArea(display.id)
@@ -1223,7 +1276,22 @@ function HMIWidgetsWindow(options) {
         renderList(model())
     })
 
+    win.find('.js-side-close').click(function () {
+        win.removeClass('choosing')
+    })
+
+    // the display is as wide as there is room with the app bar: drawn again as the screen turns. The browser's own
+    // events, as in js/appbar.js: jquery.ba-resize sends jQuery's own resize every 250ms
+    var fitDrawing = function () {
+        if (state && touch() && win.is(':visible')) {
+            render()
+        }
+    }
+    window.addEventListener('resize', fitDrawing)
+    window.addEventListener('orientationchange', fitDrawing)
+
     win.find('.js-cancel').click(function () {
+        win.removeClass('choosing')
         draft = null
         proposal = null
         closePopup()
@@ -1277,8 +1345,10 @@ function HMIWidgetsWindow(options) {
                     $(this).toggleClass('selected', $(this).attr('data-view') === 'plugin')
                 })
 
-                render()
+                // shown first, so that its room is known to draw the display in, see drawWidth
+                win.removeClass('choosing')
                 win.show()
+                render()
             },
             error: function () {
                 new Notification('error', "Could not get the display widgets")
