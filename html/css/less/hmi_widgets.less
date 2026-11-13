@@ -1,0 +1,602 @@
+// The Display dialog (Device menu): which plugin widget each area of the HMI display shows.
+// See html/js/hmiwidgets.js.
+
+#hmi-widgets-window .mod-box {
+    width:1000px;
+    margin:-330px -500px;
+    box-sizing:border-box;
+}
+#hmi-widgets-window h1 {
+    margin-bottom:14px;
+}
+.hmi-widgets-hidden {
+    position:absolute;
+    left:-9999px;
+}
+.hmi-widgets-body {
+    display:flex;
+    gap:18px;
+    height:560px;
+}
+.hmi-widgets-side {
+    width:310px;
+    flex:0 0 310px;
+    display:flex;
+    flex-direction:column;
+    border:1px solid #ddd;
+    min-height:0;
+}
+.hmi-widgets-tools {
+    padding:8px 10px;
+    border-bottom:1px solid #ddd;
+    background:#fafafa;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+#hmi-widgets-window .hmi-widgets-tools input[type="search"] {
+    width:100%;
+    box-sizing:border-box;
+    height:30px;
+    margin:0;
+}
+.hmi-widgets-tools-row {
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+#hmi-widgets-window .hmi-widgets-check {
+    float:none;
+    width:auto;
+    line-height:1.4;
+    font-size:12px;
+    display:flex;
+    align-items:center;
+    gap:4px;
+}
+#hmi-widgets-window .hmi-widgets-check input {
+    margin:0;
+}
+.hmi-widgets-view {
+    display:flex;
+    margin-left:auto;
+}
+.hmi-widgets-view button {
+    font-size:12px;
+    padding:3px 8px;
+    border:1px solid #888;
+    background:#fff;
+    color:#222;
+    margin-left:-1px;
+}
+.hmi-widgets-view button:first-child {
+    border-radius:6px 0 0 6px;
+}
+.hmi-widgets-view button:last-child {
+    border-radius:0 6px 6px 0;
+}
+.hmi-widgets-view button.selected,
+.hmi-widgets-subpage.selected {
+    background:#883996;
+    border-color:#883996;
+    color:#fff;
+}
+.hmi-widgets-count {
+    font-size:12px;
+    color:#555;
+    padding:6px 12px;
+    border-top:1px solid #ddd;
+    background:#fafafa;
+    text-align:center;
+}
+.hmi-widgets-list {
+    flex:1 1 auto;
+    overflow:auto;
+    min-height:96px;
+}
+.hmi-widgets-group {
+    padding:6px 12px;
+    font-size:12px;
+    font-weight:bold;
+    color:#333;
+    background:#f0f0f0;
+    border-bottom:1px solid #e3e3e3;
+    display:flex;
+    justify-content:space-between;
+}
+.hmi-widgets-group-count {
+    font-weight:normal;
+    color:#555;
+}
+.hmi-widgets-row {
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    width:100%;
+    padding:7px 12px;
+    border:0;
+    border-bottom:1px solid #e3e3e3;
+    background:#fff;
+    color:#222;
+    text-align:left;
+    cursor:pointer;
+}
+.hmi-widgets-row strong {
+    font-size:14px;
+}
+.hmi-widgets-row small {
+    font-size:12px;
+    color:#555;
+}
+.hmi-widgets-row small.placed {
+    color:#2e6b3a;
+}
+.hmi-widgets-row.selected {
+    background:#f3e9f5;
+    box-shadow:inset 3px 0 0 #883996;
+}
+.hmi-widgets-empty {
+    padding:12px;
+    font-size:13px;
+    color:#555;
+}
+#hmi-widgets-window .btn.hmi-widgets-primary {
+    background:#883996;
+    border-color:#883996;
+    color:#fff;
+    text-shadow:none;
+}
+.hmi-widgets-main {
+    position:relative;
+    flex:1 1 auto;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+.hmi-widgets-where {
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+// as specific as the generic .save-popup:not(...) label of dashboard.css, which comes later in the cascade
+#hmi-widgets-window #hmi-widgets-box .hmi-widgets-where label {
+    float:none;
+    width:auto;
+    font-size:13px;
+    color:#555;
+}
+#hmi-widgets-window .hmi-widgets-where select {
+    margin:0;
+    width:auto;
+}
+/* the subpage switch, in the style of the A/B compare one */
+.hmi-widgets-subpages {
+    display:inline-flex;
+    margin-left:auto;
+}
+.hmi-widgets-subpage {
+    font-size:13px;
+    line-height:28px;
+    height:30px;
+    padding:0 12px;
+    border:1px solid #333;
+    background:#fff;
+    color:#222;
+    margin-left:-1px;
+}
+.hmi-widgets-subpage:first-child {
+    border-radius:8px 0 0 8px;
+}
+.hmi-widgets-subpage:last-child {
+    border-radius:0 8px 8px 0;
+}
+/* the band above the page: the widget being placed, its ports, Assign automatically and the trash */
+.hmi-widgets-band {
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:6px;
+    // as tall as its fullest content (title, its line and the ports), so the page below never moves
+    height:96px;
+    flex:0 0 auto;
+    overflow:hidden;
+    padding:8px 12px;
+    border:1px solid #ddd;
+    border-radius:6px;
+    background:#fafafa;
+    box-sizing:border-box;
+}
+.hmi-widgets-band.active {
+    border-color:#883996;
+    background:#f3e9f5;
+}
+.hmi-widgets-band.proposal {
+    border-style:dashed;
+}
+.hmi-widgets-band-note {
+    font-size:15px;
+    color:#555;
+    line-height:26px;
+}
+.hmi-widgets-band-head {
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+.hmi-widgets-band-title {
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    flex:1 1 auto;
+}
+.hmi-widgets-band-title strong {
+    font-size:17px;
+    color:#5e2468;
+}
+.hmi-widgets-band-title small {
+    font-size:14px;
+    color:#555;
+}
+.hmi-widgets-band-actions {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex:0 0 auto;
+}
+.hmi-widgets-chips {
+    display:flex;
+    gap:6px;
+    // one row only, the band does not grow: ports that do not fit are cut
+    overflow:hidden;
+}
+.hmi-widgets-chip {
+    flex:0 0 auto;
+    white-space:nowrap;
+    font-size:14px;
+    padding:2px 8px;
+    border:1px dashed #999;
+    border-radius:10px;
+    color:#555;
+    background:#fff;
+}
+.hmi-widgets-chip.bound {
+    border-style:solid;
+    border-color:#2e6b3a;
+    color:#2e6b3a;
+}
+.hmi-widgets-chip.planned {
+    border-style:solid;
+    border-color:#883996;
+    color:#5e2468;
+}
+/* the red trash: of a widget in the band, of a placement in the corner of its area */
+.hmi-widgets-trash {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:30px;
+    height:30px;
+    padding:0;
+    border:1px solid #c0392b;
+    border-radius:6px;
+    background:#fff;
+    color:#c0392b;
+    cursor:pointer;
+}
+.hmi-widgets-trash:hover,
+.hmi-widgets-trash:focus {
+    background:#c0392b;
+    color:#fff;
+}
+.hmi-widgets-trash.small {
+    position:absolute;
+    top:2px;
+    right:2px;
+    width:20px;
+    height:20px;
+    border-radius:4px;
+    pointer-events:auto;
+    z-index:2;
+}
+/* with a mouse the trash of an area shows while the area is hovered; on touch it is always there */
+@media (hover: hover) and (pointer: fine) {
+    .hmi-widgets-area.taken .hmi-widgets-trash.small,
+    .hmi-widgets-outline .hmi-widgets-trash.small {
+        opacity:0;
+    }
+    .hmi-widgets-area.taken:hover .hmi-widgets-trash.small,
+    .hmi-widgets-outline.hover .hmi-widgets-trash.small,
+    .hmi-widgets-trash.small:focus {
+        opacity:1;
+    }
+}
+.hmi-widgets-display {
+    align-self:center;
+    position:relative;
+    background:#e9eef0;
+    outline:6px solid #1e1e1e;
+    margin:8px 0 14px;
+    flex:0 0 auto;
+}
+.hmi-widgets-area {
+    position:absolute;
+    box-sizing:border-box;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    text-align:center;
+    overflow:hidden;
+    border:1px solid #9aa3a8;
+    color:#3b4348;
+    padding:0;
+    background:transparent;
+}
+.hmi-widgets-area.taken {
+    background:#3b4348;
+    border-color:#3b4348;
+    color:#fff;
+    cursor:pointer;
+}
+.hmi-widgets-area.selected {
+    background:#883996;
+    border-color:#5e2468;
+    color:#fff;
+}
+/* the full screen is the background of the drawing, its label on the band no other area takes */
+.hmi-widgets-display.full-pickable {
+    cursor:pointer;
+}
+.hmi-widgets-display.full-selected {
+    background:#d9bfe0;
+}
+.hmi-widgets-full-label {
+    position:absolute;
+    left:4px;
+    top:2px;
+    padding:0 6px;
+    border:0;
+    background:transparent;
+    font-size:11px;
+    line-height:16px;
+    color:#5e2468;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    cursor:pointer;
+}
+.hmi-widgets-full-label:disabled {
+    color:#9aa3a8;
+    cursor:default;
+}
+.hmi-widgets-area.cell {
+    cursor:pointer;
+}
+.hmi-widgets-area.cell:disabled {
+    cursor:default;
+    color:#7a8388;
+}
+.hmi-widgets-area.cell.lit {
+    border:2px dashed #883996;
+    background:rgba(136, 57, 150, .08);
+    color:#5e2468;
+}
+.hmi-widgets-area.cell.selected {
+    border:2px solid #5e2468;
+    background:#883996;
+    color:#fff;
+}
+.hmi-widgets-outline {
+    position:absolute;
+    pointer-events:none;
+    z-index:1;
+    box-sizing:border-box;
+    outline:3px solid #1e1e1e;
+    outline-offset:1px;
+}
+.hmi-widgets-status {
+    min-height:20px;
+    margin-bottom:6px;
+    font-size:15px;
+    font-weight:bold;
+    color:#5e2468;
+    text-align:center;
+}
+.hmi-widgets-status.problem {
+    color:#a33a00;
+}
+.hmi-widgets-controls-title {
+    font-size:12px;
+    color:#555;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+}
+.hmi-widgets-controls {
+    display:flex;
+    gap:8px;
+}
+.hmi-widgets-control {
+    flex:1 1 0;
+    min-width:0;
+    border:1px solid #ccc;
+    border-radius:6px;
+    padding:6px 8px;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:2px;
+    background:#fff;
+    color:#222;
+    text-align:left;
+    cursor:pointer;
+}
+.hmi-widgets-control:disabled {
+    cursor:default;
+}
+/* held by a binding that is not this widget's: cannot be tapped */
+.hmi-widgets-control.busy {
+    background:#eee;
+    border-color:#ddd;
+    color:#888;
+}
+.hmi-widgets-control.busy b {
+    color:#999;
+}
+.hmi-widgets-control.free.pickable {
+    border:2px dashed #883996;
+    background:rgba(136, 57, 150, .06);
+}
+.hmi-widgets-control.free.pickable:hover {
+    background:rgba(136, 57, 150, .14);
+}
+.hmi-widgets-control b {
+    font-size:11px;
+    color:#555;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+}
+.hmi-widgets-control span {
+    font-size:13px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+.hmi-widgets-control em {
+    font-size:11px;
+    font-style:normal;
+    color:#5e2468;
+}
+.hmi-widgets-control.free {
+    border-style:dashed;
+    color:#555;
+}
+.hmi-widgets-control.planned {
+    border:2px solid #883996;
+    background:#f3e9f5;
+}
+/* the menu of a control: which port it takes */
+.hmi-widgets-popup {
+    position:absolute;
+    z-index:5;
+    min-width:180px;
+    display:flex;
+    flex-direction:column;
+    padding:6px 0;
+    background:#fff;
+    border:1px solid #883996;
+    border-radius:6px;
+    box-shadow:0 4px 14px rgba(0, 0, 0, .25);
+}
+.hmi-widgets-popup b {
+    padding:2px 12px 6px;
+    font-size:11px;
+    color:#555;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+}
+.hmi-widgets-popup button {
+    padding:6px 12px;
+    border:0;
+    background:transparent;
+    color:#222;
+    text-align:left;
+    font-size:13px;
+    cursor:pointer;
+}
+.hmi-widgets-popup button:hover,
+.hmi-widgets-popup button:focus {
+    background:#f3e9f5;
+}
+.hmi-widgets-popup button.danger {
+    color:#c0392b;
+}
+.hmi-widgets-footnote {
+    margin:auto 0 0;
+    font-size:12px;
+    color:#555;
+}
+/* the displays, side by side as on the device (the Duo X), each with its name; one display as before. With more
+   displays the box is a bit taller, for the controls under each one */
+#hmi-widgets-window.multi .mod-box {
+    margin-top:-350px;
+}
+#hmi-widgets-window.multi .hmi-widgets-body {
+    height:600px;
+}
+.hmi-widgets-screens {
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+}
+.hmi-widgets-screen {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+.hmi-widgets-screen-name {
+    margin-bottom:4px;
+    font-size:12px;
+    font-weight:bold;
+    color:#555;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+}
+.hmi-widgets-screen-name.current {
+    color:#883996;
+}
+/* the controls of each display under it, in the rows of the descriptor */
+.hmi-widgets-controls.multi {
+    justify-content:center;
+}
+.hmi-widgets-screens.multi .hmi-widgets-display {
+    margin:6px 0;
+}
+.hmi-widgets-screens.multi .hmi-widgets-screen-name {
+    margin-bottom:0;
+}
+.hmi-widgets-control-group {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+}
+.hmi-widgets-control-row {
+    display:flex;
+    gap:6px;
+}
+/* more controls in the same height: name and binding on one line */
+.hmi-widgets-control-group .hmi-widgets-control {
+    flex-direction:row;
+    align-items:baseline;
+    gap:6px;
+    padding:4px 8px;
+}
+.hmi-widgets-control-group .hmi-widgets-control span {
+    flex:1 1 auto;
+    min-width:0;
+}
+.hmi-widgets-control-group .hmi-widgets-control b {
+    white-space:nowrap;
+}
+/* the border tells a binding to come; its words ("on Save", "proposed") are in the tooltip */
+.hmi-widgets-control-group .hmi-widgets-control em {
+    display:none;
+}
+/* on a narrow screen one display at a time, picked with the switch */
+.hmi-widgets-screen-switch {
+    display:none;
+    margin-left:auto;
+}
+.hmi-widgets-screen-count {
+    margin-left:6px;
+    font-size:11px;
+    font-weight:bold;
+}
+@media (max-width: 1000px) {
+    .hmi-widgets-screen-switch.multi {
+        display:inline-flex;
+    }
+    .hmi-widgets-screens.multi .hmi-widgets-screen.other,
+    .hmi-widgets-controls.multi .hmi-widgets-control-group.other {
+        display:none;
+    }
+}

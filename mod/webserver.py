@@ -2041,6 +2041,29 @@ class PedalboardTeleports(JsonRequestHandler):
         SESSION.host.set_teleports(data, pbgen)
         self.write(True)
 
+class PedalboardHMIWidgets(JsonRequestHandler):
+    # The widgets of the board and where they are placed, for the Display dialog. The dialog works out the bindings
+    # for the suggested ports itself, from the controls and addressings the page already knows.
+    def get(self):
+        host = SESSION.host
+        self.write({
+            'displays' : host.hmi_widget_displays(),
+            'areas'    : host.hmi_widget_areas(),
+            'pages'    : host.addressings.addressing_pages or 1,
+            'subpages' : host.hmi_widget_subpages(),
+            'layout'   : host.hmi_widgets,
+            'available': host.hmi_widgets_available(),
+        })
+
+    def post(self):
+        try:
+            layout = json.loads(self.get_argument('widgets', ''))
+        except ValueError:
+            self.write(False)
+            return
+        SESSION.host.set_hmi_widgets(layout)
+        self.write(True)
+
 class PedalboardPluginMap(TimelessRequestHandler):
     """Display list of the live plugin graph, for the HMI to draw itself.
 
@@ -3289,6 +3312,7 @@ application = web.Application(
             (r"/pedalboard/list", PedalboardList),
             (r"/pedalboard/save", PedalboardSave),
             (r"/pedalboard/teleports/?", PedalboardTeleports),
+            (r"/pedalboard/hmi-widgets/?", PedalboardHMIWidgets),
             (r"/pedalboard/pack_bundle/?", PedalboardPackBundle),
             (r"/pedalboard/load_bundle/", PedalboardLoadBundle),
             (r"/pedalboard/load_remote/*(/[A-Za-z0-9_/]+[^/])/?", PedalboardLoadRemote),

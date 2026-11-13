@@ -180,6 +180,10 @@ var DesktopApp = {
         $('#mod-status').hide()
         $('#mod-ram').hide()
         $('#mod-show-midi-port').hide()
+        // no device display to put widgets on, but where a controller is attached (mod-hw-emulator)
+        if (! DesktopApp.hasActuators()) {
+            $('#pedalboard-info .js-hmi-widgets').hide()
+        }
         $('#pedalboards-library').find('a').hide()
 
         DesktopApp.setupExclusiveIcons()
@@ -229,7 +233,17 @@ var DesktopApp = {
 
     setupAddressing: function () {
         // The snapshot "assign all" button drives hardware addressing.
-        $('#pedal-presets-window').find('.js-assign-all').hide()
+        if (! DesktopApp.hasActuators()) {
+            $('#pedal-presets-window').find('.js-assign-all').hide()
+        }
+    },
+
+    /* The hardware descriptor of MOD Desktop has no actuators. One that has them
+     * comes with a controller attached (mod-hw-emulator): hardware addressing is
+     * there to use, not to advertise. */
+    hasActuators: function () {
+        return typeof HARDWARE_PROFILE !== 'undefined' && !!HARDWARE_PROFILE &&
+               Object.keys(HARDWARE_PROFILE).length > 0
     },
 
     /* Hardware-only addressing targets stay selectable in the dialog. Picking one

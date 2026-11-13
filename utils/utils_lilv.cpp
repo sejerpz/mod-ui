@@ -214,6 +214,7 @@ static const bool kOnlyShowPluginsWithMODGUI = getenv("MOD_UI_ONLY_SHOW_PLUGINS_
     },                                               \
     nullptr,                                         \
     nullptr,                                         \
+    nullptr,                                         \
     nullptr                                          \
 }
 
@@ -304,6 +305,7 @@ inline void fill_iotype(PInfo* const info,
 #define LILV_NS_MODGUI          "http://moddevices.com/ns/modgui#"
 #define LILV_NS_MODPEDAL        "http://moddevices.com/ns/modpedal#"
 #define LILV_NS_MODPERFORMANCE  "http://moddevices.com/ns/modperformance#"
+#define LILV_NS_ALABS_HMI       "https://github.com/sejerpz/alabs-hmi-widgets#"
 #define LV2_NS_PORT_GROUPS      "http://lv2plug.in/ns/ext/port-groups#"
 
 #define MOD__CVPort LILV_NS_MOD "CVPort"
@@ -361,6 +363,15 @@ struct NamespaceDefinitions {
     LilvNode* modgui_knob;
     LilvNode* modgui_port;
     LilvNode* modgui_monitoredOutputs;
+    LilvNode* hmi_widget;
+    LilvNode* hmi_min_width;
+    LilvNode* hmi_min_height;
+    LilvNode* hmi_natural_width;
+    LilvNode* hmi_natural_height;
+    LilvNode* hmi_suggested_ports;
+    LilvNode* hmi_pixel_format;
+    LilvNode* rdf_first;
+    LilvNode* rdf_rest;
     LilvNode* atom_bufferType;
     LilvNode* atom_Sequence;
     LilvNode* midi_MidiEvent;
@@ -458,6 +469,15 @@ struct NamespaceDefinitions {
         modgui_knob              = lilv_new_uri(w, LILV_NS_MODGUI "knob");
         modgui_port              = lilv_new_uri(w, LILV_NS_MODGUI "port");
         modgui_monitoredOutputs  = lilv_new_uri(w, LILV_NS_MODGUI "monitoredOutputs");
+        hmi_widget               = lilv_new_uri(w, LILV_NS_ALABS_HMI "widget");
+        hmi_min_width            = lilv_new_uri(w, LILV_NS_ALABS_HMI "minWidth");
+        hmi_min_height           = lilv_new_uri(w, LILV_NS_ALABS_HMI "minHeight");
+        hmi_natural_width        = lilv_new_uri(w, LILV_NS_ALABS_HMI "naturalWidth");
+        hmi_natural_height       = lilv_new_uri(w, LILV_NS_ALABS_HMI "naturalHeight");
+        hmi_suggested_ports      = lilv_new_uri(w, LILV_NS_ALABS_HMI "suggestedPorts");
+        hmi_pixel_format         = lilv_new_uri(w, LILV_NS_ALABS_HMI "pixelFormat");
+        rdf_first                = lilv_new_uri(w, LILV_NS_RDF "first");
+        rdf_rest                 = lilv_new_uri(w, LILV_NS_RDF "rest");
         atom_bufferType          = lilv_new_uri(w, LV2_ATOM__bufferType);
         atom_Sequence            = lilv_new_uri(w, LV2_ATOM__Sequence);
         midi_MidiEvent           = lilv_new_uri(w, LV2_MIDI__MidiEvent);
@@ -533,6 +553,15 @@ struct NamespaceDefinitions {
         lilv_node_free(modgui_knob);
         lilv_node_free(modgui_port);
         lilv_node_free(modgui_monitoredOutputs);
+        lilv_node_free(hmi_widget);
+        lilv_node_free(hmi_min_width);
+        lilv_node_free(hmi_min_height);
+        lilv_node_free(hmi_natural_width);
+        lilv_node_free(hmi_natural_height);
+        lilv_node_free(hmi_suggested_ports);
+        lilv_node_free(hmi_pixel_format);
+        lilv_node_free(rdf_first);
+        lilv_node_free(rdf_rest);
         lilv_node_free(atom_bufferType);
         lilv_node_free(atom_Sequence);
         lilv_node_free(midi_MidiEvent);
@@ -1981,6 +2010,21 @@ static void _fill_units(LilvWorld* const w,
 
 }
 
+// a widget size in pixels, 0 when missing or not a positive integer
+static unsigned int _get_widget_size(LilvWorld* const w, const LilvNode* const widgetnode, const LilvNode* const pred)
+{
+    unsigned int size = 0;
+
+    if (LilvNode* const node = lilv_world_get(w, widgetnode, pred, nullptr))
+    {
+        if (lilv_node_is_int(node) && lilv_node_as_int(node) > 0)
+            size = static_cast<unsigned int>(lilv_node_as_int(node));
+        lilv_node_free(node);
+    }
+
+    return size;
+}
+
 const PluginInfo& _get_plugin_info(LilvWorld* const w,
                                    const LilvPlugin* const p,
                                    const NamespaceDefinitions& ns)
@@ -2618,6 +2662,146 @@ const PluginInfo& _get_plugin_info(LilvWorld* const w,
         info.gui.panel = nc;
         info.gui.color = nc;
         info.gui.knob = nc;
+    }
+
+    // --------------------------------------------------------------------------------------------------------
+    // widgets
+    //
+    // a widget is a static declaration of what the plugin can draw on the device display.
+    // it grants no pixels by itself: the user places it on the display from the web app,
+    // and that is the only thing that gives the plugin an area to draw in.
+
+    if (LilvNodes* const widgetnodes = lilv_plugin_get_value(p, ns.hmi_widget))
+    {
+        const unsigned int maxwidgets = lilv_nodes_size(widgetnodes);
+
+        PluginWidget* const widgets = new PluginWidget[maxwidgets+1];
+        memset(widgets, 0, sizeof(PluginWidget) * (maxwidgets+1));
+
+        unsigned int widgetcount = 0;
+
+        LILV_FOREACH(nodes, it, widgetnodes)
+        {
+            const LilvNode* const widgetnode = lilv_nodes_get(widgetnodes, it);
+
+            // the symbol is the widget identity, a placement refers to it by name
+            LilvNode* const symbolnode = lilv_world_get(w, widgetnode, ns.lv2core_symbol, nullptr);
+
+            if (symbolnode == nullptr)
+            {
+                printf("NOTICE: Plugin '%s' declares a widget without symbol, ignored\n", info.uri);
+                continue;
+            }
+
+            const char* const symbol = lilv_node_as_string(symbolnode);
+
+            bool duplicated = false;
+            for (unsigned int i=0; i<widgetcount; ++i)
+            {
+                if (strcmp(widgets[i].symbol, symbol) == 0)
+                {
+                    duplicated = true;
+                    break;
+                }
+            }
+
+            if (duplicated)
+            {
+                printf("NOTICE: Plugin '%s' declares widget '%s' more than once, ignored\n", info.uri, symbol);
+                lilv_node_free(symbolnode);
+                continue;
+            }
+
+            PluginWidget& widget(widgets[widgetcount++]);
+
+            widget.valid = true;
+            widget.symbol = strdup(symbol);
+
+            // sizes in pixels: the host offers the widget in areas at least as big as its minimum, and uses the
+            // natural size to order them. Anything not a positive integer counts as not declared.
+            widget.minWidth      = _get_widget_size(w, widgetnode, ns.hmi_min_width);
+            widget.minHeight     = _get_widget_size(w, widgetnode, ns.hmi_min_height);
+            widget.naturalWidth  = _get_widget_size(w, widgetnode, ns.hmi_natural_width);
+            widget.naturalHeight = _get_widget_size(w, widgetnode, ns.hmi_natural_height);
+
+            // the ports it would like bound to the controls of the device, an ordered rdf:List of symbols
+            if (LilvNode* listnode = lilv_world_get(w, widgetnode, ns.hmi_suggested_ports, nullptr))
+            {
+                std::vector<const char*> ports;
+
+                // the walk is bounded, a malformed list may loop on itself
+                for (unsigned int guard = 0; listnode != nullptr && guard < 256; ++guard)
+                {
+                    LilvNode* const first = lilv_world_get(w, listnode, ns.rdf_first, nullptr);
+                    LilvNode* const rest  = lilv_world_get(w, listnode, ns.rdf_rest, nullptr);
+
+                    lilv_node_free(listnode);
+                    listnode = rest;
+
+                    if (first == nullptr)
+                        break;
+
+                    if (lilv_node_is_string(first))
+                        ports.push_back(strdup(lilv_node_as_string(first)));
+
+                    lilv_node_free(first);
+                }
+
+                if (listnode != nullptr)
+                    lilv_node_free(listnode);
+
+                if (! ports.empty())
+                {
+                    const char** const list = new const char*[ports.size()+1];
+                    for (size_t i = 0; i < ports.size(); ++i)
+                        list[i] = ports[i];
+                    list[ports.size()] = nullptr;
+                    widget.suggestedPorts = list;
+                }
+            }
+
+            // the pixel formats it can draw in, as bits in the order of ALABS_HMI_PixelFormat
+            if (LilvNodes* const formatnodes = lilv_world_find_nodes(w, widgetnode, ns.hmi_pixel_format, nullptr))
+            {
+                static const char* const formats[] = {
+                    LILV_NS_ALABS_HMI "Mono1", LILV_NS_ALABS_HMI "Gray4",
+                    LILV_NS_ALABS_HMI "RGB565", LILV_NS_ALABS_HMI "RGB888",
+                };
+
+                LILV_FOREACH(nodes, itf, formatnodes)
+                {
+                    const char* const format = lilv_node_as_uri(lilv_nodes_get(formatnodes, itf));
+
+                    for (unsigned int i=0; i<sizeof(formats)/sizeof(formats[0]); ++i)
+                    {
+                        if (format != nullptr && strcmp(format, formats[i]) == 0)
+                            widget.formats |= 1u << i;
+                    }
+                }
+
+                lilv_nodes_free(formatnodes);
+            }
+
+            if (widget.formats == 0)
+                widget.formats = 1u; // mono, the format widgets were first written for
+
+            // fallback to the symbol, so a widget is never left nameless in the web app
+            if (LilvNode* const namenode = lilv_world_get(w, widgetnode, ns.lv2core_name, nullptr))
+            {
+                widget.name = strdup(lilv_node_as_string(namenode));
+                lilv_node_free(namenode);
+            }
+            else
+            {
+                widget.name = strdup(symbol);
+            }
+
+            lilv_node_free(symbolnode);
+        }
+
+        info.widgets = widgets;
+
+        lilv_nodes_free(widgetnodes);
     }
 
     // --------------------------------------------------------------------------------------------------------
@@ -3759,6 +3943,23 @@ static void _clear_plugin_info(PluginInfo& info)
                 free((void*)info.presets[i].path);
         }
         delete[] info.presets;
+    }
+
+    if (info.widgets != nullptr)
+    {
+        for (int i=0; info.widgets[i].valid; ++i)
+        {
+            free((void*)info.widgets[i].symbol);
+            free((void*)info.widgets[i].name);
+
+            if (info.widgets[i].suggestedPorts != nullptr)
+            {
+                for (int j=0; info.widgets[i].suggestedPorts[j]; ++j)
+                    free((void*)info.widgets[i].suggestedPorts[j]);
+                delete[] info.widgets[i].suggestedPorts;
+            }
+        }
+        delete[] info.widgets;
     }
 
     memset(&info, 0, sizeof(PluginInfo));

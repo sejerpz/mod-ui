@@ -93,6 +93,54 @@ class SerialIOStream(BaseIOStream):
             return None
         return r
 
+class SocketSerial(object):
+    """
+    The part of the pyserial API the HMI uses, on a TCP connection: MOD_HMI_SERIAL_PORT=tcp://HOST:PORT
+    reaches a controller that is not on a serial line, such as mod-hw-emulator.
+    """
+    def __init__(self, url):
+        import socket
+        host, port = url[len("tcp://"):].rsplit(":", 1)
+        self.sock = socket.create_connection((host, int(port)), timeout=5)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.sock.setblocking(False)
+
+    def fileno(self):
+        return self.sock.fileno()
+
+    def close(self):
+        self.sock.close()
+
+    def write(self, data):
+        try:
+            return self.sock.send(data)
+        except BlockingIOError:
+            return 0
+
+    def read(self, size):
+        try:
+            data = self.sock.recv(size)
+        except BlockingIOError:
+            return None
+        if not data:
+            raise IOError("HMI connection closed")
+        return data
+
+    def flush(self):
+        pass
+
+    def flushInput(self):
+        # as on a serial line: drop what arrived and was not read, e.g. a late answer to a ping already resent
+        while True:
+            try:
+                if not self.sock.recv(4096):
+                    break
+            except (BlockingIOError, OSError):
+                break
+
+    def flushOutput(self):
+        pass
+
 class HMI(object):
     def __init__(self, port, baud_rate, timeout, init_cb, reinit_cb):
         self.sp = None
@@ -121,7 +169,9 @@ class HMI(object):
     def init(self, callback):
         ioloop = IOLoop.instance()
 
-        if not haveSerial:
+        tcp = self.port.startswith("tcp://")
+
+        if not haveSerial and not tcp:
             print("ERROR: This system has no python serial support")
             ioloop.call_later(1, callback)
             return
@@ -130,12 +180,15 @@ class HMI(object):
 
         try:
             sp = None
-            # pylint: disable=unexpected-keyword-arg
-            try:
-                sp = serial.Serial(self.port, self.baud_rate, rtscts=virtual, dsrdtr=virtual, timeout=0, write_timeout=0)
-            except:
-                sp = serial.Serial(self.port, self.baud_rate, rtscts=virtual, dsrdtr=virtual, timeout=0, writeTimeout=0)
-            # pylint: enable=unexpected-keyword-arg
+            if tcp:
+                sp = SocketSerial(self.port)
+            else:
+                # pylint: disable=unexpected-keyword-arg
+                try:
+                    sp = serial.Serial(self.port, self.baud_rate, rtscts=virtual, dsrdtr=virtual, timeout=0, write_timeout=0)
+                except:
+                    sp = serial.Serial(self.port, self.baud_rate, rtscts=virtual, dsrdtr=virtual, timeout=0, writeTimeout=0)
+                # pylint: enable=unexpected-keyword-arg
             sp.flushInput()
             sp.flushOutput()
         except Exception as e:

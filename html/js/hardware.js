@@ -69,6 +69,12 @@ function isHwCvUri (uri) {
 // Units supported for tap tempo (lowercase)
 var kTapTempoUnits = ['bpm']
 
+// whether the hardware descriptor has actuators: always on a device, under MOD Desktop only with a controller
+// attached (mod-hw-emulator); the same test as hasActuators() of the MOD Desktop seam
+function hasHardwareActuators() {
+    return typeof HARDWARE_PROFILE !== 'undefined' && !!HARDWARE_PROFILE && Object.keys(HARDWARE_PROFILE).length > 0
+}
+
 function HardwareManager(options) {
     var self = this
 
@@ -1533,7 +1539,11 @@ function HardwareManager(options) {
             // Device and Control Chain need MOD hardware. Under MOD Desktop the
             // tab stays, marked locked: selecting it shows the hardware card
             // instead of addressing options (see the click handler below).
-            else if (options.isApp() && (jbtn.attr('data-value') === deviceOption || jbtn.attr('data-value') === ccOption)) {
+            // A hardware descriptor with actuators (a controller attached, as
+            // with mod-hw-emulator) unlocks the Device tab. Read here and not
+            // from the MOD Desktop seam, which shared scripts only call behind isApp().
+            else if (options.isApp() && ((jbtn.attr('data-value') === deviceOption && !hasHardwareActuators()) ||
+                                         jbtn.attr('data-value') === ccOption)) {
               jbtn.addClass('desktop-app-locked')
             }
             // Hide MIDI tab if not available

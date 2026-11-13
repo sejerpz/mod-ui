@@ -11,6 +11,8 @@ CMD_ARGS = {
         'glcd_text': [int,int,int,str],
         'glcd_dialog': [str],
         'glcd_draw': [int,int,int,str],
+        'wa_add': [int,int,int,int,int,int,int],
+        'wa_rm': [int],
         'uc': [],
         'ud': [],
         'a': [int,str,int,str,float,float,float,int,int,],
@@ -95,6 +97,8 @@ CMD_ARGS = {
         'sys_pop': [int,int,str,str],
         'sys_pch': [int],
         'sys_spc': [int],
+        'sys_wbm': [int,int,int,int,int,str],
+        'sys_wcl': [int,int,int,int,int],
     },
     'DUO': {
         'boot': [int,int,str,],
@@ -149,6 +153,8 @@ CMD_DISP_BRIGHTNESS               = 'displ_bright'
 CMD_GLCD_TEXT                     = 'glcd_text'
 CMD_GLCD_DIALOG                   = 'glcd_dialog'
 CMD_GLCD_DRAW                     = 'glcd_draw'
+CMD_WIDGET_AREA_ADD               = 'wa_add'
+CMD_WIDGET_AREA_REMOVE            = 'wa_rm'
 CMD_GUI_CONNECTED                 = 'uc'
 CMD_GUI_DISCONNECTED              = 'ud'
 CMD_CONTROL_ADD                   = 'a'
@@ -236,6 +242,8 @@ CMD_SYS_CHANGE_WIDGET_INDICATOR   = 'sys_ind'
 CMD_SYS_LAUNCH_POPUP              = 'sys_pop'
 CMD_SYS_PAGE_CHANGE               = 'sys_pch'
 CMD_SYS_SUBPAGE_CHANGE            = 'sys_spc'
+CMD_SYS_WIDGET_BITMAP             = 'sys_wbm'
+CMD_SYS_WIDGET_CLEAR              = 'sys_wcl'
 CMD_DUO_BOOT                      = 'boot'
 CMD_DUO_FOOT_NAVIG                = 'fn'
 CMD_DUO_BANK_CONFIG               = 'bc'
@@ -347,6 +355,10 @@ def cmd_to_str(cmd):
         return "CMD_GLCD_DIALOG"
     if cmd == "glcd_draw":
         return "CMD_GLCD_DRAW"
+    if cmd == "wa_add":
+        return "CMD_WIDGET_AREA_ADD"
+    if cmd == "wa_rm":
+        return "CMD_WIDGET_AREA_REMOVE"
     if cmd == "uc":
         return "CMD_GUI_CONNECTED"
     if cmd == "ud":
@@ -515,6 +527,10 @@ def cmd_to_str(cmd):
         return "CMD_SYS_PAGE_CHANGE"
     if cmd == "sys_spc":
         return "CMD_SYS_SUBPAGE_CHANGE"
+    if cmd == "sys_wbm":
+        return "CMD_SYS_WIDGET_BITMAP"
+    if cmd == "sys_wcl":
+        return "CMD_SYS_WIDGET_CLEAR"
     if cmd == "boot":
         return "CMD_DUO_BOOT"
     if cmd == "fn":

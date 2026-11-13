@@ -30,6 +30,8 @@ DEVICE_TAG = os.environ.pop('MOD_DEVICE_TAG', None)
 DEVICE_UID = os.environ.pop('MOD_DEVICE_UID', None)
 IMAGE_VERSION_PATH = os.environ.pop('MOD_IMAGE_VERSION_PATH', '/etc/mod-release/release')
 HARDWARE_DESC_FILE = os.environ.pop('MOD_HARDWARE_DESC_FILE', '/etc/mod-hardware-descriptor.json')
+# drop-ins merged over the descriptor, so a vendor can add to it without shipping a copy of the whole file
+HARDWARE_DESC_DIR = os.environ.pop('MOD_HARDWARE_DESC_DIR', os.path.splitext(HARDWARE_DESC_FILE)[0] + '.d')
 
 if os.path.isfile(IMAGE_VERSION_PATH):
     with open(IMAGE_VERSION_PATH, 'r') as fh:
