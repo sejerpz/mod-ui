@@ -49,7 +49,7 @@ function ProblemReport(options) {
 
     // sections of the diagnostics report that matter for a release; an id the
     // tool does not know is left out by the tool itself
-    var DIAGNOSTICS_SECTIONS = 'system,services,audio'
+    var DIAGNOSTICS_SECTIONS = 'system,services,usb,audio,wifi'
 
     this.build = function () {
         if (self.window) {
