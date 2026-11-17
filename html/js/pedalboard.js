@@ -2356,8 +2356,10 @@ JqueryClass('pedalboard', {
 
     getLabel: function (instance) {
         var plugin = $(this).data('plugins')[instance]
-        if (plugin && plugin.data) {
-            return plugin.data('label')
+        var gui = plugin && plugin.data ? plugin.data('gui') : null
+        if (gui) {
+            // the name the user gave to this plugin, or the plugin's own
+            return gui.label || gui.effect.label || gui.effect.name
         }
         return "effect"
     },
