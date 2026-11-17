@@ -7499,8 +7499,14 @@ button.close {
   bottom: 45px;
   left: 2px;
   position: absolute;
+  display: flex;
+  flex-direction: column;
+}
+#pedalboard .mod-vumeter-overlay.mod-hidden {
+  display: none;
 }
 #pedalboard .mod-vumeter-overlay .mod-vumeter-plugin-info-container {
+  flex: none;
   padding-top: 12px;
   display: flex;
   flex-direction: column;
@@ -7532,9 +7538,15 @@ button.close {
   height: auto;
 }
 #pedalboard .mod-vumeter-overlay .js-vumeter {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
-  height: 100%;
-  padding: 8px 0px 164px 1px;
+  padding: 8px 0px 8px 1px;
+}
+#pedalboard .mod-vumeter-overlay .js-vumeter .mod-vumeter-wrapper.global canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto !important;
 }
 /*
 simply utility class to make a toolbar with flexbox, 

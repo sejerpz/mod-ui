@@ -896,8 +896,7 @@ class Host(object):
                         # if not found, create a new one with the current status
                         index = len(self.audioportsMonitored)
                         port_status = {"index": index, "port": port, "jack_port": jack_port, "enabled": enable}
-
-                    self.audioportsMonitored.append(port_status)
+                        self.audioportsMonitored.append(port_status)
                 else:
                     if audioMonitorExists:
                         self.audioportsMonitored.remove(port_status)
@@ -911,6 +910,13 @@ class Host(object):
         # send the command to mod host
         self.send_notmodified("monitor_audio_levels \"%s\" %s" % (jack_port, "1" if enable else "0"), monitor_audio_port_callback, datatype='boolean')
         return True
+
+    def monitor_audio_ports_clear(self, instance=None):
+        """Stop the audio level monitors of the ports of a plugin instance, or all of them when instance is None"""
+
+        for port_status in list(self.audioportsMonitored):
+            if instance is None or port_status['port'].startswith(instance + "/"):
+                self.monitor_audio_port(port_status['port'], False, port_status)
 
     # -----------------------------------------------------------------------------------------------------------------
     # Addressing callbacks
@@ -2579,6 +2585,7 @@ class Host(object):
 
         self.bank_id = bank_id if bank_id is not None else self.first_user_bank
         self.connections = []
+        self.monitor_audio_ports_clear()
         self.addressings.clear()
         self.mapper.clear()
         self.init_plugins_data()
@@ -3012,6 +3019,8 @@ class Host(object):
                     yield gen.Task(self.addressings.hmi_load_current, actuator_uri)
                 except Exception as e:
                     logging.exception(e)
+
+        self.monitor_audio_ports_clear(instance)
 
         ok = yield gen.Task(self.send_modified, "remove %d" % instance_id, datatype='boolean')
 

@@ -811,6 +811,20 @@ function Desktop(elements) {
 
     this.effectBox = self.makeEffectBox(elements.effectBox,
                                         elements.effectBoxTrigger)
+
+    // the global vu meter overlay ends where the plugin library begins, folded or not
+    if (window.ResizeObserver) {
+        var vumeterOverlay = $('.mod-vumeter-overlay')
+        new ResizeObserver(function () {
+            var library = elements.effectBox[0].getBoundingClientRect()
+            if (library.height > 0) {
+                var bottom = vumeterOverlay.parent()[0].getBoundingClientRect().bottom - library.top
+                vumeterOverlay.css('bottom', bottom)
+            } else {
+                vumeterOverlay.css('bottom', '')
+            }
+        }).observe(elements.effectBox[0])
+    }
     this.performanceBox = self.makePerformanceBox(elements.performanceBox,
                                                 elements.performanceBoxTrigger)                                        
     this.cloudPluginBox = self.makeCloudPluginBox(elements.cloudPluginBox,

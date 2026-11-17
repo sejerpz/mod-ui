@@ -1120,6 +1120,21 @@ JqueryClass('pedalboard', {
         return true
     },
 
+    // Narrows the view from the left by `inset` pixels, to leave room for something beside the canvas
+    setLeftInset: function (inset) {
+        var self = $(this)
+        var diff = inset - (self.data('leftInset') || 0)
+
+        if (!diff) {
+            return
+        }
+
+        self.data('leftInset', inset)
+        self.data('hmargins', self.data('hmargins') + diff)
+        self.parent().css('left', parseInt(self.parent().css('left')) + diff)
+        self.pedalboard('fitToWindow')
+    },
+
     // Prevents dragging of whole dashboard when dragging of effect or jack starts
     preventDrag: function (prevent) {
         $(this).data('preventDrag', prevent)
@@ -2631,6 +2646,7 @@ JqueryClass('pedalboard', {
             connMgr.removeInstance(instance)
 
             self.data('hardwareManager').removeInstance(instance)
+            self.pedalboard('removePortVUMeters', instance)
 
             var plugin = plugins[instance]
             // plugin might have failed to register
@@ -2781,6 +2797,7 @@ JqueryClass('pedalboard', {
             // runs twice per reset with the server's message landing between the two.
 
             self.data('hardwareManager').reset()
+            self.pedalboard('removePortVUMeters')
 
             var connMgr = self.data('connectionManager')
 
@@ -2924,6 +2941,14 @@ JqueryClass('pedalboard', {
     addPortVUMeter: function(port, label, element) {
         const self = $(this)
         const vumeters = self.data('vumeters')
+
+        if (vumeters[port]) {
+            // already monitored: the host level updates can create it before the toggle answer arrives
+            const instance = port.replace(port.split('/').pop(), '').slice(0, -1)
+            self.pedalboard('selectPortVUMeter', instance, port)
+            return
+        }
+
         const vumeter = new VUMeter(32, 256, {
             onClick: (sender, e) => {
                 const vumeters = self.data('vumeters')
@@ -2951,7 +2976,7 @@ JqueryClass('pedalboard', {
             }
         })
 
-        const should_add_global = Object.keys(vumeters).length == 0
+        const should_add_global = !vumeters['global::overlay']
         let count = 0
         let vuMeterKey = port.replace(port.split('/').pop(), '')
         for(let key in vumeters) {
@@ -2975,6 +3000,9 @@ JqueryClass('pedalboard', {
             const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
             const global_vumeter_container = global_overlay?.find(".js-vumeter")
             global_overlay.removeClass('mod-hidden')
+            global_vumeter_container.empty()
+            // the overlay goes beside the canvas, so it does not cover the hardware ports
+            self.pedalboard('setLeftInset', global_overlay.position().left + global_overlay.outerWidth())
 
             // create the global overlay vumeter
             const global_vumeter = new VUMeter("50px", "100%")
@@ -3020,36 +3048,52 @@ JqueryClass('pedalboard', {
 
     removePortVUMeter: function(port) {
         const self = $(this)
-        const output = self.find(`[mod-port='${port}']`)
-        const vumeter = output ? output.find('.mod-vumeter-wrapper') : undefined
+        const vumeters = self.data('vumeters')
+        const vumeter = vumeters[port]
 
-        if (vumeter) {
-            vumeter.remove()
-            let vumeters = self.data('vumeters')
-            delete vumeters[port]
+        if (!vumeter || port == 'global::overlay') {
+            return
+        }
 
-            if (Object.keys(vumeters).length == 1) { // we only have the global vumeter, remove it
-                const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
+        vumeter.getElement().remove()
+        delete vumeters[port]
 
-                global_overlay.addClass('mod-hidden')
-                global_vumeter = vumeters['global::overlay']
-                global_vumeter.getElement().remove();
-                delete vumeters['global::overlay']
-            } else {
-                // check if is the selected vumeter
-                if (port == self.data('vumeters::selected')) {
-                    const global_vumeter = vumeters['global::overlay']
-                    const firstKey = Object.keys(vumeters).find(key => key !== 'global::overlay')
+        const firstKey = Object.keys(vumeters).find(key => key !== 'global::overlay')
 
-                    if (global_vumeter) {
-                        const instanceKey = firstKey?.replace(firstKey.split('/').pop(), '')?.slice(0, -1)
-                        self.pedalboard('selectPortVUMeter', instanceKey, firstKey)
-                    } else {
-                        console.warn("not global vumeter present: vumeters not synched with host?!?")
-                    }
-                }
+        if (firstKey === undefined) {
+            // only the global vumeter is left, remove it
+            self.pedalboard('removeGlobalVUMeter')
+        } else if (port == self.data('vumeters::selected')) {
+            const instanceKey = firstKey.replace(firstKey.split('/').pop(), '').slice(0, -1)
+            self.pedalboard('selectPortVUMeter', instanceKey, firstKey)
+        }
+    },
+
+    // Removes the vumeters of the ports of a plugin instance, or all of them when instance is undefined
+    removePortVUMeters: function(instance) {
+        const self = $(this)
+        const vumeters = self.data('vumeters')
+
+        for (const port of Object.keys(vumeters)) {
+            if (port == 'global::overlay') {
+                continue
+            }
+            if (instance === undefined || port.startsWith(instance + '/')) {
+                self.pedalboard('removePortVUMeter', port)
             }
         }
+    },
+
+    removeGlobalVUMeter: function() {
+        const self = $(this)
+        const vumeters = self.data('vumeters')
+        const global_overlay = self.parent()?.parent()?.find(".mod-vumeter-overlay")
+
+        global_overlay.addClass('mod-hidden')
+        global_overlay.find(".js-vumeter").empty()
+        self.pedalboard('setLeftInset', 0)
+        delete vumeters['global::overlay']
+        self.removeData('vumeters::selected')
     },
 
     setPortVUMeterValue: function(port, db) {
