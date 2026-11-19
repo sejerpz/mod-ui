@@ -261,14 +261,14 @@ JqueryClass('effectBox', {
         self.addClass('open')
         // it takes the whole height, the title out of its way, see dashboard.css
         $('body').addClass('library-open')
-        self.data('gridTab').text('\u2039 Back').addClass('active')
+        self.data('gridTab').text('Back').addClass('active way-back')
     },
 
     closeLibrary: function () {
         var self = $(this)
         self.removeClass('open')
         $('body').removeClass('library-open')
-        self.data('gridTab').text('Add Plugin').removeClass('active')
+        self.data('gridTab').text('Add Plugin').removeClass('active way-back')
     },
 
     fold: function () {
@@ -577,7 +577,7 @@ JqueryClass('effectBox', {
                 tab.text('Cancel \u00d7').addClass('active')
                 pedalboard.pedalboard(pedalboard.pedalboard('gridMode') ? 'showPlacementGrid' : 'showFreePlacement',
                                       rendered, function () {
-                    tab.text('Add Plugin').removeClass('active')
+                    tab.text('Add Plugin').removeClass('active way-back')
                 })
                 return
             }

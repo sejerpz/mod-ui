@@ -346,7 +346,7 @@ JqueryClass('appBar', {
         // its tools are not there: the dock folds down to the way back to the board, the
         // menu being only there
         var back = $('<div class="back">').appendTo(self)
-        var elsewhereBack = $('<div>').text('‹ Back').click(function () {
+        var elsewhereBack = $('<div class="way-back">').text('Back').click(function () {
             if (options.banks.hasClass('adding')) {
                 options.banks.bankBox('showAdding', false)
             } else {
@@ -361,7 +361,7 @@ JqueryClass('appBar', {
         }).appendTo(back)
         var showBanks = function () {
             var adding = options.banks.hasClass('adding')
-            elsewhereBack.text(adding ? 'Done' : '‹ Back')
+            elsewhereBack.text(adding ? 'Done' : 'Back').toggleClass('way-back', ! adding)
             addPedalboards.toggle(! adding && $('body').hasClass('narrow-screen') &&
                                   options.banks.is(':visible') &&
                                   options.banks.find('#bank-pedalboards').css('display') != 'none')
@@ -825,7 +825,7 @@ JqueryClass('appBar', {
                 icon && icon.find('.mod-' + name).click()
             }).appendTo(plugin)
         }
-        action('‹ Board', 'board', function () {
+        action('Back', 'board way-back', function () {
             options.pedalboard.pedalboard('leavePluginView')
         })
         action('Info', 'information')
@@ -906,7 +906,7 @@ JqueryClass('appBar', {
         var snapshotWatch = new MutationObserver(showSnapshot)
         var compare = $('<div class="compare">').appendTo(dialog)
         var compareHome = null
-        var dialogBack = $('<div>').text('‹ Back').click(function () {
+        var dialogBack = $('<div class="way-back">').text('Back').click(function () {
             if (settings) {
                 closeSettings()
             } else if (info) {

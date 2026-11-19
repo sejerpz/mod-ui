@@ -7210,3 +7210,40 @@ body.app-bar-mode .blocker.screen-disconnected .button {
     margin-top: calc(120px * var(--touch-zoom, 1));
     transform: translate(-50%, -50%) scale(var(--touch-zoom, 1));
 }
+
+/* The way back, wherever the dock offers it (out of the library, a dialog, a plugin's
+   view or the places the menu leads to): as Add Plugin, bold on a purple pill, with a
+   white disc whose chevron shows the purple through, see js/appbar.js */
+.mod-app-bar div.way-back,
+.mod-app-bar .plugin > div.way-back,
+#plugins-library-tab.way-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 22px 0 12px;
+    border: none;
+    border-radius: 20px;
+    background: #883996;
+    color: #fff;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.mod-app-bar div.way-back::before {
+    content: '';
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin-right: 8px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='white' fill-rule='evenodd' d='M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20ZM11.5 4.3l1.9 1.9L9.6 10l3.8 3.8l-1.9 1.9L5.8 10Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.mod-app-bar.compact div.way-back,
+.mod-app-bar.compact .plugin > div.way-back {
+    padding: 0 14px 0 8px;
+}
+
+.mod-app-bar.compact div.way-back::before {
+    margin-right: 6px;
+}
