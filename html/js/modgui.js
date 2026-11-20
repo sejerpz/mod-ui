@@ -1857,11 +1857,11 @@ function GUI(effect, options) {
                         const port = templateData.effect.ports.control.input[key];
                         const symbol = port.symbol;
 
-                        console.log("Toggling global snapshotable for", self.instance, " new:", newSnapshotable ? "ON" : "OFF")
                         desktop.pedalboard.data('pluginPortSnapshotableSet')(self.instance, symbol, newSnapshotable)
                     }
-
-                    //TODO: update the parameters
+                    for (let uri in self.parameters) {
+                        desktop.pedalboard.data('pluginParameterSnapshotableSet')(self.instance, uri, newSnapshotable)
+                    }
                 })
             })
 
