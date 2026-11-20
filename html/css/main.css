@@ -6889,6 +6889,7 @@ button.close {
   right: 0;
   top: 0;
   z-index: 2;
+  /* the selected plugin, in every layout */
   /* desktop and large tablets */
   /* horizontal mobile and small screen */
 }
@@ -6915,6 +6916,9 @@ button.close {
 }
 #performance .js-performance {
   position: absolute;
+}
+#performance .js-performance-plugins .selected > .label-container {
+  background-color: #883996;
 }
 #performance .js-performance-plugin-settings .mod-pedal-settings {
   left: 12px;
@@ -7051,9 +7055,6 @@ button.close {
     justify-content: end;
     flex-grow: 0;
     flex-shrink: 0;
-  }
-  #performance .js-performance-plugins .selected > .label-container {
-    background-color: #883996;
   }
   #performance .js-performance-plugin-settings {
     left: 0px;

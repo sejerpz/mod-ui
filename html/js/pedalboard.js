@@ -1500,6 +1500,12 @@ JqueryClass('pedalboard', {
     // Enlarge the pedalboard to a minimum size capable of accommodating all plugins.
     adapt: function (forcedUpdate) {
         var self = $(this)
+        // A board with no room to show in (a page not laid out yet, or hidden) has nothing
+        // to fit: every size below would divide by zero and leave the scale NaN for good.
+        // The next adapt, from the load or a resize, fits it once there is room.
+        if (! self.parent().width() || ! self.parent().height()) {
+            return
+        }
         // First, get the minmum bounding rectangle,
         // given by minX, maxX, minY and maxY
         var minX, maxX, minY, maxY, padX, padY, w, h, x, y, plugin, pos
@@ -3473,9 +3479,10 @@ JqueryClass('pedalboard', {
     stereoPartner: function (element) {
         var self = $(this)
 
-        // Off by preference: every connection then draws as its own cable, which is
-        // what the rest of the code does anyway when nothing pairs up.
-        if (typeof PREFERENCES !== 'undefined' && PREFERENCES['merge-stereo-cables'] == "false") {
+        // Off unless turned on in Settings (and always off where there are no preferences,
+        // like the screenshot renderer): every connection then draws as its own cable,
+        // which is what the rest of the code does anyway when nothing pairs up.
+        if (typeof PREFERENCES === 'undefined' || PREFERENCES['merge-stereo-cables'] != "true") {
             return null
         }
 
@@ -4999,6 +5006,26 @@ JqueryClass('pedalboard', {
         plugin.css({ top: y, left: x })
         self.pedalboard('fitToWindow')
         self.pedalboard('drawPluginJacks', plugin)
+    },
+
+    // label changed by another client: update the UI, the host already knows
+    setPluginLabel: function(instance, label) {
+        var self = $(this)
+        var plugin = self.data('plugins')[instance]
+        if (!plugin) {
+            return
+        }
+        plugin.data('gui').setLabel(label, false)
+    },
+
+    // performance view options (index, visible) changed by another client
+    setPluginPerformanceOptions: function(instance, performanceOptions) {
+        var self = $(this)
+        var plugin = self.data('plugins')[instance]
+        if (!plugin) {
+            return
+        }
+        $.extend(plugin.data('gui').getPerformanceOptions(), performanceOptions)
     },
 })
 

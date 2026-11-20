@@ -184,7 +184,8 @@ JqueryClass('pedalboardBox', {
             self.window('close')
         })
 
-        self.data('dev_mode', PREFERENCES['dev-mode'] == "on")
+        // download button: the Export and Import switch in Settings > User Interface
+        self.data('dev_mode', ui_tool_enabled('ui-share'))
 
         // .modpedalboard import (Developer Mode, always on MOD Desktop)
         self.find('.js-import').click(function () {

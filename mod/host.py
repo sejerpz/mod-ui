@@ -22,8 +22,6 @@ from random import randint
 from tornado import gen, iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
 from urllib.parse import quote, unquote
-from pprint import pprint
-
 import os, json, socket, time, logging, sys
 import shutil, tempfile
 import copy
@@ -472,6 +470,7 @@ class Host(object):
         self.pedalboard_path     = ""
         self.pedalboard_size     = [0,0]
         self.pedalboard_version  = 0
+        self.reload_bundle_path  = None
         self.pedalboard_format_version = 1
         self.current_pedalboard_snapshot_id = -1
         self.pedalboard_snapshots = []
@@ -493,6 +492,8 @@ class Host(object):
         self.hmi_widgets_update_again = False
         self.compare_snapshots = dict()
         self.compare_status = "empty"
+        # while the CPU panel is open, so plugins added meanwhile get monitored too
+        self.cpu_monitor_enabled = False
         self.next_hmi_pedalboard_to_load = None
         self.next_hmi_pedalboard_loading = False
         self.next_hmi_bpb = [0, False, False]
@@ -2114,7 +2115,8 @@ class Host(object):
             load        = float(msg_data[1]) * 100.0
 
             if instance_id in self.plugins:
-                self.msg_callback("cpu_load %s %f" % (self.mapper.get_instance(instance_id), load))
+                # not "cpu_load": in mod-host that name is the global load of the whole graph
+                self.msg_callback("plugin_cpu_load %s %f" % (self.mapper.get_instance(instance_id), load))
 
         else:
             logging.error("[host] unrecognized command: %s", cmd)
@@ -2899,6 +2901,8 @@ class Host(object):
             for output in extinfo['monitoredOutputs']:
                 self.send_notmodified("monitor_output %d %s" % (instance_id, output))
 
+            self.monitor_cpu_load_new_plugin(instance_id)
+
             for snapshot in self.pedalboard_snapshots:
                 if snapshot is None:
                     continue
@@ -3279,10 +3283,12 @@ class Host(object):
         bank_id  = self.bank_id
         last_bank_id, last_path = get_last_bank_and_pedalboard()
 
-        bundlepath = os.path.join(tempfile.gettempdir(), 'reloaded.pedalboard')
-        if os.path.exists(bundlepath):
-            shutil.rmtree(bundlepath)
-        os.mkdir(bundlepath)
+        # A new bundle for every reload. After a reload the file loaders have their files open through the
+        # links in the previous bundle: deleting it before "state_save" would make them save a bare name and
+        # come back empty on the second reload. The previous bundle goes once the new one is loaded.
+        oldbundlepath = self.reload_bundle_path
+        bundlepath = tempfile.mkdtemp(prefix='reloaded-', suffix='.pedalboard')
+        self.reload_bundle_path = bundlepath
 
         self.save_state_to_ttl(bundlepath, name or 'Untitled', 'reloaded')
 
@@ -3302,8 +3308,11 @@ class Host(object):
                 if last_path is not None:
                     save_last_bank_and_pedalboard(last_bank_id, last_path)
 
-            # The bundle stays until the next reload: load() only queues "state_load" to mod-host,
+            # The new bundle stays until the next reload: load() only queues "state_load" to mod-host,
             # which reads the bundle after this returns.
+            if oldbundlepath is not None and os.path.isdir(oldbundlepath):
+                shutil.rmtree(oldbundlepath, ignore_errors=True)
+
             callback(ok)
 
         # Plugin state (the file a NAM, IR or sampler loader has open) lives outside the ttl,
@@ -5244,6 +5253,8 @@ class Host(object):
             for output in extinfo['monitoredOutputs']:
                 self.send_notmodified("monitor_output %d %s" % (instance_id, output))
 
+            self.monitor_cpu_load_new_plugin(instance_id)
+
     def load_pb_connections(self, connections, mappedOldMidiIns, mappedOldMidiOuts,
                                                mappedNewMidiIns, mappedNewMidiOuts):
         for c in connections:
@@ -6158,8 +6169,10 @@ _:b%i
         """Subscribe to (or stop) per-plugin CPU reporting for every loaded plugin.
 
         mod-host pushes "cpu_monitor <id> <load>" on the feedback socket whenever a
-        plugin beats its own previous worst cycle, so nothing is polled. Enabling also
-        resets those peaks, which is how the UI offers a "reset" button."""
+        plugin beats its own worst cycle of the current feedback round (the record is
+        reset on every output_data_ready), so nothing is polled. The UI keeps the peak
+        across rounds; enabling again also resets mod-host's records."""
+        self.cpu_monitor_enabled = enable
         instances = list(self.plugins.keys())
 
         if not instances:
@@ -6170,6 +6183,12 @@ _:b%i
                                                              len(instances),
                                                              " ".join(str(i) for i in instances)),
                               callback, datatype='boolean')
+
+    def monitor_cpu_load_new_plugin(self, instance_id):
+        # The instance list is sent when the panel opens, so a plugin added after that, by
+        # hand or by loading a pedalboard, joins on its own. Only its own record is reset.
+        if self.cpu_monitor_enabled:
+            self.send_notmodified("monitor_cpu_load 1 1 %d" % instance_id)
 
     def get_free_memory_value(self):
         if not self.memfile:
