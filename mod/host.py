@@ -597,6 +597,7 @@ class Host(object):
         self.addressings._task_act_added = self.addr_task_act_added
         self.addressings._task_act_removed = self.addr_task_act_removed
         self.addressings._task_set_available_pages = self.addr_task_set_available_pages
+        self.addressings._page_has_widgets = self.hmi_widgets_on_page
         self.addressings._task_host_hmi_map = self.addr_host_hmi_map
         self.addressings._task_host_hmi_unmap = self.addr_host_hmi_unmap
 
@@ -2989,10 +2990,7 @@ class Host(object):
                     logging.exception(e)
 
         # Send new available pages to hmi if needed
-        send_hmi_available_pages = False
-        if self.addressings.addressing_pages:
-            for page in range(self.addressings.addressing_pages):
-                send_hmi_available_pages |= self.check_available_pages(page)
+        send_hmi_available_pages = self.check_all_available_pages()
 
         # Held back for the caller to send once the panel is listening again. Not dropped:
         # the encoders would go on showing controls of a plugin that is no longer there.
@@ -4460,8 +4458,9 @@ class Host(object):
                                 gen=self.pedalboard_teleports_gen)).encode("utf-8")).decode("utf-8"))
             self.send_notmodified("state_load \"{}\"".format(bundlepath))
             self.presets_metadata.load(bundlepath, instances, abort_catcher)
-            self.addressings.load(bundlepath, instances, skippedPortAddressings, abort_catcher)
+            # the widgets first: a page with only widgets on it must be among the pages addressings sends
             self.load_pb_hmi_widgets(bundlepath)
+            self.addressings.load(bundlepath, instances, skippedPortAddressings, abort_catcher)
             self.msg_callback(self.hmi_widgets_message())
             self.hmi_widgets_sync()
         else:
@@ -4925,6 +4924,9 @@ class Host(object):
 
         self.hmi_widgets = self.hmi_widgets_validate(data.get('widgets'))
 
+    def hmi_widgets_on_page(self, page):
+        return any(widget['page'] == page for widget in self.hmi_widgets)
+
     def set_hmi_widgets(self, layout):
         layout = self.hmi_widgets_validate(layout)
         if layout == self.hmi_widgets:
@@ -4943,6 +4945,11 @@ class Host(object):
             if self.hmi_widgets_shown:
                 self.hmi_widgets_shown = {}
                 yield gen.Task(self.send_notmodified, "hmi_widget_hide -1")
+
+            # a page with widgets and no bindings can be reached only if the panel knows it is there.
+            # Not worked out when the panel is not told: the caller syncs again once it listens.
+            if send_hmi and self.check_all_available_pages() and self.hmi.initialized:
+                yield gen.Task(self.hmi.set_available_pages, self.addressings.get_available_pages())
 
             if send_hmi and self.hmi.initialized and self.hmi_widget_areas():
                 yield gen.Task(self.hmi.send, "%s -1" % CMD_WIDGET_AREA_REMOVE)
@@ -6460,21 +6467,18 @@ _:b%i
     def check_available_pages(self, page):
         send_hmi_available_pages = False
         available_pages = self.addressings.available_pages.copy()
-
-        if page == 0:
-            available_pages[0] = True
-        else:
-            available_pages[page] = False
-            for uri, addrs in self.addressings.hmi_addressings.items():
-                for addr in addrs['addrs']:
-                    if addr['page'] == page:
-                        available_pages[page] = True
-                        break
+        available_pages[page] = self.addressings.page_in_use(page)
 
         if self.addressings.available_pages != available_pages:
             send_hmi_available_pages = True
             self.addressings.available_pages = available_pages
 
+        return send_hmi_available_pages
+
+    def check_all_available_pages(self):
+        send_hmi_available_pages = False
+        for page in range(self.addressings.addressing_pages):
+            send_hmi_available_pages |= self.check_available_pages(page)
         return send_hmi_available_pages
 
     def host_and_web_parameter_set(self, pluginData, instance, instance_id, port_value, portsymbol, callback):

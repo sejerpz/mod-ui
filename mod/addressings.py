@@ -104,6 +104,7 @@ class Addressings(object):
         self._task_act_added   = None
         self._task_act_removed = None
         self._task_set_available_pages = None
+        self._page_has_widgets = None
         self._task_host_hmi_map = None
         self._task_host_hmi_unmap = None
 
@@ -252,6 +253,16 @@ class Addressings(object):
             pages[i] = True
 
         return pages
+
+    def page_in_use(self, page):
+        # the first page is always available, the others only with a binding or a plugin widget on them
+        if page == 0:
+            return True
+        for uri, addrs in self.hmi_addressings.items():
+            for addr in addrs['addrs']:
+                if addr['page'] == page:
+                    return True
+        return self._page_has_widgets is not None and self._page_has_widgets(page)
 
     # -----------------------------------------------------------------------------------------------------------------
 
@@ -464,25 +475,11 @@ class Addressings(object):
                 except Exception as e:
                     logging.exception(e)
 
-        # Send available pages (ie with addressings) to hmi
+        # Send available pages (ie with addressings or plugin widgets) to hmi
         self.available_pages = []
         if self.addressing_pages:
             for i in range(self.addressing_pages):
-                # Build default available_pages list
-                if i == 0: # For the moment we always boot/load a pedalboard with first page
-                    self.available_pages.append(True) # so it should always be available
-                else:
-                    self.available_pages.append(False)
-
-                # Loop through HMI addressings
-                def loop_addressings():
-                    for uri, addrs in self.hmi_addressings.items():
-                        for addr in addrs['addrs']:
-                            if addr['page'] == i:
-                                self.available_pages[i] = True
-                                return
-
-                loop_addressings()
+                self.available_pages.append(self.page_in_use(i))
 
             try:
                 yield gen.Task(self._task_set_available_pages, self.get_available_pages())
