@@ -1908,6 +1908,10 @@ JqueryClass('pedalboard', {
         var options = $.extend({
             dragStart: function () {
                 self.trigger('pluginDragStart', instance)
+                // the ports slide under a still pointer all through the drag, and each one
+                // would start a trace that fades every cable on the board
+                self.data('draggingPlugin', true)
+                self.pedalboard('clearTracing')
                 obj.icon.addClass('dragging')
                 obj.icon.css({'z-index': self.data('z_index')+1})
                 self.data('z_index', self.data('z_index')+1)
@@ -1924,6 +1928,7 @@ JqueryClass('pedalboard', {
                 self.pedalboard('drawPluginJacks', obj.icon)
             },
             dragStop: function (e, ui) {
+                self.data('draggingPlugin', false)
                 self.trigger('pluginDragStop')
                 self.trigger('modified')
                 self.pedalboard('drawPluginJacks', obj.icon)
@@ -2611,16 +2616,17 @@ JqueryClass('pedalboard', {
     // Redraw all connections from or to a plugin
     drawPluginJacks: function (plugin) {
         var self = $(this)
-        var myjacks = []
         var connMgr = self.data('connectionManager')
-        connMgr.iterateInstance(plugin.data('instance'), function (jack) {
-            myjacks.push($(jack.data('svg')._container))
-        })
-        $('.hasSVG.cable-connected').filter(function(e) {!(e in myjacks)}).css({'z-index': 0})
+        var zIndex = self.data("z_index")-1
 
         connMgr.iterateInstance(plugin.data('instance'), function (jack) {
             self.pedalboard('drawJack', jack)
-            $(jack.data('svg')._container).css({ 'z-index': self.data("z_index")-1, 'pointer-events': 'none'})
+            // called on every step of a drag: restacking a canvas as big as the board each
+            // time is costly, so only when it actually changes
+            if (jack.data('canvasZIndex') !== zIndex) {
+                jack.data('canvasZIndex', zIndex)
+                $(jack.data('svg')._container).css({ 'z-index': zIndex, 'pointer-events': 'none'})
+            }
         })
     },
 
@@ -3492,7 +3498,10 @@ JqueryClass('pedalboard', {
         }
         var instance = element.data('instance')
         var port = instance ? instance + '/' + counterpart.symbol : counterpart.symbol
-        var partner = self.find('[mod-port="' + port + '"]')
+        // looked up on every redraw of every cable: a plugin's ports are in its own box, and
+        // searching only there is much cheaper than searching the board
+        var plugin = instance ? self.data('plugins')[instance] : null
+        var partner = (plugin && plugin.length ? plugin : self).find('[mod-port="' + port + '"]')
         // Guessing the name is not enough. It has to be a port that exists, and one that
         // faces the same way and carries the same kind of signal, or "gain_1" pairs with
         // a control port and a hardware capture pairs with a playback
@@ -4178,7 +4187,7 @@ JqueryClass('pedalboard', {
     // output always holds for dragging from dimming the board and lighting nothing.
     traceFrom: function (port) {
         var self = $(this)
-        if (self.pedalboard('connecting')) {
+        if (self.pedalboard('connecting') || self.data('draggingPlugin')) {
             return
         }
         var jacks = self.pedalboard('jacksAtPort', port)
@@ -4258,6 +4267,10 @@ JqueryClass('pedalboard', {
         // so redrawing either half on its own still leaves both of them right
         var left = pair.first ? jack : pair.jack
         var right = pair.first ? pair.jack : jack
+        // both halves are usually redrawn together: the left one draws the whole pair
+        if (jack[0] === right[0] && left.data('drawPending')) {
+            return true
+        }
         var rightSvg = right.data('svg')
         if (rightSvg) {
             rightSvg.clear()
@@ -4276,9 +4289,21 @@ JqueryClass('pedalboard', {
     // Force parameter will force drawing when jack is disconnected
     drawJack: function (jack, force) {
         var self = $(this)
+        // Drag events can come faster than the draws, which would then pile up. One pending
+        // draw per jack is enough: it reads the positions when it runs, not when it was asked.
+        // The last call says whether it is forced, as the latest word on the jack's state.
+        jack.data('drawForce', !! force)
+        if (jack.data('drawPending')) {
+            return
+        }
+        jack.data('drawPending', true)
         // We used settimeout so that drawing will occur after all events are processed. This avoids some bad
         // user experience
         setTimeout(function () {
+            var force = jack.data('drawForce')
+            jack.data('drawPending', false)
+            jack.data('drawForce', false)
+
             var svg = jack.data('svg')
             if (!svg)
             // maybe jack has just been disconnected and so no drawing is necessary

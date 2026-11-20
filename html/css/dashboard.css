@@ -569,15 +569,15 @@ svg .light {
    The lit flag is an attribute on the canvas div rather than a class on the svg, because
    jQuery 1.9.1 sets classes through element.className, which on an svg element is a
    readonly SVGAnimatedString and silently no-ops. Matching svg classes from css is fine;
-   only setting them from script is not. */
-.mod-cable-canvas {
-    transition: opacity 0.12s ease;
-}
-.mod-tracing .mod-cable-canvas {
+   only setting them from script is not.
+
+   The fade goes on the paths, never on the canvas div. Every canvas is as big as the whole
+   board, and opacity on it, above all while a transition runs, has Safari give each one a
+   compositing layer of that size: tens of GB on a big board, while dragging or connecting.
+   Opacity on svg shapes is painted with them and makes no layer, so it takes no transition
+   either. */
+.mod-tracing .mod-cable-canvas:not([data-cable-lit]) path {
     opacity: 0.22;
-}
-.mod-tracing .mod-cable-canvas[data-cable-lit] {
-    opacity: 1;
 }
 /* the jacks fade with their cables, so the two ends of the traced one stand out too */
 .mod-output-jack {
