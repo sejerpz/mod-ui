@@ -666,6 +666,11 @@ svg .light {
 .mod-port-contextmenu > div {
     padding: 6px 14px;
 }
+.mod-port-contextmenu > hr.mod-contextmenu-separator {
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid #3a3a3a;
+}
 .mod-port-contextmenu > div:hover {
     background: #883996;
     color: #fff;
