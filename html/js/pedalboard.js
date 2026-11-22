@@ -5419,6 +5419,7 @@ function T3KIntegration(pedalboard, pubKey) {
                             // short: it travels in the X-Upload-Config header
                             description: shortDescription(tone.description),
                             author: tone.user?.display_name || tone.user?.username,
+                            authorAvatar: tone.user?.avatar_url,
                             url: tone.url,
                             image: tone.images?.[0],
                             // amp, amp-cab, pedal, outboard, cab, space...: an amp needs a cab
@@ -5596,4 +5597,135 @@ function T3KIntegration(pedalboard, pubKey) {
 
         t3kinfo?.popup?.progress?.(msg, progress)
     }
+
+    /*
+     * Show the tone a downloaded file comes from, as the Tone3000 design requirements ask:
+     * image, title, gear type, format, creator and the models of the tone, which can be
+     * switched from here.
+     *
+     * file: the file entry of a file list, with the T3K metadata saved at download
+     * files: the entries of the same list, the other models of the tone are among them
+     * onSelect: called with the entry of the model chosen in the dialog
+     */
+    this.showToneDetails = function(file, files, onSelect) {
+        const win = $('#t3k-tone-details')
+        const tone = file?.metadata?.data
+
+        if (win.length == 0 || !tone) {
+            return
+        }
+
+        const close = function () {
+            win.addClass('mod-hidden')
+            $(document).off('keydown.t3kdetails')
+        }
+
+        win.find('.js-image')
+            .attr('src', tone.image || 'js/lib/t3k/logo/NoImage.svg')
+            .off('error').on('error', function () {
+                $(this).off('error').attr('src', 'js/lib/t3k/logo/NoImage.svg')
+            })
+        win.find('.js-title').text(tone.title || file.basename)
+        win.find('.js-gear').empty()
+            .append(T3KIntegration.gearIcon(tone.gear))
+            .append($('<span>').text(T3KIntegration.gearName(tone.gear)))
+        win.find('.js-format').text(T3KIntegration.formatName(tone.format))
+        win.find('.js-avatar')
+            .attr('src', tone.authorAvatar || 'img/avatar-default.png')
+            .off('error').on('error', function () {
+                $(this).off('error').attr('src', 'img/avatar-default.png')
+            })
+        win.find('.js-author').text(tone.author ? '@' + tone.author : '')
+        win.find('.js-description').text(tone.description || '')
+        win.find('.js-license').text(tone.license ? 'License: ' + tone.license.toUpperCase() : '')
+
+        const url = win.find('.js-url')
+        if (tone.url) {
+            url.attr('href', tone.url).show()
+        } else {
+            url.removeAttr('href').hide()
+        }
+
+        // the models of the tone are the files downloaded with it
+        const models = files.filter(item => !item.fullname.startsWith('dir://')
+                                            && item.metadata?.source === 'T3K'
+                                            && item.metadata.data?.toneId === tone.toneId)
+        const list = win.find('.js-models').empty()
+
+        for (const model of models) {
+            const data = model.metadata.data.model || {}
+            const info = []
+            if (data.architecture) {
+                info.push('A' + data.architecture)
+            }
+            if (data.size) {
+                info.push(data.size)
+            }
+            const row = $('<div>')
+                .toggleClass('selected', model.fullname === file.fullname)
+                .append($('<span>').text(data.name || model.basename))
+                .append($('<span class="t3k-model-info">').text(info.join(' · ')))
+                .click(function () {
+                    close()
+                    if (onSelect) {
+                        onSelect(model)
+                    }
+                })
+            list.append(row)
+        }
+
+        win.find('.js-close').off('click').click(close)
+        win.off('click').click(function (e) {
+            // a click outside the box closes it
+            if (e.target === this) {
+                close()
+            }
+        })
+        $(document).off('keydown.t3kdetails').on('keydown.t3kdetails', function (e) {
+            if (e.keyCode == 27) {
+                close()
+            }
+        })
+
+        win.removeClass('mod-hidden')
+    }
+}
+
+// The gear types of Tone3000, as the tones show them
+T3KIntegration.GEAR_NAMES = {
+    'amp': 'Amp',
+    'amp-cab': 'Amp + Cab',
+    'full-rig': 'Amp + Cab', // deprecated name of amp-cab
+    'pedal': 'Pedal',
+    'outboard': 'Outboard',
+    'cab': 'Cab',
+    'space': 'Space',
+    'experimental': 'Experimental',
+}
+
+T3KIntegration.FORMAT_NAMES = {
+    'nam': 'NAM',
+    'ir': 'IR',
+    'aida-x': 'AIDA-X',
+    'aa-snapshot': 'AA Snapshot',
+    'proteus': 'Proteus',
+}
+
+T3KIntegration.gearName = function (gear) {
+    return T3KIntegration.GEAR_NAMES[gear] || gear || ''
+}
+
+T3KIntegration.formatName = function (format) {
+    return T3KIntegration.FORMAT_NAMES[format] || (format ? format.toUpperCase() : '')
+}
+
+// the icon of a gear type, nothing for a type without one
+T3KIntegration.gearIcon = function (gear) {
+    if (gear == 'full-rig') {
+        gear = 'amp-cab'
+    }
+    if (!T3KIntegration.GEAR_NAMES[gear]) {
+        return $()
+    }
+    return $('<span class="t3k-gear-icon">').addClass('t3k-gear-' + gear)
 }

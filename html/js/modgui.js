@@ -3681,9 +3681,35 @@ JqueryClass('customSelectPath', baseWidget, {
                     icon = icons.userFile
                 }
             }
-            // files downloaded from Tone3000 say so
-            opt.attr('title', (file?.metadata?.source === 'T3K' ? 'T3K: ' : '') + opt.text())
+            // files downloaded from Tone3000 say so: the gear type in place of the file icon,
+            // and the T3K mark on the right, which opens the tone details. A folder of a tone
+            // keeps the folder icon, it is what navigates, and has the T3K mark too
+            const tone = file?.metadata?.source === 'T3K' ? file.metadata.data : null
+            const isFile = !optValue.startsWith("dir://")
+            const gear = tone && isFile ? T3KIntegration.gearIcon(tone.gear) : $()
+            if (gear.length) {
+                icon = gear.addClass('mod-select-path-icon')[0].outerHTML
+            }
+            opt.attr('title', (tone ? [T3KIntegration.gearName(tone.gear),
+                                       T3KIntegration.formatName(tone.format),
+                                       'T3K'].filter(Boolean).join(' · ') + ': ' : '') + opt.text())
             opt.html(`${icon}` + opt.html())
+            if (tone) {
+                const logo = $('<img class="t3k-file-logo" src="js/lib/t3k/logo/T3K%20logo.svg" title="Tone details" alt="T3K"/>')
+                logo.click(function (e) {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    const t3k = desktop.pedalboard.data('T3KIntegration')
+                    t3k.showToneDetails(file, options.port.files, function (model) {
+                        // the model chosen in the details, loaded as a click on its entry would
+                        self.find('[mod-role=enumeration-option]')
+                            .filter(function () { return $(this).attr('mod-parameter-value') === model.fullname })
+                            .click()
+                    })
+                })
+                opt.addClass('t3k-option')
+                   .append($('<span class="t3k-logo-slot">').append(logo))
+            }
             opt.click(function (e) {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
