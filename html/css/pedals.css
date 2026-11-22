@@ -602,6 +602,11 @@ body.pedalboard-share #pedalboards-library header .pedalboard-file-import:hover 
     width:160px;
 }
 
+/* in a group the cells sit flush, as knobs and switches do, or the group's line breaks */
+.mod-pedal-settings .mod-enumerated.mod-group:not(.mod-group-end) {
+    margin-right:0;
+}
+
 .mod-presets,
 .mod-file-list {
     width: 322px !important;
