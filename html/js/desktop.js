@@ -2072,10 +2072,14 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
             pluginGui.updateCompareSnapshotStatus(self.compareCurrentStatus)
         },
         pluginSettingsWindowClose: function (pluginGui) {
-            pluginGui.cleanupMonitorVUMeter()
             // this is used to avoid creating new vumeters (debounce)
-            // since we can have a delay between closing the settings window and the pedalboard sending the next vu meter update
+            // since we can have a delay between closing the settings window and the pedalboard sending the next vu meter update.
+            // Counted again once the last port is disabled: they go one at a time, and on a plugin
+            // with several outputs the last one can still send levels well after the close
             self.pedalboard.data("currentSettingsWindowClosedTime", Date.now())
+            pluginGui.cleanupMonitorVUMeter(function () {
+                self.pedalboard.data("currentSettingsWindowClosedTime", Date.now())
+            })
             self.currentSettingsWindow = undefined
         },
         // returns true if help mode is active, false otherwise

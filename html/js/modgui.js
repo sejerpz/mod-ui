@@ -1387,13 +1387,18 @@ function GUI(effect, options) {
             delete self.vumeter
         }
 
-        // cleanup the monitored ports that were enabled in the setupMonitorVUMeter function
-        if (self.monitoredPorts && self.monitoredPorts.length > 0) {
+        // cleanup the monitored ports that were enabled in the setupMonitorVUMeter function.
+        // Taken over from self.monitoredPorts, which starts empty again: settings opened
+        // again before this is done get their own list, not ports this is about to disable
+        const monitoredPorts = self.monitoredPorts || []
+        self.monitoredPorts = []
+
+        if (monitoredPorts.length > 0) {
 
             function cleanupMonitoredPort() {
                 // cleanup the first port in the array
-                const monitoredPort = self.monitoredPorts.shift();
-                
+                const monitoredPort = monitoredPorts.shift();
+
                 if (!monitoredPort) {
                     // FINISH: all port removed
                     if (callback) {
@@ -1401,7 +1406,7 @@ function GUI(effect, options) {
                     }
                 } else {
                     // cleanup
-                    if (monitoredPort.alreadyMonitored || monitoredPort.enable === false) {
+                    if (monitoredPort.alreadyMonitored || !monitoredPort.enabled) {
                         // no need to cleanup go to the next
                         cleanupMonitoredPort();
                     } else {
