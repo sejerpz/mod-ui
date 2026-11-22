@@ -4,6 +4,9 @@ on: [push]
 
 jobs:
   notification:
+    # MOD's channel announces MOD's repository: a fork pushing here would post there too,
+    # and two pushes at once collide on the bot's nickname
+    if: github.repository == 'mod-audio/mod-ui'
     runs-on: ubuntu-latest
     name: IRC notification
     steps:
