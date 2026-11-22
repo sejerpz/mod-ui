@@ -5230,6 +5230,9 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
     LilvNode* const modpedal_performanceVisible = lilv_new_uri(w, LILV_NS_MODPEDAL "performanceVisible");
     LilvNode* const modpedal_performanceIndex = lilv_new_uri(w, LILV_NS_MODPEDAL "performanceIndex");
     LilvNode* const modpedal_instanceLabel = lilv_new_uri(w, LILV_NS_MODPEDAL "instanceLabel");
+    LilvNode* const modpedal_snapshotable = lilv_new_uri(w, LILV_NS_MODPEDAL "snapshotable");
+    LilvNode* const modpedal_enabledSnapshotable = lilv_new_uri(w, LILV_NS_MODPEDAL "enabledSnapshotable");
+    LilvNode* const modpedal_presetSnapshotable = lilv_new_uri(w, LILV_NS_MODPEDAL "presetSnapshotable");
     // legacy terms written by alabs builds before pedal:formatVersion 2, read only as fallback
     LilvNode* const modperf_visible = lilv_new_uri(w, LILV_NS_MODPERFORMANCE "visible");
     LilvNode* const modperf_index = lilv_new_uri(w, LILV_NS_MODPERFORMANCE "index");
@@ -5349,7 +5352,7 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
                         lilv_node_free(node);
                     }
 
-                    if (LilvNode* const node = lilv_world_get(w, block, mod_enabled_snapshotable, nullptr))
+                    if (LilvNode* const node = lilv_world_get_with_fallback(w, block, modpedal_enabledSnapshotable, mod_enabled_snapshotable))
                     {
                         bypassSnapshotable = lilv_node_as_bool(node);
                         lilv_node_free(node);
@@ -5357,7 +5360,7 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
                     else
                         bypassSnapshotable = true; // default true
 
-                    if (LilvNode* const node = lilv_world_get(w, block, mod_preset_snapshotable, nullptr))
+                    if (LilvNode* const node = lilv_world_get_with_fallback(w, block, modpedal_presetSnapshotable, mod_preset_snapshotable))
                     {
                         presetSnapshotable = lilv_node_as_bool(node);
                         lilv_node_free(node);
@@ -5441,7 +5444,7 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
 
                               char* portsymbol = lilv_file_uri_parse2(lilv_node_as_string(portnode), nullptr);
 
-                              if (LilvNode* const snapshotablevalue = lilv_world_get(w, portnode, mod_snapshotable, nullptr))
+                              if (LilvNode* const snapshotablevalue = lilv_world_get_with_fallback(w, portnode, modpedal_snapshotable, mod_snapshotable))
                               {
                                 snapshotable = lilv_node_as_bool(snapshotablevalue);
                                 lilv_node_free(snapshotablevalue);
@@ -5500,7 +5503,7 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
                             }
                             memmove(parameteruri, parameteruri+(full_instance_size+1), strlen(parameteruri)-full_instance_size);
 
-                            if (LilvNode* const snapshotablevalue = lilv_world_get(w, parameternode, mod_snapshotable, nullptr))
+                            if (LilvNode* const snapshotablevalue = lilv_world_get_with_fallback(w, parameternode, modpedal_snapshotable, mod_snapshotable))
                             {
                                 snapshotable = lilv_node_as_bool(snapshotablevalue);
                                 lilv_node_free(snapshotablevalue);
@@ -6001,6 +6004,9 @@ const PedalboardInfo* get_pedalboard_info(const char* const bundle)
     lilv_node_free(mod_snapshotable);
     lilv_node_free(mod_enabled_snapshotable);
     lilv_node_free(mod_preset_snapshotable);
+    lilv_node_free(modpedal_snapshotable);
+    lilv_node_free(modpedal_enabledSnapshotable);
+    lilv_node_free(modpedal_presetSnapshotable);
     lilv_node_free(rdftypenode);
     lilv_world_free(w);
 
