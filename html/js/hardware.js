@@ -634,7 +634,8 @@ function HardwareManager(options) {
         model.addressing = addressing?.addressingData ?? {}
         model.plugin = addressing?.plugin ?? null
         model.instance = addressing?.pluginId ?? ""
-        model.plugin_label = addressing?.plugin?.effect?.name ?? ""
+        // the name the user gave the plugin, which a bypass or presets binding goes by
+        model.plugin_label = addressing?.plugin ? self.bindingPluginLabel(addressing) : ""
         self.updateView(model)
       }
 

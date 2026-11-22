@@ -7325,15 +7325,18 @@ _:b%i
         # out of the way first; see the docstring
         callback(True, '1 %d' % freed)
 
-        # the web UI names a bypass or a presets addressing after the plugin, so the
-        # panel does too
+        # the web UI names a bypass or a presets addressing after the plugin, by the name
+        # the user gave it when there is one, so the panel does too
         label = param['name']
         if param['symbol'] in (":bypass", ":presets"):
             plugin = self.plugins[node_id]
-            try:
-                label = get_plugin_info(plugin['uri'])['label'] or plugin['name']
-            except Exception:
-                label = plugin['name'] or label
+            if plugin['label']:
+                label = plugin['label']
+            else:
+                try:
+                    label = get_plugin_info(plugin['uri'])['label'] or plugin['name']
+                except Exception:
+                    label = plugin['name'] or label
 
         def bound(ok):
             logging.debug("hmi builder bind %s/%s -> %s page %d subpage %s: %s",

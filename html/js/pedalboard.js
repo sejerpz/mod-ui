@@ -2060,7 +2060,8 @@ JqueryClass('pedalboard', {
                         return
                     }
                     var hardware = self.data('hardwareManager')
-                    hardware.open(instance, port, pluginData.label)
+                    // the name the user gave the plugin, which a bypass or presets binding goes by
+                    hardware.open(instance, port, self.pedalboard('getLabel', instance))
                 }
             }
 
