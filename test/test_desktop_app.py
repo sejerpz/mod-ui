@@ -127,7 +127,7 @@ class TestIndexTemplateKeepsTheSeamOffDevices(unittest.TestCase):
         for needle in self.SEAM:
             self.assertNotIn(needle, page)
         self.assertIn('js/templates.js?v=1"', page)
-        self.assertIn("enable_dev_mode(true)", page)
+        self.assertIn("apply_ui_tools()", page)
 
     def test_desktop_page_carries_all_of_it(self):
         page = self._render(desktop=True)
@@ -135,7 +135,7 @@ class TestIndexTemplateKeepsTheSeamOffDevices(unittest.TestCase):
             self.assertIn(needle, page)
         self.assertIn('DesktopApp.setup(desktop)', page)
         self.assertIn('js/templates.js?v=1&desktop_app_templates=1"', page)
-        self.assertNotIn("enable_dev_mode(true)", page)
+        self.assertNotIn("apply_ui_tools()", page)
 
 
 if __name__ == '__main__':

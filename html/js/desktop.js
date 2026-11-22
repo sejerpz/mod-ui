@@ -820,8 +820,30 @@ function Desktop(elements) {
 
     this.effectBox = self.makeEffectBox(elements.effectBox,
                                         elements.effectBoxTrigger)
+
+    // the global vu meter overlay ends where the plugin library begins, folded or not
+    if (window.ResizeObserver) {
+        var vumeterOverlay = $('.mod-vumeter-overlay')
+        new ResizeObserver(function () {
+            var library = elements.effectBox[0].getBoundingClientRect()
+            if (library.height > 0) {
+                var bottom = vumeterOverlay.parent()[0].getBoundingClientRect().bottom - library.top
+                vumeterOverlay.css('bottom', bottom)
+            } else {
+                vumeterOverlay.css('bottom', '')
+            }
+        }).observe(elements.effectBox[0])
+    }
     this.performanceBox = self.makePerformanceBox(elements.performanceBox,
-                                                elements.performanceBoxTrigger)                                        
+                                                elements.performanceBoxTrigger)
+
+    // Remember the view in use for the next load. Closing the performance view, by hand or
+    // by opening another window over it, always lands back on the constructor.
+    elements.performanceBox.on('windowopen windowclose', function (e) {
+        if (e.target === this) {
+            self.saveLastView(e.type === 'windowopen' ? 'performance' : 'constructor')
+        }
+    })
     this.cloudPluginBox = self.makeCloudPluginBox(elements.cloudPluginBox,
                                                   elements.cloudPluginBoxTrigger)
 
@@ -1678,8 +1700,10 @@ function Desktop(elements) {
     this.onPedalboardFirstLoadComplete = function (callback) {
         self.effectBox.effectBox('search', function () {
             setTimeout(function () {
-                    // if is a touch device, open performance view by default
-                    if (self.isTouchDevice) {
+                    // back to the view this browser was last on; the first time, the
+                    // performance view only on a phone, where the constructor is cramped
+                    var view = self.loadLastView()
+                    if (view === 'performance' || (view === null && self.isMobile)) {
                         elements.performanceBoxTrigger.click()
                     }
             }, 500)
@@ -2128,10 +2152,14 @@ Desktop.prototype.makePedalboard = function (el, effectBox) {
             pluginGui.updateCompareSnapshotStatus(self.compareCurrentStatus)
         },
         pluginSettingsWindowClose: function (pluginGui) {
-            pluginGui.cleanupMonitorVUMeter()
             // this is used to avoid creating new vumeters (debounce)
-            // since we can have a delay between closing the settings window and the pedalboard sending the next vu meter update
+            // since we can have a delay between closing the settings window and the pedalboard sending the next vu meter update.
+            // Counted again once the last port is disabled: they go one at a time, and on a plugin
+            // with several outputs the last one can still send levels well after the close
             self.pedalboard.data("currentSettingsWindowClosedTime", Date.now())
+            pluginGui.cleanupMonitorVUMeter(function () {
+                self.pedalboard.data("currentSettingsWindowClosedTime", Date.now())
+            })
             self.currentSettingsWindow = undefined
         },
         // returns true if help mode is active, false otherwise
@@ -2243,6 +2271,23 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
             transfer.start()
         },
     })
+}
+
+// The view this browser was last on, 'performance' or 'constructor', or null when it has
+// none saved. Storage can be missing or throw (private window, blocked site data).
+Desktop.prototype.loadLastView = function () {
+    try {
+        var view = window.localStorage.getItem('mod-ui-last-view')
+        return (view === 'performance' || view === 'constructor') ? view : null
+    } catch (e) {
+        return null
+    }
+}
+
+Desktop.prototype.saveLastView = function (view) {
+    try {
+        window.localStorage.setItem('mod-ui-last-view', view)
+    } catch (e) {}
 }
 
 Desktop.prototype.makePerformanceBox = function (el, trigger) {
@@ -3269,80 +3314,98 @@ JqueryClass('statusTooltip', {
     }
 })
 
-function enable_dev_mode(skipSaveConfig) {
-    // install/update all plugins
-    $('#cloud_install_all').show()
-    $('#cloud_update_all').show()
+// Tools for developers and beta testers, each switched on its own in Settings > User Interface.
+// A tool never set on its own follows the old "dev-mode" switch, so units that had Developer Mode on keep everything.
+// Install All and Update All were one switch ("ui-store-all") before they got one each; that value is their default.
+var UI_TOOLS = ['ui-xruns', 'ui-buffersize', 'ui-cpu-stats', 'ui-ping-times', 'ui-store-install-all', 'ui-store-update-all', 'ui-share']
+var UI_TOOL_FALLBACK = {
+    'ui-store-install-all': 'ui-store-all',
+    'ui-store-update-all': 'ui-store-all',
+}
+
+function ui_tool_value(key) {
+    var value = PREFERENCES[key]
+    if (value !== "on" && value !== "off" && UI_TOOL_FALLBACK[key]) {
+        value = PREFERENCES[UI_TOOL_FALLBACK[key]]
+    }
+    if (value !== "on" && value !== "off") {
+        value = PREFERENCES['dev-mode']
+    }
+    return value
+}
+
+function ui_tool_enabled(key) {
+    return ui_tool_value(key) == "on"
+}
+
+function apply_ui_tools() {
+    var toggle = function (selector, enabled) {
+        if (enabled) {
+            $(selector).show()
+        } else {
+            $(selector).hide()
+        }
+    }
+
+    // install all / update all plugins, one switch each
+    toggle('#cloud_install_all', ui_tool_enabled('ui-store-install-all'))
+    toggle('#cloud_update_all', ui_tool_enabled('ui-store-update-all'))
 
     // network and controller ping times
-    $('#mod-status').show().statusTooltip('updatePosition')
+    toggle('#mod-status', ui_tool_enabled('ui-ping-times'))
 
-    // adjust position
+    // xrun counter
+    toggle('#mod-xruns', ui_tool_enabled('ui-xruns'))
+
+    // buffer size button
+    toggle('#mod-buffersize', ui_tool_enabled('ui-buffersize'))
+
+    // CPU speed and temperature, not available on the Duo
+    toggle('#mod-cpu-stats', ui_tool_enabled('ui-cpu-stats') && PLATFORM != "duo")
+
+    // preset and pedalboard Export / Import buttons (MOD Desktop always shows them)
+    if (ui_tool_enabled('ui-share') || USING_MOD_DESKTOP) {
+        $('body').addClass('preset-share pedalboard-share')
+    } else {
+        $('body').removeClass('preset-share pedalboard-share')
+    }
+
+    // the status bar items moved: adjust the tooltips and the transport window
+    if (ui_tool_enabled('ui-ping-times')) {
+        $('#mod-status').statusTooltip('updatePosition')
+    }
     $('#mod-devices').statusTooltip('updatePosition')
     $('#mod-settings').statusTooltip('updatePosition')
 
-    // xrun counter
-    $('#mod-xruns').show()
-
-    // buffer size button
-    $('#mod-buffersize').show()
-
-    // preset and pedalboard Export / Import buttons
-    $('body').addClass('preset-share pedalboard-share')
-
-    // CPU speed and temperature, not available on the Duo
-    if (PLATFORM != "duo") {
-        $('#mod-cpu-stats').show()
-    }
-
-    // transport parameters
-    $('#mod-transport-window').css({
-        right: '592px'
+    // the transport window opens above its icon; the items on its right push the icon to the left
+    var transportRight = 310
+    $('#mod-status, #mod-cpu-stats, #mod-xruns, #mod-buffersize').each(function () {
+        if ($(this).is(':visible')) {
+            transportRight += $(this).outerWidth(true)
+        }
     })
+    $('#mod-transport-window').css({
+        right: transportRight + 'px'
+    })
+}
 
-    if (!skipSaveConfig) {
-        // save settings
-        desktop.saveConfigValue("dev-mode", "on")
+// Console helpers, kept from the old Developer Mode: switch every tool on or off at once.
+function set_all_ui_tools(value) {
+    for (var i in UI_TOOLS) {
+        PREFERENCES[UI_TOOLS[i]] = value
+        desktop.saveConfigValue(UI_TOOLS[i], value)
     }
+    PREFERENCES['dev-mode'] = value
+    desktop.saveConfigValue("dev-mode", value)
+    apply_ui_tools()
+}
 
-    // echo to you
+function enable_dev_mode() {
+    set_all_ui_tools("on")
     return "Dev mode enabled!"
 }
 
 function disable_dev_mode() {
-    // install/update all plugins
-    $('#cloud_install_all').hide()
-    $('#cloud_update_all').hide()
-
-    // network and controller ping times
-    $('#mod-status').hide()
-
-    // adjust position
-    $('#mod-devices').statusTooltip('updatePosition')
-    $('#mod-settings').statusTooltip('updatePosition')
-
-    // xrun counter
-    $('#mod-xruns').hide()
-
-    // buffer size button
-    $('#mod-buffersize').hide()
-
-    // preset and pedalboard Export / Import buttons (MOD Desktop always shows them)
-    if (! USING_MOD_DESKTOP) {
-        $('body').removeClass('preset-share pedalboard-share')
-    }
-
-    // CPU speed and temperature
-    $('#mod-cpu-stats').hide()
-
-    // transport parameters
-    $('#mod-transport-window').css({
-        right: '310px'
-    })
-
-    // save settings
-    desktop.saveConfigValue("dev-mode", "off")
-
-    // echo to you
+    set_all_ui_tools("off")
     return "Dev mode disabled!"
 }

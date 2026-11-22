@@ -39,7 +39,7 @@ except ImportError:
 
 from mod import filemetadata, hostinfo
 from mod.profile import Profile
-from mod.settings import (DESKTOP, LOG, DEV_API,
+from mod.settings import (DESKTOP, DESKTOP_UPDATE_CHECK, DESKTOP_PLATFORM, LOG, DEV_API,
                           HTML_DIR, DOWNLOAD_TMP_DIR, DEVICE_KEY, DEVICE_WEBSERVER_PORT,
                           CLOUD_HTTP_ADDRESS, PLUGINS_HTTP_ADDRESS, PEDALBOARDS_HTTP_ADDRESS, CONTROLCHAIN_HTTP_ADDRESS,
                           USER_BANKS_JSON_FILE,
@@ -2572,6 +2572,8 @@ class TemplateHandler(TimelessRequestHandler):
             # 'true'/'false', because it is substituted into JS; both strings
             # are truthy, so it cannot be branched on in the template.
             'desktop_app': DESKTOP,
+            'desktop_update_check': 'true' if DESKTOP_UPDATE_CHECK else 'false',
+            'desktop_platform': DESKTOP_PLATFORM,
             'using_mod': 'true' if DEVICE_KEY and hwdesc.get('platform', None) is not None else 'false',
             'user_name': mod_squeeze(user_id.get("name", "")),
             'user_email': mod_squeeze(user_id.get("email", "")),
@@ -2631,6 +2633,7 @@ class TemplateHandler(TimelessRequestHandler):
             'version': self.get_argument('v'),
             'image_version': self.get_image_version(),
             'hmi_eeprom': 'true' if hwdesc.get('hmi_eeprom', False) else 'false',
+            'platform': hwdesc.get('platform', "Unknown"),
             'preferences': json.dumps(prefs),
             'feedback_url': FEEDBACK_URL,
             'bufferSize': get_jack_buffer_size(),
@@ -2797,7 +2800,7 @@ class ResetXruns(JsonRequestHandler):
 
 class CpuMonitor(JsonRequestHandler):
     """Turn per-plugin CPU reporting on or off. Values arrive on the websocket as
-    "cpu_load <instance> <percent>", pushed by mod-host, so there is nothing to poll.
+    "plugin_cpu_load <instance> <percent>", pushed by mod-host, so there is nothing to poll.
     Enabling again resets each plugin's recorded peak."""
     @web.asynchronous
     @gen.engine

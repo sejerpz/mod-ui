@@ -22,8 +22,6 @@ from random import randint
 from tornado import gen, iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
 from urllib.parse import quote, unquote
-from pprint import pprint
-
 import os, json, socket, time, logging, sys
 import shutil, tempfile
 import copy
@@ -472,6 +470,7 @@ class Host(object):
         self.pedalboard_path     = ""
         self.pedalboard_size     = [0,0]
         self.pedalboard_version  = 0
+        self.reload_bundle_path  = None
         self.pedalboard_format_version = 1
         self.current_pedalboard_snapshot_id = -1
         self.pedalboard_snapshots = []
@@ -493,6 +492,8 @@ class Host(object):
         self.hmi_widgets_update_again = False
         self.compare_snapshots = dict()
         self.compare_status = "empty"
+        # while the CPU panel is open, so plugins added meanwhile get monitored too
+        self.cpu_monitor_enabled = False
         self.next_hmi_pedalboard_to_load = None
         self.next_hmi_pedalboard_loading = False
         self.next_hmi_bpb = [0, False, False]
@@ -597,6 +598,7 @@ class Host(object):
         self.addressings._task_act_added = self.addr_task_act_added
         self.addressings._task_act_removed = self.addr_task_act_removed
         self.addressings._task_set_available_pages = self.addr_task_set_available_pages
+        self.addressings._page_has_widgets = self.hmi_widgets_on_page
         self.addressings._task_host_hmi_map = self.addr_host_hmi_map
         self.addressings._task_host_hmi_unmap = self.addr_host_hmi_unmap
 
@@ -896,8 +898,7 @@ class Host(object):
                         # if not found, create a new one with the current status
                         index = len(self.audioportsMonitored)
                         port_status = {"index": index, "port": port, "jack_port": jack_port, "enabled": enable}
-
-                    self.audioportsMonitored.append(port_status)
+                        self.audioportsMonitored.append(port_status)
                 else:
                     if audioMonitorExists:
                         self.audioportsMonitored.remove(port_status)
@@ -911,6 +912,13 @@ class Host(object):
         # send the command to mod host
         self.send_notmodified("monitor_audio_levels \"%s\" %s" % (jack_port, "1" if enable else "0"), monitor_audio_port_callback, datatype='boolean')
         return True
+
+    def monitor_audio_ports_clear(self, instance=None):
+        """Stop the audio level monitors of the ports of a plugin instance, or all of them when instance is None"""
+
+        for port_status in list(self.audioportsMonitored):
+            if instance is None or port_status['port'].startswith(instance + "/"):
+                self.monitor_audio_port(port_status['port'], False, port_status)
 
     # -----------------------------------------------------------------------------------------------------------------
     # Addressing callbacks
@@ -2108,7 +2116,8 @@ class Host(object):
             load        = float(msg_data[1]) * 100.0
 
             if instance_id in self.plugins:
-                self.msg_callback("cpu_load %s %f" % (self.mapper.get_instance(instance_id), load))
+                # not "cpu_load": in mod-host that name is the global load of the whole graph
+                self.msg_callback("plugin_cpu_load %s %f" % (self.mapper.get_instance(instance_id), load))
 
         else:
             logging.error("[host] unrecognized command: %s", cmd)
@@ -2579,6 +2588,7 @@ class Host(object):
 
         self.bank_id = bank_id if bank_id is not None else self.first_user_bank
         self.connections = []
+        self.monitor_audio_ports_clear()
         self.addressings.clear()
         self.mapper.clear()
         self.init_plugins_data()
@@ -2892,6 +2902,8 @@ class Host(object):
             for output in extinfo['monitoredOutputs']:
                 self.send_notmodified("monitor_output %d %s" % (instance_id, output))
 
+            self.monitor_cpu_load_new_plugin(instance_id)
+
             for snapshot in self.pedalboard_snapshots:
                 if snapshot is None:
                     continue
@@ -2982,10 +2994,7 @@ class Host(object):
                     logging.exception(e)
 
         # Send new available pages to hmi if needed
-        send_hmi_available_pages = False
-        if self.addressings.addressing_pages:
-            for page in range(self.addressings.addressing_pages):
-                send_hmi_available_pages |= self.check_available_pages(page)
+        send_hmi_available_pages = self.check_all_available_pages()
 
         # Held back for the caller to send once the panel is listening again. Not dropped:
         # the encoders would go on showing controls of a plugin that is no longer there.
@@ -3012,6 +3021,8 @@ class Host(object):
                     yield gen.Task(self.addressings.hmi_load_current, actuator_uri)
                 except Exception as e:
                     logging.exception(e)
+
+        self.monitor_audio_ports_clear(instance)
 
         ok = yield gen.Task(self.send_modified, "remove %d" % instance_id, datatype='boolean')
 
@@ -3270,10 +3281,12 @@ class Host(object):
         bank_id  = self.bank_id
         last_bank_id, last_path = get_last_bank_and_pedalboard()
 
-        bundlepath = os.path.join(tempfile.gettempdir(), 'reloaded.pedalboard')
-        if os.path.exists(bundlepath):
-            shutil.rmtree(bundlepath)
-        os.mkdir(bundlepath)
+        # A new bundle for every reload. After a reload the file loaders have their files open through the
+        # links in the previous bundle: deleting it before "state_save" would make them save a bare name and
+        # come back empty on the second reload. The previous bundle goes once the new one is loaded.
+        oldbundlepath = self.reload_bundle_path
+        bundlepath = tempfile.mkdtemp(prefix='reloaded-', suffix='.pedalboard')
+        self.reload_bundle_path = bundlepath
 
         self.save_state_to_ttl(bundlepath, name or 'Untitled', 'reloaded')
 
@@ -3293,8 +3306,11 @@ class Host(object):
                 if last_path is not None:
                     save_last_bank_and_pedalboard(last_bank_id, last_path)
 
-            # The bundle stays until the next reload: load() only queues "state_load" to mod-host,
+            # The new bundle stays until the next reload: load() only queues "state_load" to mod-host,
             # which reads the bundle after this returns.
+            if oldbundlepath is not None and os.path.isdir(oldbundlepath):
+                shutil.rmtree(oldbundlepath, ignore_errors=True)
+
             callback(ok)
 
         # Plugin state (the file a NAM, IR or sampler loader has open) lives outside the ttl,
@@ -4451,8 +4467,9 @@ class Host(object):
                                 gen=self.pedalboard_teleports_gen)).encode("utf-8")).decode("utf-8"))
             self.send_notmodified("state_load \"{}\"".format(bundlepath))
             self.presets_metadata.load(bundlepath, instances, abort_catcher)
-            self.addressings.load(bundlepath, instances, skippedPortAddressings, abort_catcher)
+            # the widgets first: a page with only widgets on it must be among the pages addressings sends
             self.load_pb_hmi_widgets(bundlepath)
+            self.addressings.load(bundlepath, instances, skippedPortAddressings, abort_catcher)
             self.msg_callback(self.hmi_widgets_message())
             self.hmi_widgets_sync()
         else:
@@ -4916,6 +4933,9 @@ class Host(object):
 
         self.hmi_widgets = self.hmi_widgets_validate(data.get('widgets'))
 
+    def hmi_widgets_on_page(self, page):
+        return any(widget['page'] == page for widget in self.hmi_widgets)
+
     def set_hmi_widgets(self, layout):
         layout = self.hmi_widgets_validate(layout)
         if layout == self.hmi_widgets:
@@ -4934,6 +4954,11 @@ class Host(object):
             if self.hmi_widgets_shown:
                 self.hmi_widgets_shown = {}
                 yield gen.Task(self.send_notmodified, "hmi_widget_hide -1")
+
+            # a page with widgets and no bindings can be reached only if the panel knows it is there.
+            # Not worked out when the panel is not told: the caller syncs again once it listens.
+            if send_hmi and self.check_all_available_pages() and self.hmi.initialized:
+                yield gen.Task(self.hmi.set_available_pages, self.addressings.get_available_pages())
 
             if send_hmi and self.hmi.initialized and self.hmi_widget_areas():
                 yield gen.Task(self.hmi.send, "%s -1" % CMD_WIDGET_AREA_REMOVE)
@@ -5235,6 +5260,8 @@ class Host(object):
             for output in extinfo['monitoredOutputs']:
                 self.send_notmodified("monitor_output %d %s" % (instance_id, output))
 
+            self.monitor_cpu_load_new_plugin(instance_id)
+
     def load_pb_connections(self, connections, mappedOldMidiIns, mappedOldMidiOuts,
                                                mappedNewMidiIns, mappedNewMidiOuts):
         for c in connections:
@@ -5473,6 +5500,8 @@ _:b%i
             presetSnapshotable = pluginData['portsprops'][':presets'].get('snapshotable', False)
             info = get_plugin_info(pluginData['uri'])
             instance = pluginData['instance'].replace("/graph/","",1)
+            writables = tuple("%s#%s" % (instance, parameter['uri'].partition("#")[2])
+                              for parameter in info['parameters'] if parameter['uri'].partition("#")[2])
             blocks += """
 <%s>
     ingen:canvasX %.1f ;
@@ -5486,8 +5515,7 @@ _:b%i
     mod:releaseNumber %i ;
     pedal:instanceLabel "%s" ;
     lv2:port <%s> ;
-    patch:writable <%s> ;
-    lv2:prototype <%s> ;
+%s    lv2:prototype <%s> ;
     pedal:performanceVisible %s ;
     pedal:performanceIndex %i ;
     pedal:instanceNumber %i ;
@@ -5505,7 +5533,8 @@ _:b%i
                                                                                           info['ports']['midi']['input']+
                                                                                           info['ports']['midi']['output']+
                                                                                           [{'symbol': ":bypass"}]))),
-       "> ,\n             <".join(tuple("%s#%s" % (instance, parameter['uri'].partition("#")[2]) for parameter in info['parameters'] if parameter['uri'].partition("#")[2])),
+       # no patch:writable without parameters: an empty "<>" would be the pedalboard file itself
+       "    patch:writable <%s> ;\n" % "> ,\n             <".join(writables) if writables else "",
        pluginData['uri'],
        "true" if pluginData['performance']['visible'] else "false",
        pluginData['performance']['index'],
@@ -6149,8 +6178,10 @@ _:b%i
         """Subscribe to (or stop) per-plugin CPU reporting for every loaded plugin.
 
         mod-host pushes "cpu_monitor <id> <load>" on the feedback socket whenever a
-        plugin beats its own previous worst cycle, so nothing is polled. Enabling also
-        resets those peaks, which is how the UI offers a "reset" button."""
+        plugin beats its own worst cycle of the current feedback round (the record is
+        reset on every output_data_ready), so nothing is polled. The UI keeps the peak
+        across rounds; enabling again also resets mod-host's records."""
+        self.cpu_monitor_enabled = enable
         instances = list(self.plugins.keys())
 
         if not instances:
@@ -6161,6 +6192,12 @@ _:b%i
                                                              len(instances),
                                                              " ".join(str(i) for i in instances)),
                               callback, datatype='boolean')
+
+    def monitor_cpu_load_new_plugin(self, instance_id):
+        # The instance list is sent when the panel opens, so a plugin added after that, by
+        # hand or by loading a pedalboard, joins on its own. Only its own record is reset.
+        if self.cpu_monitor_enabled:
+            self.send_notmodified("monitor_cpu_load 1 1 %d" % instance_id)
 
     def get_free_memory_value(self):
         if not self.memfile:
@@ -6451,21 +6488,18 @@ _:b%i
     def check_available_pages(self, page):
         send_hmi_available_pages = False
         available_pages = self.addressings.available_pages.copy()
-
-        if page == 0:
-            available_pages[0] = True
-        else:
-            available_pages[page] = False
-            for uri, addrs in self.addressings.hmi_addressings.items():
-                for addr in addrs['addrs']:
-                    if addr['page'] == page:
-                        available_pages[page] = True
-                        break
+        available_pages[page] = self.addressings.page_in_use(page)
 
         if self.addressings.available_pages != available_pages:
             send_hmi_available_pages = True
             self.addressings.available_pages = available_pages
 
+        return send_hmi_available_pages
+
+    def check_all_available_pages(self):
+        send_hmi_available_pages = False
+        for page in range(self.addressings.addressing_pages):
+            send_hmi_available_pages |= self.check_available_pages(page)
         return send_hmi_available_pages
 
     def host_and_web_parameter_set(self, pluginData, instance, instance_id, port_value, portsymbol, callback):
@@ -7291,15 +7325,18 @@ _:b%i
         # out of the way first; see the docstring
         callback(True, '1 %d' % freed)
 
-        # the web UI names a bypass or a presets addressing after the plugin, so the
-        # panel does too
+        # the web UI names a bypass or a presets addressing after the plugin, by the name
+        # the user gave it when there is one, so the panel does too
         label = param['name']
         if param['symbol'] in (":bypass", ":presets"):
             plugin = self.plugins[node_id]
-            try:
-                label = get_plugin_info(plugin['uri'])['label'] or plugin['name']
-            except Exception:
-                label = plugin['name'] or label
+            if plugin['label']:
+                label = plugin['label']
+            else:
+                try:
+                    label = get_plugin_info(plugin['uri'])['label'] or plugin['name']
+                except Exception:
+                    label = plugin['name'] or label
 
         def bound(ok):
             logging.debug("hmi builder bind %s/%s -> %s page %d subpage %s: %s",

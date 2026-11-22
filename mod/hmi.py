@@ -488,7 +488,8 @@ class HMI(object):
             self.control_set_index(hw_id, index, n_controllers, callback)
 
         # FIXME this should be based on hw desc "max_assigns" instead of hardcoded
-        if not actuator_uri.startswith("/hmi/footswitch") and hmi_set_index:
+        # the builder's parameter page is no addressing: it has no index to set
+        if not actuator_uri.startswith("/hmi/footswitch") and hmi_set_index and 'addrs_max' in data:
             cb = control_add_callback
         else:
             cb = callback
