@@ -826,7 +826,15 @@ function Desktop(elements) {
         }).observe(elements.effectBox[0])
     }
     this.performanceBox = self.makePerformanceBox(elements.performanceBox,
-                                                elements.performanceBoxTrigger)                                        
+                                                elements.performanceBoxTrigger)
+
+    // Remember the view in use for the next load. Closing the performance view, by hand or
+    // by opening another window over it, always lands back on the constructor.
+    elements.performanceBox.on('windowopen windowclose', function (e) {
+        if (e.target === this) {
+            self.saveLastView(e.type === 'windowopen' ? 'performance' : 'constructor')
+        }
+    })
     this.cloudPluginBox = self.makeCloudPluginBox(elements.cloudPluginBox,
                                                   elements.cloudPluginBoxTrigger)
 
@@ -1653,8 +1661,10 @@ function Desktop(elements) {
     this.onPedalboardFirstLoadComplete = function (callback) {
         self.effectBox.effectBox('search', function () {
             setTimeout(function () {
-                    // if is a touch device, open performance view by default
-                    if (self.isTouchDevice) {
+                    // back to the view this browser was last on; the first time, the
+                    // performance view only on a phone, where the constructor is cramped
+                    var view = self.loadLastView()
+                    if (view === 'performance' || (view === null && self.isMobile)) {
                         elements.performanceBoxTrigger.click()
                     }
             }, 500)
@@ -2177,6 +2187,23 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
             transfer.start()
         },
     })
+}
+
+// The view this browser was last on, 'performance' or 'constructor', or null when it has
+// none saved. Storage can be missing or throw (private window, blocked site data).
+Desktop.prototype.loadLastView = function () {
+    try {
+        var view = window.localStorage.getItem('mod-ui-last-view')
+        return (view === 'performance' || view === 'constructor') ? view : null
+    } catch (e) {
+        return null
+    }
+}
+
+Desktop.prototype.saveLastView = function (view) {
+    try {
+        window.localStorage.setItem('mod-ui-last-view', view)
+    } catch (e) {}
 }
 
 Desktop.prototype.makePerformanceBox = function (el, trigger) {
