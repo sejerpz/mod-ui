@@ -1914,6 +1914,9 @@ class Host(object):
                 else:
                     pluginData['ports'][portsymbol] = value
 
+                    if instance_id != PEDALBOARD_INSTANCE_ID and portsymbol in pluginData['addressings']:
+                        self.paramhmi_set(instance, portsymbol, value, None)
+
                     if instance_id == PEDALBOARD_INSTANCE_ID:
                         self.process_read_message_pedal_changed(portsymbol, value)
 
