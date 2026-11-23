@@ -1914,6 +1914,13 @@ class Host(object):
                 else:
                     pluginData['ports'][portsymbol] = value
 
+                    # only HMI addressings: param_set does not say where the change came from, and a
+                    # Control Chain actuator would get its own value echoed back (re-addressed for options)
+                    addressing = pluginData['addressings'].get(portsymbol, None)
+                    if instance_id != PEDALBOARD_INSTANCE_ID and addressing is not None and \
+                       self.addressings.get_actuator_type(addressing['actuator_uri']) == Addressings.ADDRESSING_TYPE_HMI:
+                        self.paramhmi_set(instance, portsymbol, value, None)
+
                     if instance_id == PEDALBOARD_INSTANCE_ID:
                         self.process_read_message_pedal_changed(portsymbol, value)
 
