@@ -327,9 +327,10 @@ class Session(object):
     # This indicates web browser side is ready to receive more events
     def ws_data_ready(self, counter):
         if self.host.web_data_ready_counter == counter:
-            self.outbox.flush()
             self.host.web_data_ready_ok = True
             self.host.send_output_data_ready(None, None)
+            # last, so a socket that fails cannot skip the two lines above; nothing is sent in between
+            self.outbox.flush()
 
     # Set a plugin parameter
     # We use ":bypass" symbol for on/off state

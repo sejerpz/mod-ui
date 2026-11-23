@@ -1858,7 +1858,11 @@ class Host(object):
                 self.web_data_ready_ok = False
                 self.web_data_ready_counter += 1
                 self.web_data_ready_time = ioloop.time()
-                self.msg_callback("data_ready %i" % self.web_data_ready_counter)
+                try:
+                    self.msg_callback("data_ready %i" % self.web_data_ready_counter)
+                except Exception as e:
+                    # a socket that fails must not leave mod-host disarmed
+                    logging.exception(e)
 
             now  = ioloop.time()
             diff = now-self.last_data_finish_msg
