@@ -1851,12 +1851,14 @@ class Host(object):
         ioloop = IOLoop.instance()
 
         if msg == "data_finish":
-            if self.web_connected:
+            # mod-host is re-armed on the pacing below whether or not the browser has answered:
+            # a hidden or suspended tab answers late or never, and the HMI gets plugin port
+            # changes only through these batches. An answer re-arms it at once too (Session.ws_data_ready).
+            if self.web_connected and self.web_data_ready_ok:
                 self.web_data_ready_ok = False
                 self.web_data_ready_counter += 1
                 self.web_data_ready_time = ioloop.time()
                 self.msg_callback("data_ready %i" % self.web_data_ready_counter)
-                return
 
             now  = ioloop.time()
             diff = now-self.last_data_finish_msg
@@ -6175,10 +6177,12 @@ _:b%i
         data = get_jack_data(False)
         self.msg_callback("stats %0.1f %i" % (data['cpuLoad'], data['xruns']))
 
-        # mod-host sends nothing more until a "data_ready" is answered, and an answer can get lost.
-        # Ask again when it takes too long.
+        # An answer to "data_ready" can get lost, and the browser's view lags until one arrives.
+        # Ask again when it takes too long, at most every 2 s: each ask restarts the page's reply timer.
         if self.web_connected and not self.web_data_ready_ok:
-            if IOLoop.instance().time() - self.web_data_ready_time >= 2.0:
+            now = IOLoop.instance().time()
+            if now - self.web_data_ready_time >= 2.0:
+                self.web_data_ready_time = now
                 self.msg_callback("data_ready %i" % self.web_data_ready_counter)
 
     def monitor_cpu_load(self, enable, callback):
