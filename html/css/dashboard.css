@@ -1899,3 +1899,24 @@ header#pedalboard-actions button.js-device:hover {
     background: #F29446;
     cursor: default;
 }
+
+
+/* Safari/WebKit-only GPU Layer Promotion & Repaint Isolation */
+html.mod-safari #pedalboard-dashboard .mod-pedal {
+    transform: translateZ(0);
+}
+
+html.mod-safari #pedalboard-dashboard .mod-pedal [style*="animation"],
+html.mod-safari #pedalboard-dashboard .mod-pedal *[class*="spin"],
+html.mod-safari #pedalboard-dashboard .mod-pedal *[class*="glow"],
+html.mod-safari #pedalboard-dashboard .mod-pedal *[class*="pulse"],
+html.mod-safari #pedalboard-dashboard .mod-pedal img,
+html.mod-safari #pedalboard-dashboard .mod-pedal svg {
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+}
+
+html.mod-safari #pedalboard-dashboard .mod-pedal * {
+    filter: none !important;
+}

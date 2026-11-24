@@ -431,14 +431,35 @@ JqueryClass('pedalboard', {
             }
         }});
 
-        // Hovering a port traces every cable touching it. Delegated rather than bound per
-        // jack: jacks come and go with every connection, and a port is what knows all of
-        // its cables. Hardware ports carry mod-port too, so they trace as well.
+        // Hovering a port traces every cable touching it. In Safari, delay tracing until
+        // the pointer rests on the port so mouse fly-bys don't trigger full-board SVG dimming.
+        var isSafariBrowser = /^((?!chrome|android|crios|fxios|edgios|opr).)*safari/i.test(navigator.userAgent)
+        var traceDelayMs = isSafariBrowser ? 200 : 0
+        var traceTimer = null
+
+        function scheduleTrace(targetPort) {
+            clearTimeout(traceTimer)
+            if (traceDelayMs === 0) {
+                self.pedalboard('traceFrom', targetPort)
+                return
+            }
+            traceTimer = setTimeout(function () {
+                traceTimer = null
+                self.pedalboard('traceFrom', targetPort)
+            }, traceDelayMs)
+        }
+
+        function cancelTrace() {
+            clearTimeout(traceTimer)
+            traceTimer = null
+            self.pedalboard('clearTracing')
+        }
+    
         self.on('mouseenter', '[mod-port]', function () {
-            self.pedalboard('traceFrom', $(this))
+            scheduleTrace($(this))
         })
         self.on('mouseleave', '[mod-port]', function () {
-            self.pedalboard('clearTracing')
+            cancelTrace()
         })
 
         // What the teleport key will act on. Tracked separately from the tracing hover above, which
@@ -458,11 +479,11 @@ JqueryClass('pedalboard', {
         self.on('mouseenter', '.mod-teleport', function () {
             var source = $(this).data('sourcePort')
             if (source) {
-                self.pedalboard('traceFrom', source)
+                scheduleTrace($(this))
             }
         })
         self.on('mouseleave', '.mod-teleport', function () {
-            self.pedalboard('clearTracing')
+            cancelTrace()
         })
         self.on('mouseleave', '[mod-role=output-jack]', function () {
             self.data('hoverJack', null)

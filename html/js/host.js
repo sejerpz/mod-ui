@@ -1,6 +1,65 @@
 // SPDX-FileCopyrightText: 2012-2023 MOD Audio UG
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+(function () {
+    var ua = navigator.userAgent;
+    var isSafari = /^((?!chrome|android|crios|fxios|edgios|opr).)*safari/i.test(ua);
+    if (!isSafari) return;
+
+    document.documentElement.classList.add('mod-safari');
+
+    var OrigWebSocket = window.WebSocket;
+    if (!OrigWebSocket) return;
+
+    window.WebSocket = function (url, protocols) {
+        var ws = protocols ? new OrigWebSocket(url, protocols) : new OrigWebSocket(url);
+        var throttledQueue = [];
+        var scheduled = false;
+        var userOnMessage = null;
+
+        function isHighFreqMessage(data) {
+            if (typeof data !== 'string') return false;
+            return data.indexOf('output_set ') === 0 ||
+                   data.indexOf('param_set ') === 0 ||
+                   data.indexOf('stats ') === 0;
+        }
+
+        function flush() {
+            scheduled = false;
+            var batch = throttledQueue;
+            throttledQueue = [];
+            if (typeof userOnMessage === 'function') {
+                for (var i = 0; i < batch.length; i++) {
+                    userOnMessage.call(ws, batch[i]);
+                }
+            }
+        }
+
+        Object.defineProperty(ws, 'onmessage', {
+            get: function () { return userOnMessage; },
+            set: function (fn) { userOnMessage = fn; }
+        });
+
+        ws.addEventListener('message', function (event) {
+            if (!isHighFreqMessage(event.data)) {
+                if (typeof userOnMessage === 'function') {
+                    userOnMessage.call(ws, event);
+                }
+                return;
+            }
+            throttledQueue.push(event);
+            if (!scheduled) {
+                scheduled = true;
+                window.requestAnimationFrame(flush);
+            }
+        });
+
+        return ws;
+    };
+    window.WebSocket.prototype = OrigWebSocket.prototype;
+})();
+
+
 var ws
 var cached_cpuLoad = null,
     cached_xruns   = null,
