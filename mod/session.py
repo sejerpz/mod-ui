@@ -13,6 +13,7 @@ from mod.development import FakeHost, FakeHMI
 from mod.hmi import HMI
 from mod.recorder import Recorder, Player
 from mod.screenshot import ScreenshotGenerator
+from mod.weboutbox import WebOutbox
 from modtools.utils import update_cached_pedalboard_version
 from mod.settings import (LOG,
                           DEV_ENVIRONMENT, DEV_HMI, DEV_HOST,
@@ -74,6 +75,7 @@ class Session(object):
         self.screenshot_needed = False
         self.screenshot_generator = ScreenshotGenerator()
         self.websockets = []
+        self.outbox = WebOutbox(self.write_websockets)
 
         # Used in mod-app to know when the current pedalboard changed
         self.pedalboard_changed_callback = lambda ok,bundlepath,title:None
@@ -105,6 +107,7 @@ class Session(object):
     def signal_disconnect(self):
         sockets = self.websockets
         self.websockets = []
+        self.outbox.clear()
         for ws in sockets:
             ws.write_message("stop")
             ws.close()
@@ -263,6 +266,7 @@ class Session(object):
 
         # if this is the last socket, end ui session
         if len(self.websockets) == 0:
+            self.outbox.clear()
             self.host.end_session(callback)
         else:
             callback(True)
@@ -325,6 +329,8 @@ class Session(object):
         if self.host.web_data_ready_counter == counter:
             self.host.web_data_ready_ok = True
             self.host.send_output_data_ready(None, None)
+            # last, so a socket that fails cannot skip the two lines above; nothing is sent in between
+            self.outbox.flush()
 
     # Set a plugin parameter
     # We use ":bypass" symbol for on/off state
@@ -450,10 +456,16 @@ class Session(object):
     # Everything after this line is yet to be documented
 
     def msg_callback(self, msg):
+        # held while the page has not answered "data_ready", see mod/weboutbox.py
+        # (Host can call this while it is being built, before self.host is set)
+        self.outbox.send(msg, hasattr(self, "host") and not self.host.web_data_ready_ok)
+
+    def write_websockets(self, msg):
         for ws in self.websockets:
             ws.write_message(msg)
 
     def msg_callback_broadcast(self, msg, ws2):
+        self.outbox.before_broadcast(msg)
         for ws in self.websockets:
             if ws == ws2: continue
             ws.write_message(msg)
