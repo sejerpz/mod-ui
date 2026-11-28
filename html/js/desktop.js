@@ -2169,27 +2169,6 @@ Desktop.prototype.makePedalboardBox = function (el, trigger) {
                 cache: false
             })
         },
-        download: function (pedalboard, callback) {
-            var transfer = new SimpleTransference('/pedalboard/pack_bundle/?bundlepath=' + escape(pedalboard.bundle),
-                                                    'file://' + pedalboard.bundle + '.tar')
-            transfer.reauthorizeUpload = self.authenticateDevice;
-
-            transfer.reportFinished = function (resp2) {
-                callback({
-                    ok: true,
-                    id: resp.id,
-                })
-            }
-
-            transfer.reportError = function (error) {
-                callback({
-                    ok: false,
-                    error: "Failed to download the pedalboard",
-                })
-            }
-
-            transfer.start()
-        },
     })
 }
 

@@ -123,7 +123,6 @@ JqueryClass('pedalboardBox', {
             viewModes: self.find('.view-modes'),
             viewModeList: self.find('#view-mode-list'),
             viewModeGrid: self.find('#view-mode-grid'),
-            dev_mode: false,
             list: function (callback) {
                 callback([])
             },
@@ -131,9 +130,6 @@ JqueryClass('pedalboardBox', {
                 callback([])
             },
             remove: function (pedalboard, callback) {
-                callback()
-            },
-            download: function (pedalboard, callback) {
                 callback()
             },
             load: function (bundlepath, broken, callback) {
@@ -183,9 +179,6 @@ JqueryClass('pedalboardBox', {
         self.find('.js-close').click(function () {
             self.window('close')
         })
-
-        // download button: the Export and Import switch in Settings > User Interface
-        self.data('dev_mode', ui_tool_enabled('ui-share'))
 
         // .modpedalboard import (Developer Mode, always on MOD Desktop)
         self.find('.js-import').click(function () {
@@ -272,18 +265,6 @@ JqueryClass('pedalboardBox', {
                 e.stopPropagation();
                 return false
             })
-            const download = rendered.find('.js-download')
-
-            if (self.data('dev_mode')) {
-                download.click(function (e) {
-                    self.data('download')(pedalboard, function () {
-                        rendered.download()
-                    })
-                    e.stopPropagation();
-                    return false
-                })
-                download.removeClass('mod-hidden')
-            }
         }
 
         canvas.append(rendered)
